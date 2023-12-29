@@ -1,0 +1,10 @@
+{
+    "Groups": {
+      "coreReits": {
+        "membersOf": ["l.pasteur", "r.reits"]
+      },
+      "coreRosas": {
+        "membersOf": ["r.rosas"]
+      }
+    }
+  }
