@@ -100,8 +100,11 @@ if __name__ == "__main__":
     The main function of the script. It loads the configuration, creates the base folders,
     starts the main.py script, generates test data, and then keeps the script running for testing.
     """
-    # Create base folders
+    # Create base folders in landing_dir_base_path
     create_folders(config['landing_dir_base_path'], group_folders)
+
+    # Create base folders in staging_dir_path
+    create_folders(config['staging_dir_path'], group_folders)
 
     # Run the main script
     print("Starting main.py script...")

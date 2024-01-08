@@ -6,6 +6,9 @@ import hashlib
 import shutil
 from utils.config import load_settings
 
+# Load YAML configuration
+config = load_settings("config/test_settings.yml")
+
 def calculate_directory_size(path):
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(path):
@@ -15,8 +18,8 @@ def calculate_directory_size(path):
     return total_size
 
 def has_dataset_stabilized(path):
-    interval = settings["monitor_interval"]
-    stable_duration = settings["stable_duration"]
+    interval = config["monitor_interval"]
+    stable_duration = config["stable_duration"]
 
     last_size = -1
     stable_time = 0
@@ -74,6 +77,6 @@ def move_dataset(dataset_path, staging_path):
         return False
 
 if __name__ == "__main__":
-    dataset_path = settings["dataset_path"]
-    staging_path = settings["staging_path"]
+    dataset_path = config["landing_dir_base_path"]
+    staging_path = config["staging_dir_path"]
     move_dataset(dataset_path, staging_path)

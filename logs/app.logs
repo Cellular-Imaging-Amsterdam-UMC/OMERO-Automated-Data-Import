@@ -1,0 +1,17 @@
+2024-01-08 14:53:19,433 - __main__ - INFO - Starting the folder monitoring service.
+2024-01-08 14:53:24,132 - __main__ - INFO - Dataset detected: dataset1 for user: r.rosas in group: coreRosas
+2024-01-08 14:53:24,132 - __main__ - INFO - Starting ingestion for group: coreRosas, user: r.rosas, dataset: dataset1
+2024-01-08 14:53:27,457 - __main__ - INFO - Dataset detected: dataset4 for user: l.pasteur in group: coreReits
+2024-01-08 14:53:29,170 - __main__ - INFO - Dataset detected: dataset2 for user: r.rosas in group: coreRosas
+2024-01-08 14:53:34,223 - __main__ - INFO - Dataset detected: dataset3 for user: r.rosas in group: coreRosas
+2024-01-08 14:55:37,699 - __main__ - INFO - Starting the folder monitoring service.
+2024-01-08 14:55:42,495 - __main__ - INFO - Dataset detected: dataset1 for user: l.pasteur in group: coreReits
+2024-01-08 14:55:42,495 - __main__ - INFO - Starting ingestion for group: coreReits, user: l.pasteur, dataset: dataset1
+2024-01-08 14:55:43,719 - __main__ - INFO - Dataset detected: dataset2 for user: r.rosas in group: coreRosas
+2024-01-08 14:55:43,719 - __main__ - INFO - Starting ingestion for group: coreRosas, user: r.rosas, dataset: dataset2
+2024-01-08 15:01:42,021 - __main__ - INFO - Starting the folder monitoring service.
+2024-01-08 15:01:46,675 - __main__ - INFO - Dataset detected: dataset1 for user: l.pasteur in group: coreReits
+2024-01-08 15:01:46,675 - __main__ - INFO - Starting ingestion for group: coreReits, user: l.pasteur, dataset: dataset1
+2024-01-08 15:01:49,706 - __main__ - INFO - Dataset detected: dataset2 for user: r.reits in group: coreReits
+2024-01-08 15:01:51,735 - __main__ - INFO - Dataset detected: dataset3 for user: l.pasteur in group: coreReits
+2024-01-08 15:01:56,783 - __main__ - INFO - Dataset detected: dataset4 for user: l.pasteur in group: coreReits
