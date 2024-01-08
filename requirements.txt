@@ -1,1 +1,7 @@
 watchdog
+numpy
+pandas
+ezomero>=2.0.0
+zeroc-ice==3.6.5
+openpyxl==3.0.9
+omero-cli-transfer==0.7.3

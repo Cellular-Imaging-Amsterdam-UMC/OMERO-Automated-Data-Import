@@ -1,3 +1,5 @@
+# main.py
+
 import sys
 import json
 import os
@@ -6,32 +8,82 @@ import logging
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+#Modules
+from utils.data_mover import move_dataset
+from utils.config import load_settings, load_json
+
 # Configuration
-#CONFIG_PATH = 
-DIRECTORY_STRUCTURE = "config/directory_structure.json"
-LOG_FILE_PATH = "logs/app.logs"
+CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml"
+
+# Load YAML configuration
+config = load_settings(CONFIG_PATH)
+
+# Load JSON directory_structure
+DIRECTORY_STRUCTURE_PATH = config['directory_structure_file_path']
+directory_structure = load_json(DIRECTORY_STRUCTURE_PATH)
+
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, filename=LOG_FILE_PATH, filemode='a',
+logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemode='a',
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 logger = logging.getLogger(__name__)
 
 # Placeholder for the ingest function
 async def ingest(group, user, dataset):
+    """
+    This is the asynchronous ingestion process:
+
+    >>> data_mover.py
+    Determines when data has finished copying to the "dropbox" measuring the size of the dataset.
+    Hides the dataset by prefixing it with '.'
+    Copies the dataset to the staging with a hash check
+    Deletes the dataset in in the "dropbox"
+
+    >>> stager.py
+    Creates a json file describing for each file:
+        Destination user, group, project, and dataset    
+        Screen or simple data
+
+    >>> importer.py
+    Creates the Projects and Datasets described by the jsaon created by the stager module
+    Uploads the images/screens
+    Append the indicated metadata
+
+    """
+    #TODO: each step must have an error outcome message that results in a mail
     logger.info(f"Starting ingestion for group: {group}, user: {user}, dataset: {dataset}")
+
     # Simulate a long-running process
     await asyncio.sleep(2)
+
+    # data_mover.py
+    dataset_path = os.path.join(config['landing_dir_base_path'], group, user, dataset)
+    staging_path = config["staging_dir_path"]  
+    move_dataset(dataset_path, staging_path)
+    
+    # stager.py
+
+    # importer.py
+
     logger.info(f"Completed ingestion for group: {group}, user: {user}, dataset: {dataset}")
 
 # Handler class
 class DatasetHandler(FileSystemEventHandler):
+    """
+    Event handler class for the watchdog observer. 
+    It checks for directory creation events and triggers the ingest function when a new directory is created.
+    """
     def __init__(self, base_directory, group_folders, loop):
         self.base_directory = base_directory
         self.group_folders = group_folders
         self.loop = loop
 
     def on_created(self, event):
+        """
+        Event hook for when a new directory is created. 
+        Checks if the created directory is a dataset and triggers the ingest function if it is.
+        """
         if not event.is_directory:
             return
 
@@ -50,6 +102,9 @@ class DatasetHandler(FileSystemEventHandler):
 
     @staticmethod
     def is_valid_dataset(folder_path):
+        """
+        Checks if a directory is a valid dataset by checking if it contains any subdirectories.
+        """
         if not os.path.isdir(folder_path):
             return False
         for _, dirs, _ in os.walk(folder_path):
@@ -58,8 +113,12 @@ class DatasetHandler(FileSystemEventHandler):
         return False
 
 def main(directory):
+    """
+    Main function of the script. 
+    It sets up the directory structure, event loop, and observer, and starts the folder monitoring service.
+    """
     # Load JSON directory_structure
-    with open(DIRECTORY_STRUCTURE, 'r') as f:
+    with open(DIRECTORY_STRUCTURE_PATH, 'r') as f:
         directory_structure = json.load(f)
 
     group_folders = {group: users['membersOf'] for group, users in directory_structure['Groups'].items()}
@@ -86,9 +145,8 @@ def main(directory):
     observer.join()
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python main.py <directory>")
+    if len(sys.argv) > 3:
+        print("Usage: python main.py [config_file] [directory]")
         sys.exit(1)
 
-    directory = sys.argv[1]
-    main(directory)
+    main(sys.argv[2])

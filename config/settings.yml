@@ -1,0 +1,11 @@
+# General Settings
+log_file_path: logs/app.logs
+
+# Main
+directory_structure_file_path: config/directory_structure.json
+
+# Data Mover 
+landing_dir_base_path: /path/to/dataset
+staging_dir_path: /path/to/staging
+monitor_interval: 30
+stable_duration: 30

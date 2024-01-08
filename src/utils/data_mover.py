@@ -1,14 +1,10 @@
+#data_mover.py
+
 import os
 import time
 import hashlib
 import shutil
-import json
-
-def load_settings():
-    with open('settings.json', 'r') as file:
-        return json.load(file)
-
-settings = load_settings()
+from utils.config import load_settings
 
 def calculate_directory_size(path):
     total_size = 0
