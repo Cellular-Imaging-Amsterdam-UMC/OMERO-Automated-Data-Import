@@ -1,10 +1,26 @@
 #data_mover.py
 
+import sys
 import os
 import time
 import hashlib
 import shutil
+import logging
+from pathlib import Path
+
 from utils.config import load_settings
+
+# Configuration
+CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml"
+
+# Load YAML configuration
+config = load_settings(CONFIG_PATH)
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemode='a',
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+logger = logging.getLogger(__name__)
 
 # Load YAML configuration
 config = load_settings("config/test_settings.yml")
@@ -59,21 +75,27 @@ def copy_to_staging(src, dest):
 def verify_data_integrity(src, dest):
     return hash_directory(src) == hash_directory(dest)
 
-def move_dataset(dataset_path, staging_path):
-    if has_dataset_stabilized(dataset_path):
-        hidden_path = hide_dataset(dataset_path)
+def move_dataset(data_package):
+    # Construct the paths for the source and destination directories using pathlib
+    src_path = Path(config["landing_dir_base_path"]) / data_package.path
+    dest_path = Path(config["staging_dir_path"]) / data_package.path
+
+    logger.info(f"Triggered move_dataset for dataset at: {src_path}")
+
+    if has_dataset_stabilized(str(src_path)):
+        hidden_path = hide_dataset(str(src_path))
         original_hash = hash_directory(hidden_path)
-        copy_to_staging(hidden_path, staging_path)
-        copied_hash = hash_directory(staging_path)
+        copy_to_staging(hidden_path, str(dest_path))
+        copied_hash = hash_directory(str(dest_path))
         
         if original_hash == copied_hash:
-            print("Dataset successfully moved and verified.")
+            logger.info(f"Dataset {data_package.dataset} successfully moved to: {dest_path}")
             return True
         else:
-            print("Data integrity check failed.")
+            logger.error(f"Data integrity check failed for dataset {data_package.dataset}.")
             return False
     else:
-        print("Dataset is still changing and cannot be moved yet.")
+        logger.warning(f"Dataset {data_package.dataset} is still changing and cannot be moved yet.")
         return False
 
 if __name__ == "__main__":

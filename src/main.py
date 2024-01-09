@@ -29,8 +29,15 @@ logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemo
 
 logger = logging.getLogger(__name__)
 
+class DataPackage:
+    def __init__(self, group, user, dataset):
+        self.group = group
+        self.user = user
+        self.dataset = dataset
+        self.path = os.path.join(group, user, dataset)
+
 # Placeholder for the ingest function
-async def ingest(group, user, dataset):
+async def ingest(data_package):
     """
     This is the asynchronous ingestion process:
 
@@ -51,22 +58,16 @@ async def ingest(group, user, dataset):
     Append the indicated metadata
 
     """
-    #TODO: each step must have an error outcome message that results in a mail
-    logger.info(f"Starting ingestion for group: {group}, user: {user}, dataset: {dataset}")
-
-    # Simulate a long-running process
-    await asyncio.sleep(2)
+    logger.info(f"Starting ingestion for group: {data_package.group}, user: {data_package.user}, dataset: {data_package.dataset}")
 
     # data_mover.py
-    dataset_path = os.path.join(config['landing_dir_base_path'], group, user, dataset)
-    staging_path = config["staging_dir_path"]  
-    move_dataset(dataset_path, staging_path)
+    move_dataset(data_package)
     
     # stager.py
 
     # importer.py
 
-    logger.info(f"Completed ingestion for group: {group}, user: {user}, dataset: {dataset}")
+    logger.info(f"Completed ingestion for group: {data_package.group}, user: {data_package.user}, dataset: {data_package.dataset}")
 
 # Handler class
 class DatasetHandler(FileSystemEventHandler):
@@ -81,22 +82,25 @@ class DatasetHandler(FileSystemEventHandler):
 
     def on_created(self, event):
         """
-        Event hook for when a new directory is created. 
-        Checks if the created directory is a dataset and triggers the ingest function if it is.
+        Event hook for when a new directory or file is created. 
+        Checks if the created directory or the parent directory of the created file is a dataset 
+        and triggers the ingest function if it is.
         """
-        if not event.is_directory:
-            return
-
-        # Normalize paths for comparison
         created_dir = os.path.normpath(event.src_path)
+
+        # If a new file is created, set created_dir to its parent directory
+        if not event.is_directory:
+            created_dir = os.path.dirname(created_dir)
+
         for group, users in self.group_folders.items():
             for user in users:
                 user_folder = os.path.normpath(os.path.join(self.base_directory, group, user))
-                # Check if the created directory is directly under the user's folder
-                if os.path.dirname(created_dir) == user_folder:
+                # Check if the created directory or the parent directory of the created file is directly under the user's folder
+                if os.path.dirname(created_dir) == user_folder and self.is_valid_dataset(created_dir):
                     logger.info(f"Dataset detected: {os.path.basename(created_dir)} for user: {user} in group: {group}")
+                    data_package = DataPackage(group, user, os.path.basename(created_dir))
                     asyncio.run_coroutine_threadsafe(
-                        ingest(group, user, os.path.basename(created_dir)), 
+                        ingest(data_package), 
                         self.loop
                     )
 
