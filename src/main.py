@@ -2,7 +2,7 @@
 
 import sys
 import json
-import os
+from pathlib import Path
 import time
 import logging
 from watchdog.observers import Observer
@@ -38,7 +38,7 @@ class DataPackage:
         self.group = group
         self.user = user
         self.dataset = dataset
-        self.path = os.path.join(group, user, dataset)
+        self.path = Path(group) / user / dataset
 
 def ingest(data_package, config):
     """
@@ -82,10 +82,10 @@ class DatasetHandler(FileSystemEventHandler):
     It checks for directory creation events and triggers the ingest function when a new directory is created.
     """
     def __init__(self, base_directory, group_folders, executor):
-        self.base_directory = base_directory
+        self.base_directory = Path(base_directory)
         self.group_folders = group_folders
         self.executor = executor
-        
+
     def on_created(self, event):
         """
         Event hook for when a new directory or file is created. 
@@ -93,23 +93,34 @@ class DatasetHandler(FileSystemEventHandler):
         and triggers the ingest function if it is.
         """
         try:
-            created_dir = os.path.normpath(event.src_path)
-        
+            created_dir = Path(event.src_path)
+
             # If a new file is created, set created_dir to its parent directory
             if not event.is_directory:
-                created_dir = os.path.dirname(created_dir)
-        
+                created_dir = created_dir.parent
+
             for group, users in self.group_folders.items():
                 for user in users:
-                    user_folder = os.path.normpath(os.path.join(self.base_directory, group, user))
+                    user_folder = self.base_directory / group / user
                     # Check if the created directory or the parent directory of the created file is directly under the user's folder
-                    if os.path.dirname(created_dir) == user_folder:
-                        logger.info(f"Dataset detected: {os.path.basename(created_dir)} for user: {user} in group: {group}")
-                        data_package = DataPackage(group, user, os.path.basename(created_dir))
-                        self.executor.submit(ingest, data_package, config)
+                    if created_dir.parent == user_folder:
+                        logger.info(f"Dataset detected: {created_dir.name} for user: {user} in group: {group}")
+                        data_package = DataPackage(group, user, created_dir.name)
+
+                        # Submit the ingest task to the executor and add a callback for error logging
+                        future = self.executor.submit(ingest, data_package, config)
+                        future.add_done_callback(self.log_future_exception)
         except Exception as e:
             logger.error(f"Error during on_created event handling: {e}")
 
+    def log_future_exception(self, future):
+        """
+        Callback function to log exceptions from futures.
+        """
+        try:
+            future.result()  # This will raise any exceptions caught during the execution of the task
+        except Exception as e:
+            logger.error(f"Error in background task: {e}")
 
 
 def main(directory):
@@ -130,8 +141,8 @@ def main(directory):
     observer = Observer()
     for group in group_folders.keys():
         event_handler = DatasetHandler(directory, group_folders, executor)
-        group_path = os.path.normpath(os.path.join(directory, group))
-        observer.schedule(event_handler, path=group_path, recursive=True)
+        group_path = Path(directory) / group
+        observer.schedule(event_handler, path=str(group_path), recursive=True)
     observer.start()
 
     logger.info("Starting the folder monitoring service.")

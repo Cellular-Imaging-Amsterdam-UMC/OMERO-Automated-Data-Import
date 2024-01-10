@@ -1,19 +1,17 @@
 #data_mover.py
 
-import sys
-import os
+from pathlib import Path
 import time
 import hashlib
 import shutil
 import logging
-from pathlib import Path
 
 def calculate_directory_size(path):
     total_size = 0
-    for dirpath, dirnames, filenames in os.walk(path):
-        for f in filenames:
-            fp = os.path.join(dirpath, f)
-            total_size += os.path.getsize(fp)
+    path = Path(path)
+    for f in path.glob('**/*'):
+        if f.is_file():
+            total_size += f.stat().st_size
     return total_size
 
 def has_dataset_stabilized(path, config):
@@ -35,17 +33,18 @@ def has_dataset_stabilized(path, config):
     return True
 
 def hide_dataset(path):
-    parent_dir = os.path.dirname(path)
-    hidden_path = os.path.join(parent_dir, '.' + os.path.basename(path))
-    os.rename(path, hidden_path)
-    return hidden_path
+    path = Path(path)
+    parent_dir = path.parent
+    hidden_path = parent_dir / ('.' + path.name)
+    path.rename(hidden_path)
+    return str(hidden_path)
 
 def hash_directory(path):
     hash_algo = hashlib.sha256()
+    path = Path(path)
 
-    for dirpath, dirnames, filenames in os.walk(path):
-        for fname in sorted(filenames):
-            file_path = os.path.join(dirpath, fname)
+    for file_path in sorted(path.glob('**/*')):
+        if file_path.is_file():
             with open(file_path, "rb") as f:
                 for chunk in iter(lambda: f.read(4096), b""):
                     hash_algo.update(chunk)
