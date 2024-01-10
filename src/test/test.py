@@ -44,7 +44,7 @@ def generate_test_data(base_path, group_folders, data_package_path):
             # Copy the data package into the user's directory
             shutil.copytree(data_package_path, os.path.join(user_folder, "Test_DataPackage"))
             print(f"Copied data package to: {os.path.join(user_folder, 'Test_DataPackage')}")
-            time.sleep(10) 
+            time.sleep(1) 
 
 def print_tree(directory, file_output=False, indents=0):
     """

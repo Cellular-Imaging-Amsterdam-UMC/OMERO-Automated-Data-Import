@@ -11,7 +11,7 @@ import subprocess
 from concurrent.futures import ProcessPoolExecutor
 
 #Modules
-from utils.data_mover import move_dataset
+from utils.data_mover import move_dataset, data_package_typification
 from utils.config import load_settings, load_json
 
 # Configuration
@@ -68,8 +68,11 @@ def ingest(data_package, config):
         move_dataset(data_package, config)
         
         # stager.py
-
+        data_package_typification(data_package, config)
+        
         # importer.py
+        
+        
 
         logger.info(f"Completed ingestion for group: {data_package.group}, user: {data_package.user}, dataset: {data_package.dataset}")
     except Exception as e:

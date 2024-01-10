@@ -6,6 +6,12 @@ import hashlib
 import shutil
 import logging
 
+logger = logging.getLogger(__name__)
+
+def init_logger(log_file_path):
+    logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='a',
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 def calculate_directory_size(path):
     total_size = 0
     path = Path(path)
@@ -40,7 +46,7 @@ def hide_dataset(path):
     return str(hidden_path)
 
 def hash_directory(path):
-    hash_algo = hashlib.sha256()
+    hash_algo = hashlib.md5()  # Changed from hashlib.sha256()
     path = Path(path)
 
     for file_path in sorted(path.glob('**/*')):
@@ -52,16 +58,19 @@ def hash_directory(path):
     return hash_algo.hexdigest()
 
 def copy_to_staging(src, dest):
-    shutil.copytree(src, dest)
+    try:
+        shutil.copytree(src, dest)
+    except Exception as e:
+        logger.error(f"Error copying from {src} to {dest}: {str(e)}")
+        return False
+    return True
 
 def verify_data_integrity(src, dest):
     return hash_directory(src) == hash_directory(dest)
 
 def move_dataset(data_package, config):
-    # Set up logging
-    logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemode='a',
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(__name__)
+    # Initialize the logger
+    init_logger(config['log_file_path'])
 
     # Construct the paths for the source and destination directories using pathlib
     src_path = Path(config["landing_dir_base_path"]) / data_package.path
@@ -72,7 +81,9 @@ def move_dataset(data_package, config):
     if has_dataset_stabilized(str(src_path), config):
         hidden_path = hide_dataset(str(src_path))
         original_hash = hash_directory(hidden_path)
-        copy_to_staging(hidden_path, str(dest_path))
+        if not copy_to_staging(hidden_path, str(dest_path)):
+            logger.error(f"Failed to copy dataset from {hidden_path} to {dest_path}")
+            return False
         copied_hash = hash_directory(str(dest_path))
         
         if original_hash == copied_hash:
