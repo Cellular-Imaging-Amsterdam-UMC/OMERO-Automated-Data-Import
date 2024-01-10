@@ -1,3 +1,5 @@
 .env
 .devnotes
 test
+logs/app.logs
+
