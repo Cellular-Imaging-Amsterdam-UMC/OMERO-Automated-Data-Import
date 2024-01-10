@@ -2,4 +2,5 @@
 .devnotes
 test
 logs/app.logs
+__pycache__/
 
