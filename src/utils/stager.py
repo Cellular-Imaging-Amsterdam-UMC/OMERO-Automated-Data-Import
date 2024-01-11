@@ -8,14 +8,19 @@ Based on the aforementioned information follows simple heuristics to defin:
 """
 from pathlib import Path
 import glob
+import logging
+
+logger = logging.getLogger(__name__)
 
 def typify_data_package(data_package, config):
     """
     Identifies the datasets in the data package. A dataset is defined as any folder that contains at least one file.
-    Returns a dictionary where the keys are the dataset names and the values are lists of relative paths to the files in the dataset.
+    Returns a dictionary where the keys are the dataset names and the values are lists of full paths to the files in the dataset.
     """
     datasets = {}
-    data_package_path = Path(data_package)
+    data_package_path = Path(config["staging_dir_path"]) / data_package.path
+
+    logger.info(f"Typifying data package at: {data_package_path}")
 
     # Find all files in the data package path
     files = glob.glob(f"{data_package_path}/**/*", recursive=True)
@@ -30,7 +35,9 @@ def typify_data_package(data_package, config):
         # Get the relative path of the dataset from the data package path
         dataset_path = file_path.parent.relative_to(data_package_path)
 
-        # Add the relative file path to the dataset in the dictionary
-        datasets.setdefault(str(dataset_path), []).append(str(file_path.relative_to(data_package_path)))
+        # Add the full file path to the dataset in the dictionary
+        datasets.setdefault(str(dataset_path), []).append(str(file_path))
+
+    logger.info(f"Identified datasets: {datasets.keys()}")
 
     return datasets

@@ -63,13 +63,14 @@ def ingest(data_package, config):
 
     """
     try:
-        logger.info(f"Completed ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}")
-
         # data_mover.py
         move_datapackage(data_package, config)
         
         # stager.py
-        #data_package.datasets = typify_data_package(data_package, config)
+        data_package.datasets = typify_data_package(data_package, config)
+        
+        # Log the state of data_package after typification
+        logger.info(f"State of data_package after typification: {data_package.datasets}")
         
         # importer.py
         #import(data_package, config)
