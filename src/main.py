@@ -14,6 +14,7 @@ from concurrent.futures import ProcessPoolExecutor
 from utils.config import load_settings, load_json
 from utils.data_mover import move_datapackage
 from utils.stager import typify_data_package
+from utils.importer import import_data_package
 
 # Configuration
 CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml"
@@ -73,9 +74,7 @@ def ingest(data_package, config):
         logger.info(f"State of data_package after typification: {data_package.datasets}")
         
         # importer.py
-        #import(data_package, config)
-        
-
+        import_data_package(data_package, config)
 
         logger.info(f"Completed ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}")
     except Exception as e:
