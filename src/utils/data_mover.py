@@ -12,7 +12,7 @@ def init_logger(log_file_path):
     logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='a',
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-def calculate_directory_size(path):
+def calculate_datapackage_size(path):
     total_size = 0
     path = Path(path)
     for f in path.glob('**/*'):
@@ -20,7 +20,7 @@ def calculate_directory_size(path):
             total_size += f.stat().st_size
     return total_size
 
-def has_dataset_stabilized(path, config):
+def has_datapackage_stabilized(path, config):
     interval = config["monitor_interval"]
     stable_duration = config["stable_duration"]
 
@@ -28,7 +28,7 @@ def has_dataset_stabilized(path, config):
     stable_time = 0
 
     while stable_time < stable_duration:
-        current_size = calculate_directory_size(path)
+        current_size = calculate_datapackage_size(path)
         if current_size == last_size:
             stable_time += interval
         else:
@@ -38,14 +38,14 @@ def has_dataset_stabilized(path, config):
 
     return True
 
-def hide_dataset(path):
+def hide_datapackage(path):
     path = Path(path)
     parent_dir = path.parent
     hidden_path = parent_dir / ('.' + path.name)
     path.rename(hidden_path)
     return str(hidden_path)
 
-def hash_directory(path):
+def hash_datapackage(path):
     hash_algo = hashlib.md5()  # Changed from hashlib.sha256()
     path = Path(path)
 
@@ -65,10 +65,10 @@ def copy_to_staging(src, dest):
         return False
     return True
 
-def verify_data_integrity(src, dest):
-    return hash_directory(src) == hash_directory(dest)
+def verify_datapackage_integrity(src, dest):
+    return hash_datapackage(src) == hash_datapackage(dest)
 
-def move_dataset(data_package, config):
+def move_datapackage(data_package, config):
     # Initialize the logger
     init_logger(config['log_file_path'])
 
@@ -76,22 +76,22 @@ def move_dataset(data_package, config):
     src_path = Path(config["landing_dir_base_path"]) / data_package.path
     dest_path = Path(config["staging_dir_path"]) / data_package.path
 
-    logger.info(f"Triggered move_dataset for dataset at: {src_path}")
+    logger.info(f"Triggered move_datapackage for project at: {src_path}")
 
-    if has_dataset_stabilized(str(src_path), config):
-        hidden_path = hide_dataset(str(src_path))
-        original_hash = hash_directory(hidden_path)
+    if has_datapackage_stabilized(str(src_path), config):
+        hidden_path = hide_datapackage(str(src_path))
+        original_hash = hash_datapackage(hidden_path)
         if not copy_to_staging(hidden_path, str(dest_path)):
-            logger.error(f"Failed to copy dataset from {hidden_path} to {dest_path}")
+            logger.error(f"Failed to copy project from {hidden_path} to {dest_path}")
             return False
-        copied_hash = hash_directory(str(dest_path))
+        copied_hash = hash_datapackage(str(dest_path))
         
         if original_hash == copied_hash:
-            logger.info(f"Dataset {data_package.dataset} successfully moved to: {dest_path}")
+            logger.info(f"Project {data_package.project} successfully moved to: {dest_path}")
             return True
         else:
-            logger.error(f"Data integrity check failed for dataset {data_package.dataset}.")
+            logger.error(f"Data integrity check failed for project {data_package.project}.")
             return False
     else:
-        logger.warning(f"Dataset {data_package.dataset} is still changing and cannot be moved yet.")
+        logger.warning(f"Project {data_package.project} is still changing and cannot be moved yet.")
         return False

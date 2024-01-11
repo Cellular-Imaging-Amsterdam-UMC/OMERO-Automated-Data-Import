@@ -11,8 +11,9 @@ import subprocess
 from concurrent.futures import ProcessPoolExecutor
 
 #Modules
-from utils.data_mover import move_dataset, data_package_typification
 from utils.config import load_settings, load_json
+from utils.data_mover import move_datapackage
+from utils.stager import typify_data_package
 
 # Configuration
 CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml"
@@ -34,11 +35,11 @@ logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemo
 logger = logging.getLogger(__name__)
 
 class DataPackage:
-    def __init__(self, group, user, dataset):
+    def __init__(self, group, user, project):
         self.group = group
         self.user = user
-        self.dataset = dataset
-        self.path = Path(group) / user / dataset
+        self.project = project
+        self.path = Path(group) / user / project
 
 def ingest(data_package, config):
     """
@@ -62,21 +63,22 @@ def ingest(data_package, config):
 
     """
     try:
-        logger.info(f"Starting ingestion for group: {data_package.group}, user: {data_package.user}, dataset: {data_package.dataset}")
+        logger.info(f"Completed ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}")
 
         # data_mover.py
-        move_dataset(data_package, config)
+        move_datapackage(data_package, config)
         
         # stager.py
-        data_package_typification(data_package, config)
+        #data_package.datasets = typify_data_package(data_package, config)
         
         # importer.py
-        
+        #import(data_package, config)
         
 
-        logger.info(f"Completed ingestion for group: {data_package.group}, user: {data_package.user}, dataset: {data_package.dataset}")
+
+        logger.info(f"Completed ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}")
     except Exception as e:
-        logger.error(f"Error during ingestion for group: {data_package.group}, user: {data_package.user}, dataset: {data_package.dataset}: {e}")
+        logger.error(f"Error during ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}: {e}")
 
 # Handler class
 class DatasetHandler(FileSystemEventHandler):
@@ -107,7 +109,7 @@ class DatasetHandler(FileSystemEventHandler):
                     user_folder = self.base_directory / group / user
                     # Check if the created directory or the parent directory of the created file is directly under the user's folder
                     if created_dir.parent == user_folder:
-                        logger.info(f"Dataset detected: {created_dir.name} for user: {user} in group: {group}")
+                        logger.info(f"Project detected: {created_dir.name} for user: {user} in group: {group}")
                         data_package = DataPackage(group, user, created_dir.name)
 
                         # Submit the ingest task to the executor and add a callback for error logging
