@@ -1,5 +1,5 @@
 .env
-.devnotes
+.devnotes.md
 test
 logs/app.logs
 __pycache__/

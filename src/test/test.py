@@ -20,6 +20,24 @@ directory_structure = load_json(DIRECTORY_STRUCTURE_PATH)
 
 group_folders = {group: users['membersOf'] for group, users in directory_structure['Groups'].items()}
 
+def clean_user_directories(base_path, groups):
+    """
+    Cleans out all files and subdirectories in each user directory.
+    """
+    print("Cleaning user directories...")
+    for group, users in groups.items():
+        for user in users:
+            user_folder = os.path.join(base_path, group, user)
+            if os.path.exists(user_folder):
+                for item in os.listdir(user_folder):
+                    item_path = os.path.join(user_folder, item)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                print(f"Cleaned folder: {user_folder}")
+
+
 def create_folders(base_path, groups):
     """
     Creates a directory structure based on the provided groups.
@@ -64,6 +82,12 @@ if __name__ == "__main__":
     The main function of the script. It loads the configuration, creates the base folders,
     starts the main.py script, copies the test data, and then keeps the script running for testing.
     """
+    
+    # Clean existing user directories
+    clean_user_directories(config['landing_dir_base_path'], group_folders)
+    clean_user_directories(config['staging_dir_path'], group_folders)
+
+
     # Create base folders in landing_dir_base_path
     create_folders(config['landing_dir_base_path'], group_folders)
 
