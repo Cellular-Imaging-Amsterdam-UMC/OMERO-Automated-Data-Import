@@ -1,10 +1,14 @@
 # importer.py
 
+import os
 from pathlib import Path
 import ezomero
 import logging
 from omero.gateway import BlitzGateway
+from dotenv import load_dotenv
 
+# Load environment variables from .env file and logger
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Function to create a new dataset in OMERO
@@ -47,10 +51,10 @@ def import_data_package(data_package, config):
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     # Connection parameters (these should be replaced with your own server details)
-    HOST = 'localhost'
-    USER = 'root'
-    PASSWORD = 'omero'
-    PORT = 4064
+    HOST = os.getenv('HOST')
+    USER = os.getenv('USER')
+    PASSWORD = os.getenv('PASSWORD')
+    PORT = int(os.getenv('PORT'))
     GROUP = data_package.group.replace('core', '')
 
     # Log the connection parameters
