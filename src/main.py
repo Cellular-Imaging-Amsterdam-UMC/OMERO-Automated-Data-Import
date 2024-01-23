@@ -13,7 +13,7 @@ from concurrent.futures import ProcessPoolExecutor
 #Modules
 from utils.config import load_settings, load_json
 from utils.data_mover import move_datapackage
-from utils.stager import typify_data_package
+from utils.stager import identify_datasets
 from utils.importer import import_data_package
 
 # Configuration
@@ -41,6 +41,7 @@ class DataPackage:
         self.user = user
         self.project = project
         self.path = Path(group) / user / project
+        self.datasets = {}
 
 def ingest(data_package, config):
     """
@@ -68,7 +69,7 @@ def ingest(data_package, config):
         move_datapackage(data_package, config)
         
         # stager.py
-        data_package.datasets = typify_data_package(data_package, config)
+        data_package.datasets.update(identify_datasets(data_package, config))
         
         # Log the state of data_package after typification
         logger.info(f"State of data_package after typification: {data_package.datasets}")

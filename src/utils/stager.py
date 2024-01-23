@@ -12,7 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def typify_data_package(data_package, config):
+def identify_datasets(data_package, config):
     """
     Identifies the datasets in the data package. A dataset is defined as any folder that contains at least one file.
     Returns a dictionary where the keys are the dataset names and the values are lists of full paths to the files in the dataset.
@@ -38,6 +38,11 @@ def typify_data_package(data_package, config):
         # Add the full file path to the dataset in the dictionary
         datasets.setdefault(str(dataset_path), []).append(str(file_path))
 
+    # Print the datasets object
+    print(datasets)
+
     logger.info(f"Identified datasets: {datasets.keys()}")
 
     return datasets
+
+
