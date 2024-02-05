@@ -6,7 +6,7 @@ directory_structure_file_path: config/directory_structure.json
 max_workers: 4
 
 # Data Mover 
-landing_dir_base_path: test/test_L_Drive
-staging_dir_path: test/test_OMERO_Dir
+landing_dir_base_path: test_mnt/test_L_Drive
+staging_dir_path: test_mnt/test_OMERO_Dir
 monitor_interval: 30
 stable_duration: 30

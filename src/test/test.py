@@ -103,7 +103,7 @@ if __name__ == "__main__":
     time.sleep(5)
 
     # Copy test data packages
-    generate_test_data(config['landing_dir_base_path'], group_folders, "test/Test_DataPackage")
+    generate_test_data(config['landing_dir_base_path'], group_folders, "test_mnt/Test_DataPackage")
 
     # Print the directory tree structure
     print("Printing the directory tree structure:")

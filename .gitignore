@@ -1,6 +1,7 @@
 .env
 .devnotes.md
 test
+test_mnt
 logs/app.logs
 __pycache__/
 

@@ -4,15 +4,14 @@ import sys
 import json
 from pathlib import Path
 import time
-import logging
+from utils.logger import setup_logger
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-import subprocess
 from concurrent.futures import ProcessPoolExecutor
 
 #Modules
 from utils.config import load_settings, load_json
-from utils.data_mover import move_datapackage
+from utils.data_mover import MoveDataPackage
 from utils.stager import identify_datasets
 from utils.importer import import_data_package
 
@@ -29,11 +28,8 @@ directory_structure = load_json(DIRECTORY_STRUCTURE_PATH)
 # ProcessPoolExecutor with 4 workers
 executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemode='a',
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-logger = logging.getLogger(__name__)
+# Set up logging using setup_logger instead of basicConfig
+logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
     def __init__(self, group, user, project):
@@ -47,34 +43,40 @@ def ingest(data_package, config):
     """
     This is the ingestion process:
 
-    >>> data_mover.py
+    >>> data_mover.py -- Step 1: Move Data Package
     Determines when data has finished copying to the "dropbox" measuring the size of the dataset.
     Hides the dataset by prefixing it with '.'
     Copies the dataset to the staging with a hash check
     Deletes the dataset in in the "dropbox"
 
-    >>> stager.py
+    >>> stager.py -- Step 2: Categorize Datasets
     Creates a json file describing for each file:
         Destination user, group, project, and dataset    
         Screen or simple data
 
-    >>> importer.py
+    >>> importer.py -- Step 3: Import Data Package
     Creates the Projects and Datasets described by the jsaon created by the stager module
     Uploads the images/screens
     Append the indicated metadata
 
     """
     try:
-        # data_mover.py
-        move_datapackage(data_package, config)
+        # Step 1: Move Data Package
+        move_result, hidden_path = MoveDataPackage(data_package, config).move_result
+        if not move_result:
+            logger.error(f"Failed to move data package for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}, path: {data_package.path}")
+            raise Exception(f"Failed to move data package for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}, path: {data_package.path}")
+        else:
+            # Update the data_package.path with the hidden path
+            data_package.path = Path(hidden_path)
         
-        # stager.py
-        data_package.datasets.update(identify_datasets(data_package, config))
-        
+        # Step 2: Categorize Datasets
+        data_package.datasets = identify_datasets(data_package, config)
+
         # Log the state of data_package after typification
         logger.info(f"State of data_package after typification: {data_package.datasets}")
         
-        # importer.py
+        # Step 3: Import Data Package
         import_data_package(data_package, config)
 
         logger.info(f"Completed ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}")
