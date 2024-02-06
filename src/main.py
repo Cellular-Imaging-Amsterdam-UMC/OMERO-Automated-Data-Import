@@ -12,8 +12,8 @@ from concurrent.futures import ProcessPoolExecutor
 #Modules
 from utils.config import load_settings, load_json
 from utils.data_mover import MoveDataPackage
-from utils.stager import identify_datasets
-from utils.importer import import_data_package
+from utils.stager import DataPackageStager
+from utils.importer import DataPackageImporter
 
 # Configuration
 CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml"
@@ -32,14 +32,15 @@ executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
-    def __init__(self, group, user, project):
+    def __init__(self, landing_dir_base_path, group, user, project):
         self.group = group
         self.user = user
         self.project = project
-        self.path = Path(group) / user / project
+        self.original_path = Path(landing_dir_base_path) / group / user / project
+        self.hidden_path = None
         self.datasets = {}
 
-def ingest(data_package, config):
+def ingest(data_package, config, active_ingestions, ):
     """
     This is the ingestion process:
 
@@ -64,35 +65,39 @@ def ingest(data_package, config):
         # Step 1: Move Data Package
         move_result, hidden_path = MoveDataPackage(data_package, config).move_result
         if not move_result:
-            logger.error(f"Failed to move data package for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}, path: {data_package.path}")
-            raise Exception(f"Failed to move data package for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}, path: {data_package.path}")
-        else:
-            # Update the data_package.path with the hidden path
-            data_package.path = Path(hidden_path)
-        
+            raise Exception("Failed to move data package.")
+
         # Step 2: Categorize Datasets
-        data_package.datasets = identify_datasets(data_package, config)
+        stager = DataPackageStager(config)  # Instantiate the DatasetStager class
+        data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
 
-        # Log the state of data_package after typification
-        logger.info(f"State of data_package after typification: {data_package.datasets}")
-        
+
         # Step 3: Import Data Package
-        import_data_package(data_package, config)
+        importer = DataPackageImporter(config)
+        importer.import_data_package(data_package) 
 
-        logger.info(f"Completed ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}")
+
+        # Remove the data package identifier from active ingestions upon successful ingestion
+        data_package_identifier = f"{data_package.group}_{data_package.user}_{data_package.project}"
+        active_ingestions.remove(data_package_identifier)
     except Exception as e:
-        logger.error(f"Error during ingestion for project: {data_package.project}, user: {data_package.user}, group: {data_package.group}: {e}")
+        logger.error(f"Error during ingestion for group: {data_package.group}, user: {data_package.user}, project: {data_package.project}: {e}")
+    finally:
+        # Ensure the identifier is removed from active_ingestions once processing is complete or fails
+        data_package_identifier = f"{data_package.group}_{data_package.user}_{data_package.project}"
+        active_ingestions.remove(data_package_identifier)
 
 # Handler class
-class DatasetHandler(FileSystemEventHandler):
+class DataPackageHandler(FileSystemEventHandler):
     """
     Event handler class for the watchdog observer. 
     It checks for directory creation events and triggers the ingest function when a new directory is created.
     """
-    def __init__(self, base_directory, group_folders, executor):
+    def __init__(self, base_directory, group_folders, executor, active_ingestions):
         self.base_directory = Path(base_directory)
         self.group_folders = group_folders
         self.executor = executor
+        self.active_ingestions = active_ingestions
 
     def on_created(self, event):
         """
@@ -112,11 +117,11 @@ class DatasetHandler(FileSystemEventHandler):
                     user_folder = self.base_directory / group / user
                     # Check if the created directory or the parent directory of the created file is directly under the user's folder
                     if created_dir.parent == user_folder:
-                        logger.info(f"Project detected: {created_dir.name} for user: {user} in group: {group}")
-                        data_package = DataPackage(group, user, created_dir.name)
+                        logger.info(f"DataPackge detected: {config['landing_dir_base_path']}, {group}, {user}, {created_dir.name}")
+                        data_package = DataPackage(config['landing_dir_base_path'], group, user, created_dir.name)
 
                         # Submit the ingest task to the executor and add a callback for error logging
-                        future = self.executor.submit(ingest, data_package, config)
+                        future = self.executor.submit(ingest, data_package, config, self.active_ingestions)
                         future.add_done_callback(self.log_future_exception)
         except Exception as e:
             logger.error(f"Error during on_created event handling: {e}")
@@ -136,6 +141,8 @@ def main(directory):
     Main function of the script. 
     It sets up the directory structure, event loop, and observer, and starts the folder monitoring service.
     """
+    active_ingestions = set()
+    
     # Load JSON directory_structure
     with open(DIRECTORY_STRUCTURE_PATH, 'r') as f:
         directory_structure = json.load(f)
@@ -148,7 +155,7 @@ def main(directory):
     # Set up the observer
     observer = Observer()
     for group in group_folders.keys():
-        event_handler = DatasetHandler(directory, group_folders, executor)
+        event_handler = DataPackageHandler(directory, group_folders, executor, active_ingestions)
         group_path = Path(directory) / group
         observer.schedule(event_handler, path=str(group_path), recursive=True)
     observer.start()

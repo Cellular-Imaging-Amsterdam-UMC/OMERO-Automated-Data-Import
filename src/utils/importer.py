@@ -1,5 +1,3 @@
-# importer.py
-
 import os
 from pathlib import Path
 import ezomero
@@ -7,87 +5,76 @@ import logging
 from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
 
-# Load environment variables from .env file and logger
-load_dotenv()
-logger = logging.getLogger(__name__)
+# Load environment variables from .env file
+load_dotenv('.env')
 
-# Function to create a new dataset in OMERO
-def create_dataset(conn, dataset_name, description, project_id=None):
-    try:
-        dataset_id = ezomero.post_dataset(conn, dataset_name, project_id, description)
-        logger.info(f"Created dataset: {dataset_name}")
-        return dataset_id
-    except Exception as e:
-        logger.error(f"Error creating dataset: {e}")
-        return None
-    
-def create_project(conn, project_name, description):
-    try:
-        project_id = ezomero.post_project(conn, project_name, description)
-        logger.info(f"Created project: {project_name}")
-        return project_id
-    except Exception as e:
-        logger.error(f"Error creating project: {e}")
-        return None
+class DataPackageImporter:
+    def __init__(self, config):
+        self.config = config
+        logging.basicConfig(level=logging.INFO, filename=self.config['log_file_path'], filemode='a',
+                            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        self.logger = logging.getLogger(__name__)
 
-# Function to upload files to the dataset
-def upload_files(conn, file_paths, project, dataset):
-    try:
-        # Convert file_paths to Path objects
-        file_paths = [Path(fp) for fp in file_paths]
+    def create_dataset(self, conn, dataset_name, description, project_id=None):
+        try:
+            dataset_id = ezomero.post_dataset(conn, dataset_name, project_id, description)
+            self.logger.info(f"Created dataset: {dataset_name} with ID: {dataset_id}")
+            return dataset_id
+        except Exception as e:
+            self.logger.error(f"Error creating dataset: {e}")
+            return None
 
-        # Import the files into OMERO
-        for file_path in file_paths:
-            ezomero.ezimport(conn, str(file_path), project, dataset)
+    def create_project(self, conn, project_name, description):
+        try:
+            project_id = ezomero.post_project(conn, project_name, description)
+            self.logger.info(f"Created project: {project_name} with ID: {project_id}")
+            return project_id
+        except Exception as e:
+            self.logger.error(f"Error creating project: {e}")
+            return None
 
-        logger.info(f"Uploaded files: {file_paths}")
-    except Exception as e:
-        logger.error(f"Error uploading files {file_paths}: {e}")
+    def upload_files(self, conn, file_paths, project_id, dataset_id):
+        try:
+            # Adjust the base path for file_paths to the correct directory
+            corrected_file_paths = [Path(str(fp).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')) for fp in file_paths]
+            for file_path in corrected_file_paths:
+                ezomero.ezimport(conn, str(file_path), project_id, dataset_id)
+            self.logger.info(f"Uploaded files: {corrected_file_paths}")
+        except Exception as e:
+            self.logger.error(f"Error uploading files {corrected_file_paths}: {e}")
 
-# Main function to orchestrate the upload process
-def import_data_package(data_package, config):
-    # Initialize the logger
-    logging.basicConfig(level=logging.INFO, filename=config['log_file_path'], filemode='a',
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    def import_data_package(self, data_package):
+        # Correct the base path for path_to_use if necessary
+        path_to_use = str(data_package.hidden_path if data_package.hidden_path else data_package.original_path).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')
+        self.logger.info(f"Importing data from path: {path_to_use}")
 
-    # Connection parameters (these should be replaced with your own server details)
-    HOST = os.getenv('HOST')
-    USER = os.getenv('USER')
-    PASSWORD = os.getenv('PASSWORD')
-    PORT = int(os.getenv('PORT'))
-    GROUP = data_package.group.replace('core', '')
+        # Use environment variables directly
+        # HOST = os.getenv('HOST')
+        # USER = os.getenv('USER')
+        # PASSWORD = os.getenv('PASSWORD')
+        HOST = 'omero-acc.amc.nl'
+        USER = 'root'
+        PASSWORD = 'omero'
+        PORT = int(os.getenv('PORT'))
+        GROUP = data_package.group.replace('core', '')
 
-    # Log the connection parameters
-    logger.info(f"Attempting to connect to OMERO with host: {HOST}, username: {USER}, port: {PORT}, group: {GROUP}")
+        self.logger.info(f"Attempting to connect to OMERO with host: {HOST}, username: {USER}, port: {PORT}, group: {GROUP}")
 
-    # Connect to OMERO
-    #conn = ezomero.connect(user=USER, password=PASSWORD, host=HOST, group=GROUP, port=PORT, secure=False)
-    conn = BlitzGateway(USER, PASSWORD, group = GROUP, host = HOST, port=4064, secure=True)
-    conn.connect()
-    if conn is None:
-        return
+        conn = BlitzGateway(USER, PASSWORD, group=GROUP, host=HOST, port=PORT, secure=True)
+        if not conn.connect():
+            self.logger.error("Failed to connect to OMERO.")
+            return
 
-    # Create a new project
-    project_description = 'This is a test project description'
-    project_id = create_project(conn, data_package.project, project_description)
-    if project_id is None:
-        logger.error(f"Error creating project: {data_package.project}")
-        return
+        project_description = 'This is a test project description'
+        project_id = self.create_project(conn, data_package.project, project_description)
+        if project_id is None:
+            conn.close()
+            return
 
-    # Loop through each dataset in the data package
-    for dataset_name, file_paths in data_package.datasets.items():
-        # Create a new dataset
-        description = 'This is a test description'
-        dataset_id = create_dataset(conn, dataset_name, description, project_id)
-        if dataset_id is None:
-            continue
+        for dataset_name, file_paths in data_package.datasets.items():
+            dataset_id = self.create_dataset(conn, dataset_name, 'This is a test description', project_id)
+            if dataset_id is None:
+                continue
+            self.upload_files(conn, file_paths, project_id, dataset_id)
 
-        # Upload files
-        upload_files(conn, file_paths, project_id, dataset_id)
-
-    # Close the connection
-    conn.close()
-
-# Call the main function
-if __name__ == '__main__':
-    import_data_package()
+        conn.close()
