@@ -1,3 +1,5 @@
+# importer.py
+
 import os
 from pathlib import Path
 import ezomero
@@ -33,12 +35,13 @@ class DataPackageImporter:
             self.logger.error(f"Error creating project: {e}")
             return None
 
-    def upload_files(self, conn, file_paths, project_id, dataset_id):
+    def upload_files(self, conn, file_paths, dataset_id):
         try:
             # Adjust the base path for file_paths to the correct directory
-            corrected_file_paths = [Path(str(fp).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')) for fp in file_paths]
+            corrected_file_paths = [Path(str(fp).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')) for fp in file_paths] #TODO revisit the path handling and make it all through pathlib
             for file_path in corrected_file_paths:
-                ezomero.ezimport(conn, str(file_path), project_id, dataset_id)
+                # Import function of ezomero
+                ezomero.ezimport(conn, str(file_path), dataset=dataset_id) #TODO change this to just project and dataset to see it that is the issue
             self.logger.info(f"Uploaded files: {corrected_file_paths}")
         except Exception as e:
             self.logger.error(f"Error uploading files {corrected_file_paths}: {e}")
@@ -53,7 +56,7 @@ class DataPackageImporter:
         # USER = os.getenv('USER')
         # PASSWORD = os.getenv('PASSWORD')
         HOST = 'omero-acc.amc.nl'
-        USER = 'root'
+        USER = 'rrosas'
         PASSWORD = 'omero'
         PORT = int(os.getenv('PORT'))
         GROUP = data_package.group.replace('core', '')
@@ -75,6 +78,6 @@ class DataPackageImporter:
             dataset_id = self.create_dataset(conn, dataset_name, 'This is a test description', project_id)
             if dataset_id is None:
                 continue
-            self.upload_files(conn, file_paths, project_id, dataset_id)
+            self.upload_files(conn, file_paths, dataset_id)
 
         conn.close()
