@@ -14,7 +14,7 @@ from threading import Event, Timer
 #Modules
 from utils.config import load_settings, load_json
 from utils.data_mover import DataPackageMover
-# from utils.stager import DataPackageStager
+from utils.stager import DataPackageStager
 # from utils.importer import DataPackageImporter
 
 # Setup Configuration
@@ -26,11 +26,12 @@ executor = ProcessPoolExecutor(max_workers=config['max_workers']) # ProcessPoolE
 logger = setup_logger(__name__, config['log_file_path']) # Set up logging using setup_logger instead of basicConfig
 
 class DataPackage:
-    def __init__(self, landing_dir_base_path, group, user, project):
+    def __init__(self, landing_dir_base_path, staging_dir_base_path, group, user, project):
         self.group = group
         self.user = user
         self.project = project
-        self.original_path = Path(landing_dir_base_path) / group / user / project
+        self.landing_dir_base_path = Path(landing_dir_base_path) / group / user / project
+        self.staging_dir_base_path = Path(staging_dir_base_path) / group / user / project
         self.hidden_path = None
         self.datasets = {}
 
@@ -48,9 +49,10 @@ def ingest(data_package, config):
         # Proceed with further processing only if the data package was successfully moved
         logger.info(f"Data package {data_package.project} moved successfully.")
         
-        # # Step 2: Categorize Datasets
-        # stager = DataPackageStager(config)  # Instantiate the DatasetStager class
-        # data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
+        # Step 2: Categorize Datasets
+        stager = DataPackageStager(config)  # Instantiate the DatasetStager class
+        data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
+        logger.info(f"Datasets categorized for data package {data_package.project}.")
 
 
         # # Step 3: Import Data Package
@@ -63,14 +65,17 @@ def ingest(data_package, config):
 
 # Handler class
 class DataPackageHandler(FileSystemEventHandler):
-    def __init__(self, base_directory, group_folders, executor, logger):
-        self.base_directory = Path(base_directory)
+    def __init__(self, landing_dir_base_path, staging_dir_base_path, group_folders, executor, logger):
+        self.landing_dir_base_path = Path(landing_dir_base_path)
+        self.staging_dir_base_path = Path(staging_dir_base_path)
         self.group_folders = group_folders
         self.executor = executor
         self.logger = logger
         self.debounced_events = {}
 
     def on_created(self, event):
+        logger.info(f"on_created called with event: {event.src_path}")
+        logger.info(f"self.group_folders type: {type(self.group_folders)}")
         created_dir = Path(event.src_path)
         if not event.is_directory:
             created_dir = created_dir.parent
@@ -85,10 +90,10 @@ class DataPackageHandler(FileSystemEventHandler):
         try:
             for group, users in self.group_folders.items():
                 for user in users:
-                    user_folder = self.base_directory / group / user
+                    user_folder = self.landing_dir_base_path / group / user
                     if created_dir.parent == user_folder:
                         self.logger.info(f"DataPackage detected: {created_dir}, {group}, {user}, {created_dir.name}")
-                        data_package = DataPackage(self.base_directory, group, user, created_dir.name)
+                        data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, created_dir.name)
                         future = self.executor.submit(ingest, data_package, config)
                         future.add_done_callback(self.log_future_exception)
         except Exception as e:
@@ -104,7 +109,7 @@ class DataPackageHandler(FileSystemEventHandler):
             self.logger.error(f"Error in background task: {e}")
 
 
-def main(directory):
+def main():
     # Initialize the shutdown event
     shutdown_event = Event()
 
@@ -117,15 +122,22 @@ def main(directory):
         shutdown_event.set()
 
     # Load JSON directory_structure
-    with open(DIRECTORY_STRUCTURE_PATH, 'r') as f:
-        directory_structure = json.load(f)
-    group_folders = {group: users['membersOf'] for group, users in directory_structure['Groups'].items()}
+    try:
+        with open(DIRECTORY_STRUCTURE_PATH, 'r') as f:
+            directory_structure = json.load(f)
+        group_folders = {group: users['membersOf'] for group, users in directory_structure['Groups'].items()}
+    except Exception as e:
+        logger.error(f"Failed to load or parse the directory structure JSON: {e}")
+
+    # Retrieve the landing base directory from the configuration
+    landing_dir_base_path = config['landing_dir_base_path']
 
     # Set up the observer
     observer = Observer()
     for group in group_folders.keys():
-        event_handler = DataPackageHandler(directory, group_folders, executor, logger)
-        group_path = Path(directory) / group
+        # Adjust the call to DataPackageHandler with the correct parameters
+        event_handler = DataPackageHandler(landing_dir_base_path, config['staging_dir_path'], group_folders[group], executor, logger)
+        group_path = Path(landing_dir_base_path) / group
         observer.schedule(event_handler, path=str(group_path), recursive=True)
     observer.start()
 
@@ -148,8 +160,9 @@ def main(directory):
         logger.info("Folder monitoring service stopped.")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 3:
-        print("Usage: python main.py [config_file] [directory]")
+    if len(sys.argv) != 2:
+        print("Usage: python main.py [config_file]")
         sys.exit(1)
-
-    main(sys.argv[2])
+    CONFIG_PATH = sys.argv[1]
+    config = load_settings(CONFIG_PATH)  # Load the configuration early
+    main()

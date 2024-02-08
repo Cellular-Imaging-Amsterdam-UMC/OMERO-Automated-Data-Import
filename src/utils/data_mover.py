@@ -14,7 +14,7 @@ class DataPackageMover:
 
     def move_data_package(self):
         self.logger.info(f"Starting move for {self.data_package.project}")
-        source_path = self.data_package.original_path
+        source_path = self.data_package.landing_path
 
         if not self._verify_source_path(source_path):
             return False
@@ -65,6 +65,7 @@ class DataPackageMover:
             hidden_path = path.parent / ('.' + path.name)
             path.rename(hidden_path)
             self.logger.info(f"Data package hidden at: {hidden_path}")
+            self.data_package.hidden_path = hidden_path  # Update the hidden_path attribute
             return hidden_path
         except Exception as e:
             self.logger.error(f"Failed to hide data package: {e}")

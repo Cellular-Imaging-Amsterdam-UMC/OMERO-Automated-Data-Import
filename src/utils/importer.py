@@ -37,33 +37,26 @@ class DataPackageImporter:
 
     def upload_files(self, conn, file_paths, dataset_id):
         try:
-            # Adjust the base path for file_paths to the correct directory
-            corrected_file_paths = [Path(str(fp).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')) for fp in file_paths] #TODO revisit the path handling and make it all through pathlib
-            for file_path in corrected_file_paths:
-                # Import function of ezomero
-                ezomero.ezimport(conn, str(file_path), dataset=dataset_id) #TODO change this to just project and dataset to see it that is the issue
-            self.logger.info(f"Uploaded files: {corrected_file_paths}")
+            for file_path in file_paths:
+                # Directly use the file path as it's already adjusted to the staging directory
+                ezomero.ezimport(conn, str(file_path), dataset=dataset_id)
+            self.logger.info(f"Uploaded files: {file_paths}")
         except Exception as e:
-            self.logger.error(f"Error uploading files {corrected_file_paths}: {e}")
+            self.logger.error(f"Error uploading files {file_paths}: {e}")
 
     def import_data_package(self, data_package):
-        # Log a detailed representation of the data_package
-        detailed_repr = (f"DataPackage Details:\n"
+        self.logger.info(f"DataPackage Details:\n"
                          f"Group: {data_package.group}\n"
                          f"User: {data_package.user}\n"
                          f"Project: {data_package.project}\n"
                          f"Original Path: {data_package.original_path}\n"
-                         f"Hidden Path: {data_package.hidden_path}\n"
+                         f"Staging Path: {data_package.staging_path}\n"
                          f"Datasets: {data_package.datasets}")
-        self.logger.info(detailed_repr)
-        # Correct the base path for path_to_use if necessary
-        path_to_use = str(data_package.hidden_path if data_package.hidden_path else data_package.original_path).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')
-        self.logger.info(f"Importing data from path: {path_to_use}")
+        
+        # Use the staging_path for importing data
+        self.logger.info(f"Importing data from path: {data_package.staging_path}")
 
-        # Use environment variables directly
-        # HOST = os.getenv('HOST')
-        # USER = os.getenv('USER')
-        # PASSWORD = os.getenv('PASSWORD')
+        # Connection details
         HOST = 'omero-acc.amc.nl'
         USER = 'rrosas'
         PASSWORD = 'omero'
