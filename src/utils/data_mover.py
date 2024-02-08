@@ -75,36 +75,58 @@ class MoveDataPackage:
             self.logger.error(f"Error copying from {src} to {dest}: {str(e)}")
             return False
         return True
+    
+    def delete_original_datapackage(self, path):
+        try:
+            shutil.rmtree(path)
+            self.logger.info(f"Successfully deleted original data package at: {path}")
+        except Exception as e:
+            self.logger.error(f"Failed to delete original data package at {path}: {e}")
+            return False
+        return True
 
     def move_datapackage(self):
         self.logger.info(f"Starting move_datapackage for project: {self.data_package.project}")
-        src_path = self.data_package.original_path
+        src_path = Path(self.data_package.original_path)
         self.logger.info(f"Original path: {src_path}")
+    
+        # Ensure the source path exists before proceeding
+        if not src_path.exists():
+            self.logger.error(f"Source path does not exist: {src_path}")
+            return False, None
+    
+        # Step 1: Check if the data package has stabilized
+        if not self.has_datapackage_stabilized(src_path):
+            self.logger.warning(f"Data package at {src_path} is still changing. Cannot proceed with move.")
+            return False, None
+    
+        # Step 2: Hide the data package
         hidden_src_path = self.hide_datapackage(src_path)
         if hidden_src_path is None:
             self.logger.error("Aborting move_datapackage due to failure in hiding data package.")
             return False, None
-        self.data_package.hidden_path = Path(hidden_src_path)
+        hidden_src_path = Path(hidden_src_path)  # Ensure hidden_src_path is a Path object
     
-        self.logger.info(f"Triggered move_datapackage for project at: {hidden_src_path}")
-    
-        # Adjust the destination path to include group and user
-        dest_path = Path(self.config["staging_dir_path"]) / self.data_package.group / self.data_package.user / Path(hidden_src_path).name
-    
-        if self.has_datapackage_stabilized(hidden_src_path):
-            original_hash = self.hash_datapackage(hidden_src_path)
-            if not self.copy_to_staging(Path(hidden_src_path), dest_path):
-                self.logger.error(f"Failed to copy project from {hidden_src_path} to {dest_path}")
-                return False, None
-            copied_hash = self.hash_datapackage(dest_path)
-    
-            if original_hash == copied_hash:
-                self.logger.info(f"Project {self.data_package.project} successfully moved to: {dest_path}")
-                return True, Path(hidden_src_path)
-            else:
-                self.logger.error(f"Data integrity check failed for project {self.data_package.project}.")
-                return False, None
-        else:
-            self.logger.warning(f"Project {self.data_package.project} is still changing and cannot be moved yet.")
+        # Step 3: Move hidden data package to staging directory
+        dest_path = Path(self.config["staging_dir_path"]) / self.data_package.group / self.data_package.user / hidden_src_path.name
+        if not self.copy_to_staging(hidden_src_path, dest_path):
+            self.logger.error(f"Failed to copy data package from {hidden_src_path} to {dest_path}")
             return False, None
     
+        # Verify data integrity after copy
+        original_hash = self.hash_datapackage(hidden_src_path)
+        copied_hash = self.hash_datapackage(dest_path)
+        if original_hash != copied_hash:
+            self.logger.error("Data integrity check failed after copying to staging directory.")
+            # Optional: Implement a rollback mechanism here if needed
+            return False, None
+    
+        # Step 4: Remove the original data package
+        if not self.delete_original_datapackage(hidden_src_path):
+            self.logger.error(f"Failed to delete the original data package at {hidden_src_path}")
+            # Optional: Decide if you need to rollback the copied data in staging in this case
+            return False, None
+    
+        self.logger.info(f"Data package for project {self.data_package.project} successfully moved to staging: {dest_path}")
+        return True, dest_path
+        

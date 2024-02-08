@@ -51,18 +51,41 @@ def create_folders(base_path, groups):
             os.makedirs(user_folder, exist_ok=True)
             print(f"Created folder: {user_folder}")
 
+
+#config['landing_dir_base_path'], group_folders, "test_mnt/Test_DataPackage
 def generate_test_data(base_path, group_folders, data_package_path):
     """
     Generates test data by copying a sample data package into each user's directory.
     """
     print("Generating test datasets...")
+
+    # Print the contents of test_mnt before copying
+    print("Contents of test_mnt before copying:")
+    print_tree(data_package_path, file_output=True)
+
     for group, users in group_folders.items():
         for user in users:
             user_folder = os.path.join(base_path, group, user)
-            # Copy the data package into the user's directory
-            shutil.copytree(data_package_path, os.path.join(user_folder, "Test_DataPackage"))
-            print(f"Copied data package to: {os.path.join(user_folder, 'Test_DataPackage')}")
+            destination_path = os.path.join(user_folder, "Test_DataPackage")
+            try:
+                # Ensure the destination directory exists
+                os.makedirs(destination_path, exist_ok=True)
+                # Copy each item in the data package individually to the destination
+                for item in os.listdir(data_package_path):
+                    s_item = os.path.join(data_package_path, item)
+                    d_item = os.path.join(destination_path, item)
+                    if os.path.isdir(s_item):
+                        shutil.copytree(s_item, d_item)
+                    else:
+                        shutil.copy2(s_item, d_item)
+                print(f"Copied data package to: {destination_path}")
+            except Exception as e:
+                print(f"Error copying data package to {destination_path}: {e}")
             time.sleep(1) 
+
+    # Print the contents of test_mnt after copying
+    print("Contents of test_mnt after copying:")
+    print_tree(data_package_path, file_output=True)
 
 def print_tree(directory, file_output=False, indents=0):
     """
@@ -110,8 +133,8 @@ if __name__ == "__main__":
     print_tree(config['landing_dir_base_path'], file_output=True)
 
     # Keep the script running to allow time for testing
-    print("Test data generation complete. Keeping the script running for 30 seconds...")
-    time.sleep(30)
+    print("Test data generation complete. Keeping the script running for 10 seconds...")
+    time.sleep(10)
 
     # Optionally terminate the main.py process after testing
     print("Terminating main.py script...")

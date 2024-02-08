@@ -4,10 +4,13 @@ import sys
 import json
 from pathlib import Path
 import time
+from collections import defaultdict
+import threading
 from utils.logger import setup_logger
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from concurrent.futures import ProcessPoolExecutor
+from threading import Lock
 
 #Modules
 from utils.config import load_settings, load_json
@@ -98,43 +101,50 @@ class DataPackageHandler(FileSystemEventHandler):
         self.group_folders = group_folders
         self.executor = executor
         self.active_ingestions = active_ingestions
+        self.debounce_timers = defaultdict(int)
+        self.debounce_lock = Lock()
 
     def on_created(self, event):
-        """
-        Event hook for when a new directory or file is created. 
-        Checks if the created directory or the parent directory of the created file is a dataset 
-        and triggers the ingest function if it is.
-        """
-        try:
-            created_dir = Path(event.src_path)
+        created_dir = Path(event.src_path)
+        if created_dir.name.startswith('.'):
+            return
 
-            # If a new file is created, set created_dir to its parent directory
-            if not event.is_directory:
-                created_dir = created_dir.parent
+        if not event.is_directory:
+            created_dir = created_dir.parent
 
-            for group, users in self.group_folders.items():
-                for user in users:
-                    user_folder = self.base_directory / group / user
-                    # Check if the created directory or the parent directory of the created file is directly under the user's folder
-                    if created_dir.parent == user_folder:
-                        logger.info(f"DataPackge detected: {config['landing_dir_base_path']}, {group}, {user}, {created_dir.name}")
-                        data_package = DataPackage(config['landing_dir_base_path'], group, user, created_dir.name)
+        # Unique identifier for the datapackage
+        data_package_id = str(created_dir)
 
-                        # Submit the ingest task to the executor and add a callback for error logging
-                        future = self.executor.submit(ingest, data_package, config, self.active_ingestions)
-                        future.add_done_callback(self.log_future_exception)
-        except Exception as e:
-            logger.error(f"Error during on_created event handling: {e}")
+        with self.debounce_lock:
+            if data_package_id in self.debounce_timers:
+                self.debounce_timers[data_package_id].cancel()
+
+            timer = threading.Timer(1.0, self.process_event, [event])
+            self.debounce_timers[data_package_id] = timer
+            timer.start()
+
+    def process_event(self, event):
+        created_dir = Path(event.src_path)
+        if not event.is_directory:
+            created_dir = created_dir.parent
+
+        for group, users in self.group_folders.items():
+            for user in users:
+                user_folder = self.base_directory / group / user
+                if created_dir.parent == user_folder:
+                    logger.info(f"DataPackage detected: {config['landing_dir_base_path']}, {group}, {user}, {created_dir.name}")
+                    data_package = DataPackage(config['landing_dir_base_path'], group, user, created_dir.name)
+                    future = self.executor.submit(ingest, data_package, config, self.active_ingestions)
+                    future.add_done_callback(self.log_future_exception)
+
+        with self.debounce_lock:
+            del self.debounce_timers[str(created_dir)]
 
     def log_future_exception(self, future):
-        """
-        Callback function to log exceptions from futures.
-        """
         try:
-            future.result()  # This will raise any exceptions caught during the execution of the task
+            future.result()
         except Exception as e:
             logger.error(f"Error in background task: {e}")
-
 
 def main(directory):
     """

@@ -47,6 +47,15 @@ class DataPackageImporter:
             self.logger.error(f"Error uploading files {corrected_file_paths}: {e}")
 
     def import_data_package(self, data_package):
+        # Log a detailed representation of the data_package
+        detailed_repr = (f"DataPackage Details:\n"
+                         f"Group: {data_package.group}\n"
+                         f"User: {data_package.user}\n"
+                         f"Project: {data_package.project}\n"
+                         f"Original Path: {data_package.original_path}\n"
+                         f"Hidden Path: {data_package.hidden_path}\n"
+                         f"Datasets: {data_package.datasets}")
+        self.logger.info(detailed_repr)
         # Correct the base path for path_to_use if necessary
         path_to_use = str(data_package.hidden_path if data_package.hidden_path else data_package.original_path).replace('test_mnt\\test_L_Drive', 'test_mnt\\test_OMERO_Dir')
         self.logger.info(f"Importing data from path: {path_to_use}")
