@@ -9,7 +9,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from concurrent.futures import ProcessPoolExecutor
 import signal
-from threading import Event
+from threading import Event, Timer
 
 #Modules
 from utils.config import load_settings, load_json
@@ -63,31 +63,36 @@ def ingest(data_package, config):
 
 # Handler class
 class DataPackageHandler(FileSystemEventHandler):
-    """
-    Event handler class for the watchdog observer. 
-    It checks for directory creation events and triggers the ingest function when a new directory is created.
-    """
-    def __init__(self, base_directory, group_folders, executor):
+    def __init__(self, base_directory, group_folders, executor, logger):
         self.base_directory = Path(base_directory)
         self.group_folders = group_folders
         self.executor = executor
+        self.logger = logger
+        self.debounced_events = {}
 
     def on_created(self, event):
-        try:
-            created_dir = Path(event.src_path)
-            if not event.is_directory:
-                created_dir = created_dir.parent
+        created_dir = Path(event.src_path)
+        if not event.is_directory:
+            created_dir = created_dir.parent
 
+        # Debounce logic to prevent processing the same directory multiple times in quick succession
+        if created_dir in self.debounced_events:
+            self.debounced_events[created_dir].cancel()  # Cancel the previous timer
+        self.debounced_events[created_dir] = Timer(0.5, self.process_event, [created_dir, event])
+        self.debounced_events[created_dir].start()
+
+    def process_event(self, created_dir, event):
+        try:
             for group, users in self.group_folders.items():
                 for user in users:
                     user_folder = self.base_directory / group / user
                     if created_dir.parent == user_folder:
-                        logger.info(f"DataPackage detected: {config['landing_dir_base_path']}, {group}, {user}, {created_dir.name}")
-                        data_package = DataPackage(config['landing_dir_base_path'], group, user, created_dir.name)
+                        self.logger.info(f"DataPackage detected: {created_dir}, {group}, {user}, {created_dir.name}")
+                        data_package = DataPackage(self.base_directory, group, user, created_dir.name)
                         future = self.executor.submit(ingest, data_package, config)
                         future.add_done_callback(self.log_future_exception)
         except Exception as e:
-            logger.error(f"Error during on_created event handling: {e}")
+            self.logger.error(f"Error during on_created event handling: {e}")
 
     def log_future_exception(self, future):
         """
@@ -96,7 +101,8 @@ class DataPackageHandler(FileSystemEventHandler):
         try:
             future.result()  # This will raise any exceptions caught during the execution of the task
         except Exception as e:
-            logger.error(f"Error in background task: {e}")
+            self.logger.error(f"Error in background task: {e}")
+
 
 def main(directory):
     # Initialize the shutdown event
@@ -118,7 +124,7 @@ def main(directory):
     # Set up the observer
     observer = Observer()
     for group in group_folders.keys():
-        event_handler = DataPackageHandler(directory, group_folders, executor)
+        event_handler = DataPackageHandler(directory, group_folders, executor, logger)
         group_path = Path(directory) / group
         observer.schedule(event_handler, path=str(group_path), recursive=True)
     observer.start()
