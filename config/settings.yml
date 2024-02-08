@@ -3,6 +3,7 @@ log_file_path: logs/app.logs
 
 # Main
 directory_structure_file_path: config/directory_structure.json
+max_workers: 4
 
 # Data Mover 
 landing_dir_base_path: /path/to/dataset

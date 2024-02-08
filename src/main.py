@@ -4,35 +4,26 @@ import sys
 import json
 from pathlib import Path
 import time
-from collections import defaultdict
-import threading
 from utils.logger import setup_logger
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from concurrent.futures import ProcessPoolExecutor
-from threading import Lock
+import signal
+from threading import Event
 
 #Modules
 from utils.config import load_settings, load_json
-from utils.data_mover import MoveDataPackage
-from utils.stager import DataPackageStager
-from utils.importer import DataPackageImporter
+from utils.data_mover import DataPackageMover
+# from utils.stager import DataPackageStager
+# from utils.importer import DataPackageImporter
 
-# Configuration
-CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml"
-
-# Load YAML configuration
-config = load_settings(CONFIG_PATH)
-
-# Load JSON directory_structure
-DIRECTORY_STRUCTURE_PATH = config['directory_structure_file_path']
+# Setup Configuration
+CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml" # Configuration
+config = load_settings(CONFIG_PATH) # Load YAML configuration
+DIRECTORY_STRUCTURE_PATH = config['directory_structure_file_path'] # Load JSON directory_structure
 directory_structure = load_json(DIRECTORY_STRUCTURE_PATH)
-
-# ProcessPoolExecutor with 4 workers
-executor = ProcessPoolExecutor(max_workers=config['max_workers'])
-
-# Set up logging using setup_logger instead of basicConfig
-logger = setup_logger(__name__, config['log_file_path'])
+executor = ProcessPoolExecutor(max_workers=config['max_workers']) # ProcessPoolExecutor with 4 workers
+logger = setup_logger(__name__, config['log_file_path']) # Set up logging using setup_logger instead of basicConfig
 
 class DataPackage:
     def __init__(self, landing_dir_base_path, group, user, project):
@@ -43,52 +34,32 @@ class DataPackage:
         self.hidden_path = None
         self.datasets = {}
 
-def ingest(data_package, config, active_ingestions, ):
+def ingest(data_package, config):
     """
-    This is the ingestion process:
-
-    >>> data_mover.py -- Step 1: Move Data Package
-    Determines when data has finished copying to the "dropbox" measuring the size of the dataset.
-    Hides the dataset by prefixing it with '.'
-    Copies the dataset to the staging with a hash check
-    Deletes the dataset in in the "dropbox"
-
-    >>> stager.py -- Step 2: Categorize Datasets
-    Creates a json file describing for each file:
-        Destination user, group, project, and dataset    
-        Screen or simple data
-
-    >>> importer.py -- Step 3: Import Data Package
-    Creates the Projects and Datasets described by the jsaon created by the stager module
-    Uploads the images/screens
-    Append the indicated metadata
-
     """
     try:
         # Step 1: Move Data Package
-        move_result, hidden_path = MoveDataPackage(data_package, config).move_result
+        mover = DataPackageMover(data_package, config)
+        move_result = mover.move_data_package()  # Adjust to capture the boolean return
+
         if not move_result:
-            raise Exception("Failed to move data package.")
-
-        # Step 2: Categorize Datasets
-        stager = DataPackageStager(config)  # Instantiate the DatasetStager class
-        data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
-
-
-        # Step 3: Import Data Package
-        importer = DataPackageImporter(config)
-        importer.import_data_package(data_package) 
+            logger.error(f"Failed to move data package for project {data_package.project}. Check logs for details.")
+            return 
+        # Proceed with further processing only if the data package was successfully moved
+        logger.info(f"Data package {data_package.project} moved successfully.")
+        
+        # # Step 2: Categorize Datasets
+        # stager = DataPackageStager(config)  # Instantiate the DatasetStager class
+        # data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
 
 
-        # Remove the data package identifier from active ingestions upon successful ingestion
-        data_package_identifier = f"{data_package.group}_{data_package.user}_{data_package.project}"
-        active_ingestions.remove(data_package_identifier)
+        # # Step 3: Import Data Package
+        # importer = DataPackageImporter(config)
+        # importer.import_data_package(data_package) 
+
+        logger.info(f"Data package {data_package.project} processed successfully.")
     except Exception as e:
         logger.error(f"Error during ingestion for group: {data_package.group}, user: {data_package.user}, project: {data_package.project}: {e}")
-    finally:
-        # Ensure the identifier is removed from active_ingestions once processing is complete or fails
-        data_package_identifier = f"{data_package.group}_{data_package.user}_{data_package.project}"
-        active_ingestions.remove(data_package_identifier)
 
 # Handler class
 class DataPackageHandler(FileSystemEventHandler):
@@ -96,90 +67,79 @@ class DataPackageHandler(FileSystemEventHandler):
     Event handler class for the watchdog observer. 
     It checks for directory creation events and triggers the ingest function when a new directory is created.
     """
-    def __init__(self, base_directory, group_folders, executor, active_ingestions):
+    def __init__(self, base_directory, group_folders, executor):
         self.base_directory = Path(base_directory)
         self.group_folders = group_folders
         self.executor = executor
-        self.active_ingestions = active_ingestions
-        self.debounce_timers = defaultdict(int)
-        self.debounce_lock = Lock()
 
     def on_created(self, event):
-        created_dir = Path(event.src_path)
-        if created_dir.name.startswith('.'):
-            return
+        try:
+            created_dir = Path(event.src_path)
+            if not event.is_directory:
+                created_dir = created_dir.parent
 
-        if not event.is_directory:
-            created_dir = created_dir.parent
-
-        # Unique identifier for the datapackage
-        data_package_id = str(created_dir)
-
-        with self.debounce_lock:
-            if data_package_id in self.debounce_timers:
-                self.debounce_timers[data_package_id].cancel()
-
-            timer = threading.Timer(1.0, self.process_event, [event])
-            self.debounce_timers[data_package_id] = timer
-            timer.start()
-
-    def process_event(self, event):
-        created_dir = Path(event.src_path)
-        if not event.is_directory:
-            created_dir = created_dir.parent
-
-        for group, users in self.group_folders.items():
-            for user in users:
-                user_folder = self.base_directory / group / user
-                if created_dir.parent == user_folder:
-                    logger.info(f"DataPackage detected: {config['landing_dir_base_path']}, {group}, {user}, {created_dir.name}")
-                    data_package = DataPackage(config['landing_dir_base_path'], group, user, created_dir.name)
-                    future = self.executor.submit(ingest, data_package, config, self.active_ingestions)
-                    future.add_done_callback(self.log_future_exception)
-
-        with self.debounce_lock:
-            del self.debounce_timers[str(created_dir)]
+            for group, users in self.group_folders.items():
+                for user in users:
+                    user_folder = self.base_directory / group / user
+                    if created_dir.parent == user_folder:
+                        logger.info(f"DataPackage detected: {config['landing_dir_base_path']}, {group}, {user}, {created_dir.name}")
+                        data_package = DataPackage(config['landing_dir_base_path'], group, user, created_dir.name)
+                        future = self.executor.submit(ingest, data_package, config)
+                        future.add_done_callback(self.log_future_exception)
+        except Exception as e:
+            logger.error(f"Error during on_created event handling: {e}")
 
     def log_future_exception(self, future):
+        """
+        Callback function to log exceptions from futures.
+        """
         try:
-            future.result()
+            future.result()  # This will raise any exceptions caught during the execution of the task
         except Exception as e:
             logger.error(f"Error in background task: {e}")
 
 def main(directory):
-    """
-    Main function of the script. 
-    It sets up the directory structure, event loop, and observer, and starts the folder monitoring service.
-    """
-    active_ingestions = set()
-    
+    # Initialize the shutdown event
+    shutdown_event = Event()
+
+    def graceful_exit(signum, frame):
+        """
+        Signal handler for graceful shutdown.
+        Sets the shutdown event to signal the main loop to exit.
+        """
+        logger.info("Graceful shutdown initiated.")
+        shutdown_event.set()
+
     # Load JSON directory_structure
     with open(DIRECTORY_STRUCTURE_PATH, 'r') as f:
         directory_structure = json.load(f)
-
     group_folders = {group: users['membersOf'] for group, users in directory_structure['Groups'].items()}
-
-    # ProcessPoolExecutor with 4 workers
-    executor = ProcessPoolExecutor(max_workers=4)
 
     # Set up the observer
     observer = Observer()
     for group in group_folders.keys():
-        event_handler = DataPackageHandler(directory, group_folders, executor, active_ingestions)
+        event_handler = DataPackageHandler(directory, group_folders, executor)
         group_path = Path(directory) / group
         observer.schedule(event_handler, path=str(group_path), recursive=True)
     observer.start()
 
     logger.info("Starting the folder monitoring service.")
 
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, graceful_exit)
+    signal.signal(signal.SIGTERM, graceful_exit)
+
     try:
-        while True:
+        # Main loop waits for the shutdown event
+        while not shutdown_event.is_set():
             time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
+    finally:
+        # Cleanup operations
         logger.info("Stopping the folder monitoring service.")
-    observer.join()
-    executor.shutdown()
+        observer.stop()
+        observer.join()
+        executor.shutdown(wait=True)
+        logger.info("Folder monitoring service stopped.")
 
 if __name__ == "__main__":
     if len(sys.argv) > 3:

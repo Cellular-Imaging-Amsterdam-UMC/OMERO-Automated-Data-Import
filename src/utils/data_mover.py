@@ -6,127 +6,106 @@ import hashlib
 import shutil
 from utils.logger import setup_logger
 
-class MoveDataPackage:
+class DataPackageMover:
     def __init__(self, data_package, config):
         self.data_package = data_package
         self.config = config
         self.logger = setup_logger(__name__, self.config['log_file_path'])
-        self.move_result = self.move_datapackage()
 
-    def calculate_datapackage_size(self, path):
-        total_size = 0
-        path = Path(path)
-        for f in path.glob('**/*'):
-            if f.is_file():
-                total_size += f.stat().st_size
-        return total_size
+    def move_data_package(self):
+        self.logger.info(f"Starting move for {self.data_package.project}")
+        source_path = self.data_package.original_path
 
-    def has_datapackage_stabilized(self, path):
-        interval = self.config["monitor_interval"]
-        stable_duration = self.config["stable_duration"]
+        if not self._verify_source_path(source_path):
+            return False
 
-        last_size = -1
-        stable_time = 0
+        if not self._wait_until_stable(source_path):
+            self.logger.warning("Data package size is not stabilizing.")
+            return False
 
-        while stable_time < stable_duration:
-            current_size = self.calculate_datapackage_size(path)
-            if current_size == last_size:
-                stable_time += interval
-            else:
-                stable_time = 0
-            last_size = current_size
-            time.sleep(interval)
+        hidden_path = self._hide_data_package(source_path)
+        if not hidden_path:
+            return False
 
-        return True
+        dest_path = self._define_destination_path(hidden_path)
+        if not self._copy_data_package(hidden_path, dest_path):
+            return False
 
-    def hide_datapackage(self, path):
-        self.logger.info(f"Attempting to hide data package at: {path}")
-        path = Path(path)
+        if not self._verify_data_integrity(hidden_path, dest_path):
+            return False
+
+        if self._delete_original_data_package(hidden_path):
+            self.logger.info(f"Data package {self.data_package.project} moved successfully.")
+            return True
+        else:
+            return False
+
+    def _verify_source_path(self, path):
         if not path.exists():
-            self.logger.error(f"Path does not exist: {path}")
-            return None
-        parent_dir = path.parent
-        hidden_path = parent_dir / ('.' + path.name)
-        try:
-            path.rename(hidden_path)
-            self.logger.info(f"Data package successfully hidden: {hidden_path}")
-        except Exception as e:
-            self.logger.error(f"Failed to hide data package from {path} to {hidden_path}: {e}")
-            return None
-        return str(hidden_path)
-
-    def hash_datapackage(self, path):
-        hash_algo = hashlib.md5()
-        path = Path(path)
-
-        for file_path in sorted(path.glob('**/*')):
-            if file_path.is_file():
-                with open(file_path, "rb") as f:
-                    for chunk in iter(lambda: f.read(4096), b""):
-                        hash_algo.update(chunk)
-
-        return hash_algo.hexdigest()
-
-    def copy_to_staging(self, src, dest):
-        try:
-            shutil.copytree(src, dest)  # Use dest directly without hiding it again
-            self.logger.info(f"Successfully copied to staging at: {dest}")
-        except Exception as e:
-            self.logger.error(f"Error copying from {src} to {dest}: {str(e)}")
+            self.logger.error(f"Source path does not exist: {path}")
             return False
         return True
-    
-    def delete_original_datapackage(self, path):
+
+    def _wait_until_stable(self, path, attempts=10, interval=2):
+        """Wait for the data package size to stabilize."""
+        last_size = -1
+        for _ in range(attempts):
+            current_size = self._calculate_size(path)
+            if current_size == last_size:
+                return True
+            last_size = current_size
+            time.sleep(interval)
+        return False
+
+    def _calculate_size(self, path):
+        return sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
+
+    def _hide_data_package(self, path):
+        try:
+            hidden_path = path.parent / ('.' + path.name)
+            path.rename(hidden_path)
+            self.logger.info(f"Data package hidden at: {hidden_path}")
+            return hidden_path
+        except Exception as e:
+            self.logger.error(f"Failed to hide data package: {e}")
+            return None
+
+    def _define_destination_path(self, hidden_path):
+        return Path(self.config["staging_dir_path"]) / self.data_package.group / self.data_package.user / hidden_path.name.strip('.')
+
+    def _copy_data_package(self, source_path, dest_path):
+        try:
+            shutil.copytree(source_path, dest_path)
+            self.logger.info(f"Data package copied to staging at: {dest_path}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Error during data package copy: {e}")
+            return False
+
+    def _verify_data_integrity(self, source_path, dest_path):
+        source_hash = self._calculate_hash(source_path)
+        dest_hash = self._calculate_hash(dest_path)
+        if source_hash == dest_hash:
+            self.logger.info("Data integrity check passed.")
+            return True
+        else:
+            self.logger.error("Data integrity check failed.")
+            return False
+
+    def _calculate_hash(self, path):
+        hash_md5 = hashlib.md5()
+        for item in sorted(path.rglob('*')):
+            if item.is_file():
+                with open(item, "rb") as f:
+                    for chunk in iter(lambda: f.read(4096), b""):
+                        hash_md5.update(chunk)
+        return hash_md5.hexdigest()
+
+    def _delete_original_data_package(self, path):
         try:
             shutil.rmtree(path)
             self.logger.info(f"Successfully deleted original data package at: {path}")
+            return True
         except Exception as e:
-            self.logger.error(f"Failed to delete original data package at {path}: {e}")
+            self.logger.error(f"Failed to delete the original data package at {path}: {e}")
             return False
-        return True
-
-    def move_datapackage(self):
-        self.logger.info(f"Starting move_datapackage for project: {self.data_package.project}")
-        src_path = Path(self.data_package.original_path)
-        self.logger.info(f"Original path: {src_path}")
-    
-        # Ensure the source path exists before proceeding
-        if not src_path.exists():
-            self.logger.error(f"Source path does not exist: {src_path}")
-            return False, None
-    
-        # Step 1: Check if the data package has stabilized
-        if not self.has_datapackage_stabilized(src_path):
-            self.logger.warning(f"Data package at {src_path} is still changing. Cannot proceed with move.")
-            return False, None
-    
-        # Step 2: Hide the data package
-        hidden_src_path = self.hide_datapackage(src_path)
-        if hidden_src_path is None:
-            self.logger.error("Aborting move_datapackage due to failure in hiding data package.")
-            return False, None
-        hidden_src_path = Path(hidden_src_path)  # Ensure hidden_src_path is a Path object
-    
-        # Step 3: Move hidden data package to staging directory
-        dest_path = Path(self.config["staging_dir_path"]) / self.data_package.group / self.data_package.user / hidden_src_path.name
-        if not self.copy_to_staging(hidden_src_path, dest_path):
-            self.logger.error(f"Failed to copy data package from {hidden_src_path} to {dest_path}")
-            return False, None
-    
-        # Verify data integrity after copy
-        original_hash = self.hash_datapackage(hidden_src_path)
-        copied_hash = self.hash_datapackage(dest_path)
-        if original_hash != copied_hash:
-            self.logger.error("Data integrity check failed after copying to staging directory.")
-            # Optional: Implement a rollback mechanism here if needed
-            return False, None
-    
-        # Step 4: Remove the original data package
-        if not self.delete_original_datapackage(hidden_src_path):
-            self.logger.error(f"Failed to delete the original data package at {hidden_src_path}")
-            # Optional: Decide if you need to rollback the copied data in staging in this case
-            return False, None
-    
-        self.logger.info(f"Data package for project {self.data_package.project} successfully moved to staging: {dest_path}")
-        return True, dest_path
-        
