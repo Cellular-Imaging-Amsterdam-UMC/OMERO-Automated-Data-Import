@@ -15,7 +15,7 @@ from threading import Event, Timer
 from utils.config import load_settings, load_json
 from utils.data_mover import DataPackageMover
 from utils.stager import DataPackageStager
-# from utils.importer import DataPackageImporter
+from utils.importer import DataPackageImporter
 
 # Setup Configuration
 CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml" # Configuration
@@ -52,12 +52,12 @@ def ingest(data_package, config):
         # Step 2: Categorize Datasets
         stager = DataPackageStager(config)  # Instantiate the DatasetStager class
         data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
-        logger.info(f"Datasets categorized for data package {data_package.project}.")
+        logger.info(f"Datasets categorized for data package {data_package.project}.") #TODO: Add a structure print when I start testing complex project injests
 
 
-        # # Step 3: Import Data Package
-        # importer = DataPackageImporter(config)
-        # importer.import_data_package(data_package) 
+        # Step 3: Import Data Package
+        importer = DataPackageImporter(config)
+        importer.import_data_package(data_package) 
 
         logger.info(f"Data package {data_package.project} processed successfully.")
     except Exception as e:
@@ -74,8 +74,6 @@ class DataPackageHandler(FileSystemEventHandler):
         self.debounced_events = {}
 
     def on_created(self, event):
-        logger.info(f"on_created called with event: {event.src_path}")
-        logger.info(f"self.group_folders type: {type(self.group_folders)}")
         created_dir = Path(event.src_path)
         if not event.is_directory:
             created_dir = created_dir.parent
@@ -88,11 +86,12 @@ class DataPackageHandler(FileSystemEventHandler):
 
     def process_event(self, created_dir, event):
         try:
+            self.logger.info(f"Processing event for directory: {created_dir}")
             for group, users in self.group_folders.items():
                 for user in users:
                     user_folder = self.landing_dir_base_path / group / user
                     if created_dir.parent == user_folder:
-                        self.logger.info(f"DataPackage detected: {created_dir}, {group}, {user}, {created_dir.name}")
+                        self.logger.info(f"DataPackage detected - Directory: {created_dir}, Group: {group}, User: {user}, Package Name: {created_dir.name}")
                         data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, created_dir.name)
                         future = self.executor.submit(ingest, data_package, config)
                         future.add_done_callback(self.log_future_exception)
@@ -136,7 +135,7 @@ def main():
     observer = Observer()
     for group in group_folders.keys():
         # Adjust the call to DataPackageHandler with the correct parameters
-        event_handler = DataPackageHandler(landing_dir_base_path, config['staging_dir_path'], group_folders[group], executor, logger)
+        event_handler = DataPackageHandler(landing_dir_base_path, config['staging_dir_path'], group_folders, executor, logger)
         group_path = Path(landing_dir_base_path) / group
         observer.schedule(event_handler, path=str(group_path), recursive=True)
     observer.start()

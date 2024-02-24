@@ -49,18 +49,16 @@ class DataPackageImporter:
                          f"Group: {data_package.group}\n"
                          f"User: {data_package.user}\n"
                          f"Project: {data_package.project}\n"
-                         f"Original Path: {data_package.original_path}\n"
-                         f"Staging Path: {data_package.staging_path}\n"
+                         f"Original Path: {data_package.landing_dir_base_path}\n"
+                         f"Staging Path: {data_package.staging_dir_base_path}\n"
                          f"Datasets: {data_package.datasets}")
         
-        # Use the staging_path for importing data
-        self.logger.info(f"Importing data from path: {data_package.staging_path}")
-
         # Connection details
-        HOST = 'omero-acc.amc.nl'
-        USER = 'rrosas'
-        PASSWORD = 'omero'
-        PORT = int(os.getenv('PORT'))
+        HOST = os.getenv('OMERO_HOST')
+        USER = os.getenv('OMERO_USER')
+        PASSWORD = os.getenv('OMERO_PASSWORD')
+        PORT = os.getenv('OMERO_PORT')
+        # GROUP is derived from data_package.group and doesn't need to be an environment variable unless it's a static value.
         GROUP = data_package.group.replace('core', '')
 
         self.logger.info(f"Attempting to connect to OMERO with host: {HOST}, username: {USER}, port: {PORT}, group: {GROUP}")

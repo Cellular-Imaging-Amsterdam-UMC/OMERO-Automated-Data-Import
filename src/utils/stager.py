@@ -17,7 +17,7 @@ class DataPackageStager:
 
     def identify_datasets(self, data_package):
         datasets = {}
-        data_package_path = data_package.hidden_path if data_package.hidden_path else data_package.original_path
+        data_package_path = data_package.staging_dir_base_path
 
         self.logger.info(f"Typifying data package at: {data_package_path}")
 

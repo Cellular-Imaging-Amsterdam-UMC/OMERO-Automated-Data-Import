@@ -14,7 +14,7 @@ class DataPackageMover:
 
     def move_data_package(self):
         self.logger.info(f"Starting move for {self.data_package.project}")
-        source_path = self.data_package.landing_path
+        source_path = self.data_package.landing_dir_base_path
 
         if not self._verify_source_path(source_path):
             return False
