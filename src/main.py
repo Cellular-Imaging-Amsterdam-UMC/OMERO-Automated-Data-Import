@@ -16,6 +16,7 @@ from utils.config import load_settings, load_json
 from utils.data_mover import DataPackageMover
 from utils.stager import DataPackageStager
 from utils.importer import DataPackageImporter
+from utils.ingest_tracker import log_ingestion_step, initialize_database
 
 # Setup Configuration
 CONFIG_PATH = sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml" # Configuration
@@ -37,31 +38,35 @@ class DataPackage:
 
 def ingest(data_package, config):
     """
+    Ingests a data package through various stages and logs each step.
     """
     try:
         # Step 1: Move Data Package
         mover = DataPackageMover(data_package, config)
-        move_result = mover.move_data_package()  # Adjust to capture the boolean return
+        move_result = mover.move_data_package()
 
         if not move_result:
             logger.error(f"Failed to move data package for project {data_package.project}. Check logs for details.")
-            return 
-        # Proceed with further processing only if the data package was successfully moved
+            log_ingestion_step(data_package.group, data_package.user, data_package.project, "Move Failed")
+            return
         logger.info(f"Data package {data_package.project} moved successfully.")
-        
-        # Step 2: Categorize Datasets
-        stager = DataPackageStager(config)  # Instantiate the DatasetStager class
-        data_package.datasets = stager.identify_datasets(data_package)  # Use the identify_datasets method
-        logger.info(f"Datasets categorized for data package {data_package.project}.") #TODO: Add a structure print when I start testing complex project injests
+        log_ingestion_step(data_package.group, data_package.user, data_package.project, "Data Moved")
 
+        # Step 2: Categorize Datasets
+        stager = DataPackageStager(config)
+        data_package.datasets = stager.identify_datasets(data_package)
+        logger.info(f"Datasets categorized for data package {data_package.project}.")
+        log_ingestion_step(data_package.group, data_package.user, data_package.project, "Datasets Categorized")
 
         # Step 3: Import Data Package
         importer = DataPackageImporter(config)
-        importer.import_data_package(data_package) 
-
+        importer.import_data_package(data_package)
         logger.info(f"Data package {data_package.project} processed successfully.")
+        log_ingestion_step(data_package.group, data_package.user, data_package.project, "Data Imported")
+        
     except Exception as e:
         logger.error(f"Error during ingestion for group: {data_package.group}, user: {data_package.user}, project: {data_package.project}: {e}")
+        log_ingestion_step(data_package.group, data_package.user, data_package.project, "Ingestion Error")
 
 # Handler class
 class DataPackageHandler(FileSystemEventHandler):
@@ -92,6 +97,8 @@ class DataPackageHandler(FileSystemEventHandler):
                     user_folder = self.landing_dir_base_path / group / user
                     if created_dir.parent == user_folder:
                         self.logger.info(f"DataPackage detected - Directory: {created_dir}, Group: {group}, User: {user}, Package Name: {created_dir.name}")
+                        # Log the detection of a data package
+                        log_ingestion_step(group, user, created_dir.name, "Data Package Detected")
                         data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, created_dir.name)
                         future = self.executor.submit(ingest, data_package, config)
                         future.add_done_callback(self.log_future_exception)
@@ -109,6 +116,9 @@ class DataPackageHandler(FileSystemEventHandler):
 
 
 def main():
+    # Initialize the database for ingest tracking
+    initialize_database()
+    
     # Initialize the shutdown event
     shutdown_event = Event()
 

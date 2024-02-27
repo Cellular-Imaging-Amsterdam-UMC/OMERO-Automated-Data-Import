@@ -9,7 +9,7 @@ Based on the aforementioned information follows simple heuristics to defin:
 from pathlib import Path
 import glob
 from utils.logger import setup_logger
-
+from datetime import datetime
 class DataPackageStager:
     def __init__(self, config):
         self.config = config
@@ -18,18 +18,23 @@ class DataPackageStager:
     def identify_datasets(self, data_package):
         datasets = {}
         data_package_path = data_package.staging_dir_base_path
-
         self.logger.info(f"Typifying data package at: {data_package_path}")
 
-        files = glob.glob(f"{data_package_path}/**/*", recursive=True)
+        # Check if there are any directories in the data package
+        dirs = [d for d in glob.glob(f"{data_package_path}/**/", recursive=True)]
+        if not dirs:  # No directories, treat all files as part of a single dataset
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            files = glob.glob(f"{data_package_path}/*")  # Only look for files in the base directory
+            datasets[date_str] = [str(Path(file)) for file in files]
+        else:
+            files = glob.glob(f"{data_package_path}/**/*", recursive=True)
+            for file in files:
+                file_path = Path(file)
+                if file_path.is_dir():
+                    continue
 
-        for file in files:
-            file_path = Path(file)
-            if file_path.is_dir():
-                continue
-
-            dataset_path = file_path.parent.relative_to(data_package_path)
-            datasets.setdefault(str(dataset_path), []).append(str(file_path))
+                dataset_path = file_path.parent.relative_to(data_package_path)
+                datasets.setdefault(str(dataset_path), []).append(str(file_path))
 
         self.logger.info(f"Identified datasets: {datasets.keys()}")
 

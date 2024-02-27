@@ -1,9 +1,7 @@
-# importer.py
-
 import os
-from pathlib import Path
-import ezomero
+import subprocess
 import logging
+import ezomero
 from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
 
@@ -16,6 +14,12 @@ class DataPackageImporter:
         logging.basicConfig(level=logging.INFO, filename=self.config['log_file_path'], filemode='a',
                             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         self.logger = logging.getLogger(__name__)
+        
+        # Set OMERO server details as instance attributes
+        self.host = os.getenv('OMERO_HOST')
+        self.password = os.getenv('OMERO_PASSWORD')
+        self.user = os.getenv('OMERO_USER')
+        self.port = os.getenv('OMERO_PORT')
 
     def create_dataset(self, conn, dataset_name, description, project_id=None):
         try:
@@ -38,7 +42,6 @@ class DataPackageImporter:
     def upload_files(self, conn, file_paths, dataset_id):
         try:
             for file_path in file_paths:
-                # Directly use the file path as it's already adjusted to the staging directory
                 ezomero.ezimport(conn, str(file_path), dataset=dataset_id)
             self.logger.info(f"Uploaded files: {file_paths}")
         except Exception as e:
@@ -53,19 +56,15 @@ class DataPackageImporter:
                          f"Staging Path: {data_package.staging_dir_base_path}\n"
                          f"Datasets: {data_package.datasets}")
         
-        # Connection details
-        HOST = os.getenv('OMERO_HOST')
-        USER = os.getenv('OMERO_USER')
-        PASSWORD = os.getenv('OMERO_PASSWORD')
-        PORT = os.getenv('OMERO_PORT')
-        # GROUP is derived from data_package.group and doesn't need to be an environment variable unless it's a static value.
-        GROUP = data_package.group.replace('core', '')
-
-        self.logger.info(f"Attempting to connect to OMERO with host: {HOST}, username: {USER}, port: {PORT}, group: {GROUP}")
-
-        conn = BlitzGateway(USER, PASSWORD, group=GROUP, host=HOST, port=PORT, secure=True)
+        conn = BlitzGateway(self.user, self.password, group=data_package.group.replace('core', ''), host=self.host, port=self.port, secure=True)
         if not conn.connect():
             self.logger.error("Failed to connect to OMERO.")
+            return
+
+        new_owner_id = ezomero.get_user_id(conn, data_package.user)
+        if new_owner_id is None:
+            self.logger.error(f"Failed to find user ID for user name: {data_package.user}")
+            conn.close()
             return
 
         project_description = 'This is a test project description'
@@ -81,3 +80,15 @@ class DataPackageImporter:
             self.upload_files(conn, file_paths, dataset_id)
 
         conn.close()
+
+        # Change the ownership of the project using the CLI command
+        login_command = f"omero login {self.user}@{self.host}:{self.port} -w {self.password}"
+        chown_command = f"omero chown {new_owner_id} Project:{project_id}"
+        omero_cli_command = f"{login_command} && {chown_command}"
+
+        try:
+            self.logger.info(f"Changing ownership of project ID {project_id} to user ID {new_owner_id}")
+            result = subprocess.run(omero_cli_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, executable='/bin/bash')
+            self.logger.info(f"Ownership change successful. Output: {result.stdout}")
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Failed to change ownership. Error: {e.stderr}")

@@ -46,16 +46,29 @@ class DataPackageMover:
             return False
         return True
 
-    def _wait_until_stable(self, path, attempts=10, interval=2):
-        """Wait for the data package size to stabilize."""
-        last_size = -1
-        for _ in range(attempts):
+    def _wait_until_stable(self, path, interval=2):
+        """Wait indefinitely for the data package size to stop growing, logging the size in GB at the first interval and then every 10 intervals."""
+        last_size = 0
+        interval_counter = 0  # Initialize a counter to track the intervals
+    
+        while True:
             current_size = self._calculate_size(path)
+            size_in_gb = current_size / (1024**3)  # Convert bytes to gigabytes
+    
+            # Log the size at the first interval and then every 10 intervals
+            if interval_counter == 0 or interval_counter % 10 == 0:
+                self.logger.info(f"Current data package size: {size_in_gb:.3f} GB")
+    
             if current_size == last_size:
+                # Ensure the final size is logged if it hasn't been already
+                if interval_counter % 10 != 0:
+                    self.logger.info(f"Final data package size: {size_in_gb:.3f} GB")
+                self.logger.info("Data package size stabilized.")
                 return True
+    
             last_size = current_size
+            interval_counter += 1  # Increment the counter at each interval
             time.sleep(interval)
-        return False
 
     def _calculate_size(self, path):
         return sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
