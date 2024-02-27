@@ -4,7 +4,6 @@ from pathlib import Path
 import time
 import hashlib
 import shutil
-import datetime
 from utils.logger import setup_logger
 
 class DataPackageMover:
@@ -26,7 +25,7 @@ class DataPackageMover:
                 folder_name = file_path.stem  # File name without the extension
                 folder_path = file_path.parent / folder_name
                 folder_path.mkdir(exist_ok=True)
-    
+
                 # Move the file into the newly created folder
                 new_file_path = folder_path / file_path.name
                 file_path.rename(new_file_path)
