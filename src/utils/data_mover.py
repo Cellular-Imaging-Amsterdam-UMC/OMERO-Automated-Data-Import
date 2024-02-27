@@ -4,6 +4,7 @@ from pathlib import Path
 import time
 import hashlib
 import shutil
+import datetime
 from utils.logger import setup_logger
 
 class DataPackageMover:
@@ -11,10 +12,37 @@ class DataPackageMover:
         self.data_package = data_package
         self.config = config
         self.logger = setup_logger(__name__, self.config['log_file_path'])
+    
+    def _wrap_data_package(self, path):
+        # Check if the path as provided exists (likely a directory)
+        if path.exists():
+            return path
+        else:
+            # Path does not exist as provided, attempt to find a matching file
+            possible_files = list(path.parent.glob(path.name + ".*"))
+            if possible_files:
+                # Assuming only one file matches, adjust as necessary
+                file_path = possible_files[0]
+                folder_name = file_path.stem  # File name without the extension
+                folder_path = file_path.parent / folder_name
+                folder_path.mkdir(exist_ok=True)
+    
+                # Move the file into the newly created folder
+                new_file_path = folder_path / file_path.name
+                file_path.rename(new_file_path)
+                self.logger.info(f"Moved file into new folder: {folder_path}")
+                return folder_path
+            else:
+                # No matching file found, log an error or handle as needed
+                self.logger.error(f"No file found matching: {path}")
+                return None
 
     def move_data_package(self):
         self.logger.info(f"Starting move for {self.data_package.project}")
         source_path = self.data_package.landing_dir_base_path
+
+        # Check and wrap the data package if it's a file
+        source_path = self._wrap_data_package(source_path)
 
         if not self._verify_source_path(source_path):
             return False
@@ -50,22 +78,22 @@ class DataPackageMover:
         """Wait indefinitely for the data package size to stop growing, logging the size in GB at the first interval and then every 10 intervals."""
         last_size = 0
         interval_counter = 0  # Initialize a counter to track the intervals
-    
+
         while True:
             current_size = self._calculate_size(path)
             size_in_gb = current_size / (1024**3)  # Convert bytes to gigabytes
-    
+
             # Log the size at the first interval and then every 10 intervals
             if interval_counter == 0 or interval_counter % 10 == 0:
                 self.logger.info(f"Current data package size: {size_in_gb:.3f} GB")
-    
+
             if current_size == last_size:
                 # Ensure the final size is logged if it hasn't been already
                 if interval_counter % 10 != 0:
                     self.logger.info(f"Final data package size: {size_in_gb:.3f} GB")
                 self.logger.info("Data package size stabilized.")
                 return True
-    
+
             last_size = current_size
             interval_counter += 1  # Increment the counter at each interval
             time.sleep(interval)

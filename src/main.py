@@ -79,27 +79,32 @@ class DataPackageHandler(FileSystemEventHandler):
         self.debounced_events = {}
 
     def on_created(self, event):
-        created_dir = Path(event.src_path)
-        if not event.is_directory:
-            created_dir = created_dir.parent
+        # Handle both files and directories
+        created_path = Path(event.src_path)
+        is_directory = event.is_directory
 
-        # Debounce logic to prevent processing the same directory multiple times in quick succession
-        if created_dir in self.debounced_events:
-            self.debounced_events[created_dir].cancel()  # Cancel the previous timer
-        self.debounced_events[created_dir] = Timer(0.5, self.process_event, [created_dir, event])
-        self.debounced_events[created_dir].start()
+        # Debounce logic to prevent processing the same path multiple times in quick succession
+        if created_path in self.debounced_events:
+            self.debounced_events[created_path].cancel()  # Cancel the previous timer
+        self.debounced_events[created_path] = Timer(0.5, self.process_event, [created_path, is_directory])
+        self.debounced_events[created_path].start()
 
-    def process_event(self, created_dir, event):
+    def process_event(self, created_path, is_directory):
         try:
-            self.logger.info(f"Processing event for directory: {created_dir}")
+            self.logger.info(f"Processing event for path: {created_path}")
             for group, users in self.group_folders.items():
                 for user in users:
                     user_folder = self.landing_dir_base_path / group / user
-                    if created_dir.parent == user_folder:
-                        self.logger.info(f"DataPackage detected - Directory: {created_dir}, Group: {group}, User: {user}, Package Name: {created_dir.name}")
+                    # Check if the created path is directly under a user folder
+                    if created_path.parent == user_folder:
+                        # Determine the package name based on whether it's a file or directory
+                        package_name = created_path.stem if not is_directory else created_path.name
+                        self.logger.info(f"DataPackage detected - Path: {created_path}, Group: {group}, User: {user}, Package Name: {package_name}")
                         # Log the detection of a data package
-                        log_ingestion_step(group, user, created_dir.name, "Data Package Detected")
-                        data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, created_dir.name)
+                        log_ingestion_step(group, user, package_name, "Data Package Detected")
+                        # Create a DataPackage instance
+                        data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, package_name)
+                        # Submit the data package for ingestion
                         future = self.executor.submit(ingest, data_package, config)
                         future.add_done_callback(self.log_future_exception)
         except Exception as e:
