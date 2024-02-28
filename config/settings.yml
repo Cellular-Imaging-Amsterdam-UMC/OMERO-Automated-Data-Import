@@ -6,7 +6,10 @@ directory_structure_file_path: config/directory_structure.json
 max_workers: 4
 
 # Data Mover 
-landing_dir_base_path: /path/to/dataset
-staging_dir_path: /path/to/staging
+landing_dir_base_path: /mnt/L-Drive/basic/divg
+staging_dir_path: /mnt/datadisk/omero/OMERO_inplace
 monitor_interval: 30
 stable_duration: 30
+
+# Importer
+failed_uploads_directory: test_mnt/failed_uploads_directory

@@ -14,6 +14,7 @@ from threading import Event, Timer
 
 #Modules
 from utils.config import load_settings, load_json
+from utils.initialize import initialize_system
 from utils.data_mover import DataPackageMover
 from utils.stager import DataPackageStager
 from utils.importer import DataPackageImporter
@@ -125,8 +126,8 @@ class DataPackageHandler(FileSystemEventHandler):
 
 
 def main():
-    # Initialize the database for ingest tracking
-    initialize_database()
+    # Initialize
+    initialize_system(config)
     
     # Initialize the shutdown event
     shutdown_event = Event()

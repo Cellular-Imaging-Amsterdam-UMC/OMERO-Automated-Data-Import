@@ -1,8 +1,5 @@
 {
     "Groups": {
-      "coreReits": {
-        "membersOf": ["l.pasteur", "e.reits"]
-      },
       "coreRosas": {
         "membersOf": ["rrosas"]
       }
