@@ -61,10 +61,20 @@ def ingest(data_package, config, ingestion_id):
 
         # Step 3: Import Data Package
         importer = DataPackageImporter(config)
-        importer.import_data_package(data_package)
-        logger.info(f"Data package {data_package.project} processed successfully.")
+        successful_uploads, failed_uploads = importer.import_data_package(data_package)
+        logger.info(f"Data package {data_package.project} processed successfully with {len(successful_uploads)} successful uploads and {len(failed_uploads)} failed uploads.")
         log_ingestion_step(data_package.group, data_package.user, data_package.project, "Data Imported", ingestion_id)
+                
+        # Adjusted log details of successful and failed uploads
+        # if successful_uploads:
+        #     successful_uploads_str = "; ".join([f"File: {upload[0]}, Project: {upload[1]}, Dataset: {upload[2]}, File Name: {upload[3]}, File ID: {upload[4]}" for upload in successful_uploads])
+        #     logger.info(f"Successful uploads for {data_package.project}: {successful_uploads_str}")
+        # if failed_uploads:
+        #     failed_uploads_str = "; ".join([f"File: {upload[0]}, Project: {upload[1]}, Dataset: {upload[2]}, File Name: {upload[3]}, Error: No ID returned" for upload in failed_uploads])
+        #     logger.error(f"Failed uploads for {data_package.project}: {failed_uploads_str}")
         
+        
+                
     except Exception as e:
         logger.error(f"Error during ingestion for group: {data_package.group}, user: {data_package.user}, project: {data_package.project}: {e}")
         log_ingestion_step(data_package.group, data_package.user, data_package.project, "Ingestion Error", ingestion_id)

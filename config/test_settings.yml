@@ -10,3 +10,6 @@ landing_dir_base_path: test_mnt/test_L_Drive
 staging_dir_path: test_mnt/test_OMERO_Dir
 monitor_interval: 30
 stable_duration: 30
+
+# Importer
+failed_upload_directory: test_mnt/failed_upload_directory

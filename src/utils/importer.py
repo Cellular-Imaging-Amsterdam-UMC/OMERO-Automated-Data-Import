@@ -39,13 +39,22 @@ class DataPackageImporter:
             self.logger.error(f"Error creating project: {e}")
             return None
 
-    def upload_files(self, conn, file_paths, dataset_id):
-        try:
-            for file_path in file_paths:
-                ezomero.ezimport(conn, str(file_path), dataset=dataset_id)
-            self.logger.info(f"Uploaded files: {file_paths}")
-        except Exception as e:
-            self.logger.error(f"Error uploading files {file_paths}: {e}")
+    def upload_files(self, conn, file_paths, dataset_id, project_name, dataset_name):
+        successful_uploads = []
+        failed_uploads = []
+        for file_path in file_paths:
+            try:
+                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id)
+                if file_id is not None:
+                    self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
+                    successful_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), file_id))
+                else:
+                    self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
+                    failed_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), None))
+            except Exception as e:
+                self.logger.error(f"Error uploading file {file_path} to dataset ID: {dataset_id}: {e}")
+                failed_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), None))
+        return successful_uploads, failed_uploads
 
     def import_data_package(self, data_package):
         self.logger.info(f"DataPackage Details:\n"
@@ -73,13 +82,17 @@ class DataPackageImporter:
             conn.close()
             return
 
+        all_successful_uploads = []
+        all_failed_uploads = []
         for dataset_name, file_paths in data_package.datasets.items():
             dataset_id = self.create_dataset(conn, dataset_name, 'This is a test description', project_id)
             if dataset_id is None:
                 continue
-            self.upload_files(conn, file_paths, dataset_id)
-
-        conn.close()
+            successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.project, dataset_name)
+            all_successful_uploads.extend(successful_uploads)
+            all_failed_uploads.extend(failed_uploads)
+        
+        conn.close()         
 
         # Change the ownership of the project using the CLI command
         login_command = f"omero login {self.user}@{self.host}:{self.port} -w {self.password}"
@@ -92,3 +105,5 @@ class DataPackageImporter:
             self.logger.info(f"Ownership change successful. Output: {result.stdout}")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to change ownership. Error: {e.stderr}")
+        
+        return all_successful_uploads, all_failed_uploads
