@@ -6,11 +6,9 @@ from pathlib import Path
 import time
 import uuid
 from utils.logger import setup_logger
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from concurrent.futures import ProcessPoolExecutor
 import signal
-from threading import Event, Timer
+from threading import Event, Thread
 
 #Modules
 from utils.config import load_settings, load_json
@@ -18,7 +16,7 @@ from utils.initialize import initialize_system
 from utils.data_mover import DataPackageMover
 from utils.stager import DataPackageStager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import log_ingestion_step, initialize_database
+from utils.ingest_tracker import log_ingestion_step
 from utils.failure_handler import UploadFailureHandler
 
 # Setup Configuration
@@ -78,47 +76,52 @@ def ingest(data_package, config, ingestion_id):
         log_ingestion_step(data_package.group, data_package.user, data_package.project, "Ingestion Error", ingestion_id)
 
 # Handler class
-class DataPackageHandler(FileSystemEventHandler):
-    def __init__(self, landing_dir_base_path, staging_dir_base_path, group_folders, executor, logger):
+class DirectoryPoller:
+    def __init__(self, landing_dir_base_path, staging_dir_base_path, group_folders, executor, logger, interval=10):
         self.landing_dir_base_path = Path(landing_dir_base_path)
         self.staging_dir_base_path = Path(staging_dir_base_path)
         self.group_folders = group_folders
         self.executor = executor
         self.logger = logger
-        self.debounced_events = {}
+        self.interval = interval
+        self.shutdown_event = Event()
 
-    def on_created(self, event):
-        # Handle both files and directories
-        created_path = Path(event.src_path)
-        is_directory = event.is_directory
+    def start(self):
+        self.polling_thread = Thread(target=self.poll_directory_changes)
+        self.polling_thread.start()
 
-        # Debounce logic to prevent processing the same path multiple times in quick succession
-        if created_path in self.debounced_events:
-            self.debounced_events[created_path].cancel()  # Cancel the previous timer
-        self.debounced_events[created_path] = Timer(0.5, self.process_event, [created_path, is_directory])
-        self.debounced_events[created_path].start()
+    def stop(self):
+        self.shutdown_event.set()
+        self.polling_thread.join()
 
-    def process_event(self, created_path, is_directory):
-        try:
-            self.logger.info(f"Processing event for path: {created_path}")
-            ingestion_id = str(uuid.uuid4())  # Generate a unique ID for this ingestion process
+    def poll_directory_changes(self):
+        last_checked = {}
+        while not self.shutdown_event.is_set():
             for group, users in self.group_folders.items():
                 for user in users:
                     user_folder = self.landing_dir_base_path / group / user
-                    if created_path.parent == user_folder:
-                        package_name = created_path.stem if not is_directory else created_path.name
-                        self.logger.info(f"DataPackage detected - Path: {created_path}, Group: {group}, User: {user}, Package Name: {package_name}, Ingestion ID: {ingestion_id}")
-                        log_ingestion_step(group, user, package_name, "Data Package Detected", ingestion_id)
-                        data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, package_name)
-                        future = self.executor.submit(ingest, data_package, config, ingestion_id)
-                        future.add_done_callback(self.log_future_exception)
-        except Exception as e:
-            self.logger.error(f"Error during on_created event handling: {e}")
+                    if not user_folder.exists():
+                        continue
+                    for item in user_folder.iterdir():
+                        # Check if the item is a directory or a file
+                        if item.is_dir() or item.is_file():
+                            package_name = item.name
+                            # Determine if the item is new or has been modified since last checked
+                            if package_name not in last_checked or item.stat().st_mtime > last_checked.get(package_name, 0):
+                                self.logger.info(f"Change detected in package: {package_name}")
+                                self.process_event(group, user, package_name, item)
+                                last_checked[package_name] = item.stat().st_mtime
+            time.sleep(self.interval)
+
+    def process_event(self, group, user, package_name, created_path):
+        ingestion_id = str(uuid.uuid4())
+        self.logger.info(f"DataPackage detected - Path: {created_path}, Group: {group}, User: {user}, Package Name: {package_name}, Ingestion ID: {ingestion_id}")
+        log_ingestion_step(group, user, package_name, "Data Package Detected", ingestion_id)
+        data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, package_name)
+        future = self.executor.submit(ingest, data_package, config, ingestion_id)
+        future.add_done_callback(self.log_future_exception)
 
     def log_future_exception(self, future):
-        """
-        Callback function to log exceptions from futures.
-        """
         try:
             future.result()  # This will raise any exceptions caught during the execution of the task
         except Exception as e:
@@ -126,56 +129,51 @@ class DataPackageHandler(FileSystemEventHandler):
 
 
 def main():
-    # Initialize
+    # Initialize system configurations and logging
     initialize_system(config)
     
-    # Initialize the shutdown event
+    # Define a global shutdown event to manage the graceful shutdown of the application
+    global shutdown_event
     shutdown_event = Event()
 
+    # Function to handle graceful exit signals (SIGINT/SIGTERM)
     def graceful_exit(signum, frame):
         """
         Signal handler for graceful shutdown.
-        Sets the shutdown event to signal the main loop to exit.
+        Sets the shutdown event to signal the polling loop to exit.
         """
         logger.info("Graceful shutdown initiated.")
         shutdown_event.set()
 
-    # Load JSON directory_structure
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, graceful_exit)
+    signal.signal(signal.SIGTERM, graceful_exit)
+
+    # Load the directory structure from the configuration
     try:
         with open(DIRECTORY_STRUCTURE_PATH, 'r') as f:
             directory_structure = json.load(f)
         group_folders = {group: users['membersOf'] for group, users in directory_structure['Groups'].items()}
     except Exception as e:
         logger.error(f"Failed to load or parse the directory structure JSON: {e}")
+        sys.exit(1)  # Exit if the directory structure cannot be loaded
 
-    # Retrieve the landing base directory from the configuration
-    landing_dir_base_path = config['landing_dir_base_path']
+    # Initialize the DirectoryPoller with the loaded configuration
+    poller = DirectoryPoller(config['landing_dir_base_path'], config['staging_dir_path'], group_folders, executor, logger)
+    
+    # Start the DirectoryPoller to begin monitoring for changes
+    poller.start()
+    logger.info("Starting the folder monitoring service using polling.")
 
-    # Set up the observer
-    observer = Observer()
-    for group in group_folders.keys():
-        # Adjust the call to DataPackageHandler with the correct parameters
-        event_handler = DataPackageHandler(landing_dir_base_path, config['staging_dir_path'], group_folders, executor, logger)
-        group_path = Path(landing_dir_base_path) / group
-        observer.schedule(event_handler, path=str(group_path), recursive=True)
-    observer.start()
-
-    logger.info("Starting the folder monitoring service.")
-
-    # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGINT, graceful_exit)
-    signal.signal(signal.SIGTERM, graceful_exit)
-
+    # Main loop waits for the shutdown event
     try:
-        # Main loop waits for the shutdown event
         while not shutdown_event.is_set():
             time.sleep(1)
     finally:
         # Cleanup operations
         logger.info("Stopping the folder monitoring service.")
-        observer.stop()
-        observer.join()
-        executor.shutdown(wait=True)
+        poller.stop()  # Stop the DirectoryPoller
+        executor.shutdown(wait=True)  # Shutdown the ProcessPoolExecutor
         logger.info("Folder monitoring service stopped.")
 
 if __name__ == "__main__":

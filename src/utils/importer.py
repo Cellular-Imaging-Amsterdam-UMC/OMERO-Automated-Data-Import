@@ -58,12 +58,12 @@ class DataPackageImporter:
 
     def import_data_package(self, data_package):
         self.logger.info(f"DataPackage Details:\n"
-                         f"Group: {data_package.group}\n"
-                         f"User: {data_package.user}\n"
-                         f"Project: {data_package.project}\n"
-                         f"Original Path: {data_package.landing_dir_base_path}\n"
-                         f"Staging Path: {data_package.staging_dir_base_path}\n"
-                         f"Datasets: {data_package.datasets}")
+                         f"     Group: {data_package.group.replace('core', '')}\n"
+                         f"     User: {data_package.user}\n"
+                         f"     Project: {data_package.project}\n"
+                         f"     landing_dir_base_path Path: {data_package.landing_dir_base_path}\n"
+                         f"     staging_dir_base_path Path: {data_package.staging_dir_base_path}\n"
+                         f"     Datasets: {data_package.datasets}")
         
         conn = BlitzGateway(self.user, self.password, group=data_package.group.replace('core', ''), host=self.host, port=self.port, secure=True)
         if not conn.connect():
