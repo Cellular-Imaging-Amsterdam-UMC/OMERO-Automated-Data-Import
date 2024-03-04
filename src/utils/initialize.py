@@ -42,6 +42,15 @@ def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
         log.error(f"Access check failed for {path}: {e}")
         return False
 
+def display_ready_flag():
+    """
+    Displays a decorative flag indicating the system is ready to upload data to OMERO.
+    """
+    line_pattern = "/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
+    print(line_pattern)
+    print("         READY TO UPLOAD DATA TO OMERO")
+    print(line_pattern)
+
 def initialize_system(config):
     """
     Performs initial system checks and setups, including directory access checks and database initialization.
@@ -68,4 +77,18 @@ def initialize_system(config):
 
     # Initialize the database for ingest tracking
     initialize_database()
+    logger.info("Database has been successfully created and initialized.")
+
     logger.info("System initialization complete.")
+    
+    # Display the ready flag
+    display_ready_flag()
+
+# Example usage
+if __name__ == "__main__":
+    config = {
+        'log_file_path': 'path/to/log_file.log',
+        'directory_structure_file_path': 'path/to/directory_structure.json',
+        'landing_dir_base_path': 'path/to/landing_dir'
+    }
+    initialize_system(config)

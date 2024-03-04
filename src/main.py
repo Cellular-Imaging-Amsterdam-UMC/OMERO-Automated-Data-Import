@@ -9,6 +9,7 @@ from utils.logger import setup_logger
 from concurrent.futures import ProcessPoolExecutor
 import signal
 from threading import Event, Thread
+import datetime
 
 #Modules
 from utils.config import load_settings, load_json
@@ -166,6 +167,12 @@ class DirectoryPoller:
         except Exception as e:
             self.logger.error(f"Error in background task: {e}")
 
+def log_ready_flag(logger):
+    """
+    Logs a decorative flag indicating the system is ready to upload data to OMERO.
+    """
+    line_pattern = "/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
+    logger.info("\n" + line_pattern + "\n         READY TO UPLOAD DATA TO OMERO\n" + line_pattern)
 
 def main():
     # Initialize system configurations and logging
@@ -204,7 +211,11 @@ def main():
     poller.start()
     logger.info("Starting the folder monitoring service using polling.")
 
+    # Log the ready flag
+    log_ready_flag(logger)
+
     # Main loop waits for the shutdown event
+    start_time = datetime.datetime.now()
     try:
         while not shutdown_event.is_set():
             time.sleep(1)
@@ -214,6 +225,9 @@ def main():
         poller.stop()  # Stop the DirectoryPoller
         executor.shutdown(wait=True)  # Shutdown the ProcessPoolExecutor
         logger.info("Folder monitoring service stopped.")
+        end_time = datetime.datetime.now()
+        runtime = end_time - start_time
+        logger.info(f"Program completed. Total runtime: {runtime}")
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
