@@ -44,7 +44,8 @@ class DataPackageImporter:
         failed_uploads = []
         for file_path in file_paths:
             try:
-                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id)
+                # Set ln_s=True for in-place imports
+                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=True)
                 if file_id is not None:
                     self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
                     successful_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), file_id))

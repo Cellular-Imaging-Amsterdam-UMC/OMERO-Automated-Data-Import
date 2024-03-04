@@ -76,11 +76,6 @@ class IngestionProcess:
         if not move_result:
             raise Exception(f"Failed to move data package for project {self.data_package.project}. Check logs for details.")
         self.log_ingestion_step("Data Moved")
-        
-        # Log each attribute of the DataPackage class
-        logger.info("Logging DataPackage attributes post-move:")
-        for attr, value in self.data_package.__dict__.items():
-            logger.info(f"{attr}: {value}")
     
     def categorize_datasets(self):
         stager = DataPackageStager(self.config)
