@@ -37,63 +37,65 @@ class DataPackage:
         self.hidden_path = None
         self.datasets = {}
 
-def ingest(data_package, config, ingestion_id):
-    """
-    Ingests a data package through various stages and logs each step.
-    """
-    failure_handler = UploadFailureHandler(config)  # Initialize once for potential use
-    process_failed = False  # Flag to indicate process failure
+class IngestionProcess:
+    def __init__(self, data_package, config, ingestion_id):
+        self.data_package = data_package
+        self.config = config
+        self.ingestion_id = ingestion_id
+        self.failure_handler = UploadFailureHandler(config)
+        self.process_steps = [
+            self.move_data_package,
+            self.categorize_datasets,
+            self.import_data_package,
+        ]
+    
+    def execute(self):
+        for step in self.process_steps:
+            if not self.run_step(step):
+                self.handle_failure()
+                break
+    
+    def run_step(self, step_function):
+        try:
+            step_function()
+            return True
+        except Exception as e:
+            logger.error(f"Error during {step_function.__name__} step: {e}")
+            return False
 
-    try:
-        # Step 1: Move Data Package
-        mover = DataPackageMover(data_package, config)
+    def move_data_package(self):
+        mover = DataPackageMover(self.data_package, self.config)
         move_result = mover.move_data_package()
-
         if not move_result:
-            raise Exception(f"Failed to move data package for project {data_package.project}. Check logs for details.")
-        logger.info(f"Data package {data_package.project} moved successfully.")
-        log_ingestion_step(data_package.group, data_package.user, data_package.project, "Data Moved", ingestion_id)
+            raise Exception(f"Failed to move data package for project {self.data_package.project}. Check logs for details.")
+        logger.info(f"Data package {self.data_package.project} moved successfully.")
+        self.log_ingestion_step("Data Moved")
+    
+    def categorize_datasets(self):
+        stager = DataPackageStager(self.config)
+        self.data_package.datasets = stager.identify_datasets(self.data_package)
+        logger.info(f"Datasets categorized for data package {self.data_package.project}.")
+        self.log_ingestion_step("Datasets Categorized")
+    
+    def import_data_package(self):
+        importer = DataPackageImporter(self.config)
+        successful_uploads, failed_uploads, importer_failed = importer.import_data_package(self.data_package)
+        if importer_failed:
+            raise Exception(f"Import process failed for data package {self.data_package.project}.")
+        logger.info(f"Data package {self.data_package.project} processed successfully with {len(successful_uploads)} successful uploads and {len(failed_uploads)} failed uploads.")
+        self.log_ingestion_step("Data Imported")
+        if failed_uploads:
+            self.failure_handler.move_failed_uploads(failed_uploads, self.data_package.user)
+            logger.info(f"Failed uploads for data package {self.data_package.project} have been handled.")
+            self.log_ingestion_step("Failed Uploads Handled")
 
-    except Exception as e:
-        logger.error(f"Error during move step: {e}")
-        process_failed = True
+    def handle_failure(self):
+        self.failure_handler.move_entire_data_package(self.data_package, self.data_package.staging_dir_base_path)
+        logger.error(f"Due to errors, the entire data package {self.data_package.project} has been moved to failed uploads.")
+        self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
 
-    if not process_failed:
-        try:
-            # Step 2: Categorize Datasets
-            stager = DataPackageStager(config)
-            data_package.datasets = stager.identify_datasets(data_package)
-            logger.info(f"Datasets categorized for data package {data_package.project}.")
-            log_ingestion_step(data_package.group, data_package.user, data_package.project, "Datasets Categorized", ingestion_id)
-
-        except Exception as e:
-            logger.error(f"Error during categorization step: {e}")
-            process_failed = True
-
-    if not process_failed:
-        try:
-            # Step 3: Import Data Package
-            importer = DataPackageImporter(config)
-            successful_uploads, failed_uploads, importer_failed = importer.import_data_package(data_package)
-            if importer_failed:
-                raise Exception(f"Import process failed for data package {data_package.project}.")
-            logger.info(f"Data package {data_package.project} processed successfully with {len(successful_uploads)} successful uploads and {len(failed_uploads)} failed uploads.")
-            log_ingestion_step(data_package.group, data_package.user, data_package.project, "Data Imported", ingestion_id)
-
-            # Step 4: Handling Failed Uploads
-            if failed_uploads:
-                failure_handler.move_failed_uploads(failed_uploads, data_package.user)
-                logger.info(f"Failed uploads for data package {data_package.project} have been handled.")
-                log_ingestion_step(data_package.group, data_package.user, data_package.project, "Failed Uploads Handled", ingestion_id)
-
-        except Exception as e:
-            logger.error(f"Error during import step: {e}")
-            process_failed = True
-
-    if process_failed:
-        failure_handler.move_entire_data_package(data_package, data_package.staging_dir_base_path)
-        logger.error(f"Due to errors, the entire data package {data_package.project} has been moved to failed uploads.")
-        log_ingestion_step(data_package.group, data_package.user, data_package.project, "Process Failed - Moved to Failed Uploads", ingestion_id)
+    def log_ingestion_step(self, step_description):
+        log_ingestion_step(self.data_package.group, self.data_package.user, self.data_package.project, step_description, self.ingestion_id)
 
 # Handler class
 class DirectoryPoller:
@@ -138,7 +140,8 @@ class DirectoryPoller:
         self.logger.info(f"DataPackage detected - Path: {created_path}, Group: {group}, User: {user}, Package Name: {package_name}, Ingestion ID: {ingestion_id}")
         log_ingestion_step(group, user, package_name, "Data Package Detected", ingestion_id)
         data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, package_name)
-        future = self.executor.submit(ingest, data_package, config, ingestion_id)
+        ingestion_process = IngestionProcess(data_package, config, ingestion_id)
+        future = self.executor.submit(ingestion_process.execute)
         future.add_done_callback(self.log_future_exception)
 
     def log_future_exception(self, future):
