@@ -7,7 +7,7 @@ max_workers: 4
 
 # Data Mover 
 landing_dir_base_path: test_mnt/test_L_Drive
-staging_dir_path: test_mnt/test_OMERO_Dir
+staging_dir_base_path: test_mnt/test_OMERO_Dir
 monitor_interval: 30
 stable_duration: 30
 

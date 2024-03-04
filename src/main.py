@@ -29,13 +29,19 @@ logger = setup_logger(__name__, config['log_file_path']) # Set up logging using 
 
 class DataPackage:
     def __init__(self, landing_dir_base_path, staging_dir_base_path, group, user, project):
+        self.id = str(uuid.uuid4())
         self.group = group
         self.user = user
         self.project = project
-        self.landing_dir_base_path = Path(landing_dir_base_path) / group / user / project
-        self.staging_dir_base_path = Path(staging_dir_base_path) / group / user / project
+        self.landing_path = Path(landing_dir_base_path) / group / user / project
+        self.staging_path = Path(staging_dir_base_path) / group / user / project
         self.hidden_path = None
         self.datasets = {}
+
+    def update_datapackage_data(self, **kwargs):
+        for key, value in kwargs.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
 
 class IngestionProcess:
     def __init__(self, data_package, config, ingestion_id):
@@ -62,21 +68,25 @@ class IngestionProcess:
         except Exception as e:
             logger.error(f"Error during {step_function.__name__} step: {e}")
             return False
-
+        
     def move_data_package(self):
         mover = DataPackageMover(self.data_package, self.config)
         move_result = mover.move_data_package()
         if not move_result:
             raise Exception(f"Failed to move data package for project {self.data_package.project}. Check logs for details.")
-        logger.info(f"Data package {self.data_package.project} moved successfully.")
         self.log_ingestion_step("Data Moved")
+        
+        # Log each attribute of the DataPackage class
+        logger.info("Logging DataPackage attributes post-move:")
+        for attr, value in self.data_package.__dict__.items():
+            logger.info(f"{attr}: {value}")
     
     def categorize_datasets(self):
         stager = DataPackageStager(self.config)
         self.data_package.datasets = stager.identify_datasets(self.data_package)
         logger.info(f"Datasets categorized for data package {self.data_package.project}.")
         self.log_ingestion_step("Datasets Categorized")
-    
+        
     def import_data_package(self):
         importer = DataPackageImporter(self.config)
         successful_uploads, failed_uploads, importer_failed = importer.import_data_package(self.data_package)
@@ -90,7 +100,8 @@ class IngestionProcess:
             self.log_ingestion_step("Failed Uploads Handled")
 
     def handle_failure(self):
-        self.failure_handler.move_entire_data_package(self.data_package, self.data_package.staging_dir_base_path)
+        #TODO check why if I am giving both datapackage and one of its attributes for a reason or a mistake
+        self.failure_handler.move_entire_data_package(self.data_package, self.data_package.staging_path)
         logger.error(f"Due to errors, the entire data package {self.data_package.project} has been moved to failed uploads.")
         self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
 
@@ -100,8 +111,8 @@ class IngestionProcess:
 # Handler class
 class DirectoryPoller:
     def __init__(self, landing_dir_base_path, staging_dir_base_path, group_folders, executor, logger, interval=10):
-        self.landing_dir_base_path = Path(landing_dir_base_path)
-        self.staging_dir_base_path = Path(staging_dir_base_path)
+        self.landing_path = Path(landing_dir_base_path)
+        self.staging_path = Path(staging_dir_base_path)
         self.group_folders = group_folders
         self.executor = executor
         self.logger = logger
@@ -121,7 +132,7 @@ class DirectoryPoller:
         while not self.shutdown_event.is_set():
             for group, users in self.group_folders.items():
                 for user in users:
-                    user_folder = self.landing_dir_base_path / group / user
+                    user_folder = self.landing_path / group / user
                     if not user_folder.exists():
                         continue
                     for item in user_folder.iterdir():
@@ -130,17 +141,22 @@ class DirectoryPoller:
                             package_name = item.name
                             # Determine if the item is new or has been modified since last checked
                             if package_name not in last_checked or item.stat().st_mtime > last_checked.get(package_name, 0):
-                                self.logger.info(f"Change detected in package: {package_name}")
                                 self.process_event(group, user, package_name, item)
                                 last_checked[package_name] = item.stat().st_mtime
             time.sleep(self.interval)
 
     def process_event(self, group, user, package_name, created_path):
-        ingestion_id = str(uuid.uuid4())
-        self.logger.info(f"DataPackage detected - Path: {created_path}, Group: {group}, User: {user}, Package Name: {package_name}, Ingestion ID: {ingestion_id}")
-        log_ingestion_step(group, user, package_name, "Data Package Detected", ingestion_id)
-        data_package = DataPackage(self.landing_dir_base_path, self.staging_dir_base_path, group, user, package_name)
-        ingestion_process = IngestionProcess(data_package, config, ingestion_id)
+        data_package = DataPackage(self.landing_path, self.staging_path, group, user, package_name)
+        self.logger.info(
+            f"  DataPackage detected:\n"
+            f"  Path: {created_path},\n"
+            f"  Group: {group},\n"
+            f"  User: {user},\n"
+            f"  Package Name: {package_name},\n"
+            f"  Ingestion ID: {data_package.id}"
+        )
+        log_ingestion_step(group, user, package_name, "Data Package Detected", data_package.id)
+        ingestion_process = IngestionProcess(data_package, config, data_package.id)
         future = self.executor.submit(ingestion_process.execute)
         future.add_done_callback(self.log_future_exception)
 
@@ -182,7 +198,7 @@ def main():
         sys.exit(1)  # Exit if the directory structure cannot be loaded
 
     # Initialize the DirectoryPoller with the loaded configuration
-    poller = DirectoryPoller(config['landing_dir_base_path'], config['staging_dir_path'], group_folders, executor, logger)
+    poller = DirectoryPoller(config['landing_dir_base_path'], config['staging_dir_base_path'], group_folders, executor, logger)
     
     # Start the DirectoryPoller to begin monitoring for changes
     poller.start()

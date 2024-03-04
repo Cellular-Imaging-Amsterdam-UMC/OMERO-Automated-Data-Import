@@ -7,7 +7,7 @@ max_workers: 4
 
 # Data Mover 
 landing_dir_base_path: /mnt/L-Drive/basic/divg
-staging_dir_path: /mnt/datadisk/omero/OMERO_inplace
+staging_dir_base_path: /mnt/datadisk/omero/OMERO_inplace
 monitor_interval: 30
 stable_duration: 30
 

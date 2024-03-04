@@ -64,35 +64,42 @@ class DataPackageImporter:
         if not conn.connect():
             self.logger.error("Failed to connect to OMERO.")
             return [], [], True  # Indicate failure to connect as an import failure
-    
+
         try:
-            # Create project
-            project_id = self.create_project(conn, data_package.project, 'This is a test project description')
+            # Adjust the project name to remove the UUID
+            # Assuming the UUID is at the end of the project name, formatted as "_UUID"
+            project_name_without_uuid = data_package.project.rsplit('_', 1)[0]
+            
+            # Update the data_package instance's project name to the adjusted name
+            data_package.update_datapackage_data(project=project_name_without_uuid)
+
+            # Create project without the UUID in its name
+            project_id = self.create_project(conn, project_name_without_uuid, 'This is a test project description')
             if project_id is None:
                 raise Exception("Failed to create project.")
-    
+
             all_successful_uploads = []
             all_failed_uploads = []
-    
+
             # Process each dataset
             for dataset_name, file_paths in data_package.datasets.items():
                 dataset_id = self.create_dataset(conn, dataset_name, 'This is a test description', project_id)
                 if dataset_id is None:
                     continue  # Skip this dataset if creation failed
                 
-                successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.project, dataset_name)
+                successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, project_name_without_uuid, dataset_name)
                 all_successful_uploads.extend(successful_uploads)
                 all_failed_uploads.extend(failed_uploads)
-    
+
             # Change ownership of the project
             self.change_project_ownership(conn, project_id, data_package.user)
-    
+
         except Exception as e:
             self.logger.error(f"Exception during import: {e}")
             return [], [], True  # Indicate any exception as an import failure
         finally:
             conn.close()
-    
+
         return all_successful_uploads, all_failed_uploads, False  # False indicates no import failure
     
     def change_project_ownership(self, conn, project_id, new_owner_username):

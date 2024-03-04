@@ -13,32 +13,33 @@ class DataPackageMover:
         self.logger = setup_logger(__name__, self.config['log_file_path'])
     
     def _wrap_data_package(self, path):
-        # Check if the path as provided exists (likely a directory)
-        if path.exists():
+        # Check if the path exists and is a file
+        if path.is_file():
+            # The path is a file; wrap it in a directory
+            folder_name = path.stem  # File name without the extension
+            folder_path = path.parent / folder_name
+            folder_path.mkdir(exist_ok=True)
+
+            # Move the file into the newly created folder
+            new_file_path = folder_path / path.name
+            path.rename(new_file_path)
+            self.logger.info(f"Moved file into new folder: {folder_path}")
+
+            # Update the project name to the folder name
+            self.data_package.update_datapackage_data(project=folder_name)
+            return folder_path
+        
+        elif path.is_dir():
+            # The path is a directory; no action needed
             return path
         else:
-            # Path does not exist as provided, attempt to find a matching file
-            possible_files = list(path.parent.glob(path.name + ".*"))
-            if possible_files:
-                # Assuming only one file matches, adjust as necessary
-                file_path = possible_files[0]
-                folder_name = file_path.stem  # File name without the extension
-                folder_path = file_path.parent / folder_name
-                folder_path.mkdir(exist_ok=True)
-
-                # Move the file into the newly created folder
-                new_file_path = folder_path / file_path.name
-                file_path.rename(new_file_path)
-                self.logger.info(f"Moved file into new folder: {folder_path}")
-                return folder_path
-            else:
-                # No matching file found, log an error or handle as needed
-                self.logger.error(f"No file found matching: {path}")
-                return None
+            # Path does not exist and no matching file was found, log an error
+            self.logger.error(f"No file or directory found matching: {path}")
+            return None
 
     def move_data_package(self):
-        self.logger.info(f"Starting move for {self.data_package.project}")
-        source_path = self.data_package.landing_dir_base_path
+        self.logger.info(f"Starting move for {self.data_package.project}, with uuid {self.data_package.id}")
+        source_path = self.data_package.landing_path
 
         # Check and wrap the data package if it's a file
         source_path = self._wrap_data_package(source_path)
@@ -50,15 +51,23 @@ class DataPackageMover:
             self.logger.warning("Data package size is not stabilizing.")
             return False
 
-        hidden_path = self._hide_data_package(source_path)
+        hidden_path = self._hide_and_tag_data_package(source_path)
         if not hidden_path:
             return False
 
-        dest_path = self._define_destination_path(hidden_path)
-        if not self._copy_data_package(hidden_path, dest_path):
+        # Define the new staging path based on the hidden path
+        new_staging_path = self._define_destination_path(hidden_path)
+
+        # Update the project name to the new hidden name without the leading dot and UUID
+        new_project_name = hidden_path.name.strip('.')
+
+        # Update the DataPackage object with the new project name and staging path
+        self.data_package.update_datapackage_data(project=new_project_name, staging_path=new_staging_path)
+
+        if not self._copy_data_package(hidden_path, new_staging_path):
             return False
 
-        if not self._verify_data_integrity(hidden_path, dest_path):
+        if not self._verify_data_integrity(hidden_path, new_staging_path):
             return False
 
         if self._delete_original_data_package(hidden_path):
@@ -100,19 +109,25 @@ class DataPackageMover:
     def _calculate_size(self, path):
         return sum(f.stat().st_size for f in path.rglob('*') if f.is_file())
 
-    def _hide_data_package(self, path):
+    def _hide_and_tag_data_package(self, path):
         try:
-            hidden_path = path.parent / ('.' + path.name)
+            # Generate the new hidden name with UUID appended
+            new_hidden_name = f".{path.name}_{self.data_package.id}"
+            hidden_path = path.parent / new_hidden_name
             path.rename(hidden_path)
             self.logger.info(f"Data package hidden at: {hidden_path}")
             self.data_package.hidden_path = hidden_path  # Update the hidden_path attribute
+            
+            # Also update the project name to reflect the new hidden name without the leading dot
+            self.data_package.project = new_hidden_name.strip('.')
+            
             return hidden_path
         except Exception as e:
             self.logger.error(f"Failed to hide data package: {e}")
             return None
 
     def _define_destination_path(self, hidden_path):
-        return Path(self.config["staging_dir_path"]) / self.data_package.group / self.data_package.user / hidden_path.name.strip('.')
+        return Path(self.config["staging_dir_base_path"]) / self.data_package.group / self.data_package.user / hidden_path.name.strip('.')
 
     def _copy_data_package(self, source_path, dest_path):
         try:
