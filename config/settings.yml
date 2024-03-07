@@ -12,4 +12,4 @@ monitor_interval: 30
 stable_duration: 30
 
 # Importer
-failed_uploads_directory: test_mnt/failed_uploads_directory
+failed_uploads_directory: /mnt/L-Drive/basic/divg/coreKrawczyk/.failed_uploads

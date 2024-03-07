@@ -12,7 +12,7 @@ from threading import Event, Thread
 import datetime
 
 #Modules
-from utils.config import load_settings, load_json
+from utils.config_manager import load_settings, load_json
 from utils.initialize import initialize_system
 from utils.data_mover import DataPackageMover
 from utils.stager import DataPackageStager

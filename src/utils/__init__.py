@@ -1,3 +1,3 @@
 # __init__.py
 
-from .config import load_settings, load_json
+from .config_manager import load_settings, load_json

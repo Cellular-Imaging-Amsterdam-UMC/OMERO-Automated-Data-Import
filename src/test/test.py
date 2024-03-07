@@ -6,7 +6,7 @@ import time
 import subprocess
 from pathlib import Path
 
-from ..utils.config import load_settings, load_json
+from ..utils.config_manager import load_settings, load_json
 
 # Configuration
 CONFIG_PATH = "config/test_settings.yml"
