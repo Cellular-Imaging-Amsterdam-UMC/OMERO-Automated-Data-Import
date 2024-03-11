@@ -5,6 +5,7 @@ base_dir: /mnt/L-Drive/basic/divg
 upload_orders_dir_name: .2BUploaded
 data_dir_name: .uploads
 failed_uploads_directory_name: .failed_uploads
+completed_orders_dir_name: .Uploaded
 
 # Worker settings
 max_workers: 4

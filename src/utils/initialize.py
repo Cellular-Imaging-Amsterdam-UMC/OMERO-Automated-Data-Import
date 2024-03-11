@@ -42,14 +42,6 @@ def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
         log.error(f"Access check failed for {path}: {e}")
         return False
 
-def display_ready_flag():
-    """
-    Displays a decorative flag indicating the system is ready to upload data to OMERO.
-    """
-    line_pattern = "/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
-    print(line_pattern)
-    print("         READY TO UPLOAD DATA TO OMERO")
-    print(line_pattern)
 
 def initialize_system(config):
     """
@@ -58,17 +50,16 @@ def initialize_system(config):
     # Setup logger
     logger = setup_logger('initialize_system', config['log_file_path'])
 
-    # Load the directory structure
-    directory_structure_path = config['directory_structure_file_path']
-    directory_structure = load_json(directory_structure_path)
-
-    # Check access to user directories under landing_dir_base_path
-    base_path = config['landing_dir_base_path']
+    # Check access to directories for each group
     access_checks_passed = True
-    for group, details in directory_structure['Groups'].items():
-        for user in details['membersOf']:
-            user_dir_path = os.path.join(base_path, group, user)
-            if not check_directory_access(user_dir_path, logger):
+    for group_info in load_json(config['group_list']):
+        # Use 'core_grp_name' as the directory name
+        group_base_path = os.path.join(config['base_dir'], group_info['core_grp_name'])
+        
+        # Check access for each specific directory within the group directory
+        for dir_name in [config['upload_orders_dir_name'], config['completed_orders_dir_name'], config['failed_uploads_directory_name']]:
+            dir_path = os.path.join(group_base_path, dir_name)
+            if not check_directory_access(dir_path, logger):
                 access_checks_passed = False
 
     if not access_checks_passed:
@@ -80,15 +71,3 @@ def initialize_system(config):
     logger.info("Database has been successfully created and initialized.")
 
     logger.info("System initialization complete.")
-    
-    # Display the ready flag
-    display_ready_flag()
-
-# Example usage
-if __name__ == "__main__":
-    config = {
-        'log_file_path': 'path/to/log_file.log',
-        'directory_structure_file_path': 'path/to/directory_structure.json',
-        'landing_dir_base_path': 'path/to/landing_dir'
-    }
-    initialize_system(config)
