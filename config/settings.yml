@@ -1,8 +1,10 @@
-# General Settings
+# Paths settings
 log_file_path: logs/app.logs
-
-# Main
-max_workers: 4
+group_list: config/group_list.yml
 base_dir: /mnt/L-Drive/basic/divg
-upload_orders_dir: .2BUploaded
-failed_uploads_directory: .failed_uploads
+upload_orders_dir_name: .2BUploaded
+data_dir_name: .uploads
+failed_uploads_directory_name: .failed_uploads
+
+# Worker settings
+max_workers: 4

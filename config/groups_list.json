@@ -1,10 +1,12 @@
 [
   {
-    "group_name": "coreKrawczyk",
-    "omero_grp_name": "Krawczyk"
+    "core_grp_name": "coreKrawczyk",
+    "omero_grp_name": "Krawczyk",
+    "omero_grp_id": 234
   },
   {
-    "group_name": "coreReits",
-    "omero_grp_name": "Reits"
+    "core_group_name": "coreReits",
+    "omero_grp_name": "Reits",
+    "ömero_grp_id": 134
   }
 ]
