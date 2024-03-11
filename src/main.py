@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import time
 import uuid
-from utils.logger import setup_logger
+from utils.logger import setup_logger, log_ready_flag
 from concurrent.futures import ProcessPoolExecutor
 import signal
 from threading import Event, Thread
@@ -104,11 +104,11 @@ class DirectoryPoller:
                         package_name = item.name
                         # Determine if the item is new or has been modified since last checked
                         if package_name not in last_checked or item.stat().st_mtime > last_checked.get(package_name, 0):
-                            self.process_event(core_grp_name, package_name, item)
+                            self.process_event(item)
                             last_checked[package_name] = item.stat().st_mtime
             time.sleep(self.interval)
 
-    def process_event(self, core_grp_name, package_name, created_path):
+    def process_event(self, created_path):
         if created_path.suffix == '.txt':  # Adjust based on your file naming/extension
             order_manager = UploadOrderManager(str(created_path), 'config/settings.yml')
             group, user, project, dataset = order_manager.get_order_info()  # Unpack the returned tuple
@@ -130,22 +130,16 @@ class DirectoryPoller:
 
     def log_future_exception(self, future):
         try:
-            future.result()  # This will raise any exceptions caught during the execution of the task
+            future.result()
         except Exception as e:
             self.logger.error(f"Error in background task: {e}")
-
-def log_ready_flag(logger):
-    """
-    Logs a decorative flag indicating the system is ready to upload data to OMERO.
-    """
-    line_pattern = "/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
-    logger.info("\n" + line_pattern + "\n         READY TO UPLOAD DATA TO OMERO\n" + line_pattern)
 
 def main():
     # Initialize system configurations and logging
     initialize_system(config)
     
     # Define a global shutdown event to manage the graceful shutdown of the application
+    # TODO review this shutdown mechanism, I find it somewhat excessive.
     global shutdown_event
     shutdown_event = Event()
 
