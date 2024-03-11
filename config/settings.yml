@@ -3,12 +3,6 @@ log_file_path: logs/app.logs
 
 # Main
 max_workers: 4
+base_dir: /mnt/L-Drive/basic/divg
 upload_orders_dir: .2BUploaded
 failed_uploads_directory: .failed_uploads
-
-
-# Data Mover 
-landing_dir_base_path: /mnt/L-Drive/basic/divg
-staging_dir_base_path: /mnt/datadisk/omero/OMERO_inplace
-monitor_interval: 30
-stable_duration: 30
