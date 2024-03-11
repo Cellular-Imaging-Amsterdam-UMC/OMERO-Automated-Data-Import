@@ -4,6 +4,7 @@ import logging
 import ezomero
 from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
+import json
 
 # Load environment variables from .env file
 load_dotenv('.env')
@@ -20,8 +21,21 @@ class DataPackageImporter:
         self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
+        self.groups_info = self.load_groups_info()
 
-    def create_dataset(self, conn, dataset_name, description, project_id=None):
+    def load_groups_info(self):
+        with open('config/groups_list.json') as f:
+            return json.load(f)
+
+    def get_omero_group_name(self, core_group_name):
+        for group in self.groups_info:
+            if group.get('core_grp_name') == core_group_name or group.get('core_group_name') == core_group_name:
+                return group.get('omero_grp_name')
+        self.logger.error(f"OMERO group name not found for core group: {core_group_name}")
+        return None
+
+    def create_dataset(self, conn, dataset_name, uuid, project_id=None):
+        description = f"uploaded through datapackage uuid: {uuid}"
         try:
             dataset_id = ezomero.post_dataset(conn, dataset_name, project_id, description)
             self.logger.info(f"Created dataset: {dataset_name} with ID: {dataset_id}")
@@ -30,22 +44,12 @@ class DataPackageImporter:
             self.logger.error(f"Error creating dataset: {e}")
             return None
 
-    def create_project(self, conn, project_name, description):
-        try:
-            project_id = ezomero.post_project(conn, project_name, description)
-            self.logger.info(f"Created project: {project_name} with ID: {project_id}")
-            return project_id
-        except Exception as e:
-            self.logger.error(f"Error creating project: {e}")
-            return None
-
     def upload_files(self, conn, file_paths, dataset_id, project_name, dataset_name):
         successful_uploads = []
         failed_uploads = []
         for file_path in file_paths:
             try:
-                # Set ln_s=True for in-place imports
-                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=True)
+                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=False)
                 if file_id is not None:
                     self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
                     successful_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), file_id))
@@ -60,40 +64,28 @@ class DataPackageImporter:
     def import_data_package(self, data_package):
         self.logger.info(f"Starting import for data package: {data_package.project}")
         
-        # Attempt to connect to OMERO
-        conn = BlitzGateway(self.user, self.password, group=data_package.group.replace('core', ''), host=self.host, port=self.port, secure=True)
+        omero_group_name = self.get_omero_group_name(data_package.group)
+        if not omero_group_name:
+            self.logger.error("OMERO group name could not be resolved.")
+            return [], [], True
+
+        conn = BlitzGateway(self.user, self.password, group=omero_group_name, host=self.host, port=self.port, secure=True)
         if not conn.connect():
             self.logger.error("Failed to connect to OMERO.")
-            return [], [], True  # Indicate failure to connect as an import failure
+            return [], [], True
+
+        # Initialize the lists to store upload results
+        all_successful_uploads = []
+        all_failed_uploads = []
 
         try:
-            # Adjust the project name to remove the UUID
-            # Assuming the UUID is at the end of the project name, formatted as "_UUID"
-            project_name_without_uuid = data_package.project.rsplit('_', 1)[0]
-            
-            # Update the data_package instance's project name to the adjusted name
-            data_package.update_datapackage_data(project=project_name_without_uuid)
+            dataset_id = self.create_dataset(conn, data_package.dataset, data_package.uuid)
+            if dataset_id is None:
+                raise Exception("Failed to create dataset.")
 
-            # Create project without the UUID in its name
-            project_id = self.create_project(conn, project_name_without_uuid, 'This is a test project description')
-            if project_id is None:
-                raise Exception("Failed to create project.")
-
-            all_successful_uploads = []
-            all_failed_uploads = []
-
-            # Process each dataset
-            for dataset_name, file_paths in data_package.datasets.items():
-                dataset_id = self.create_dataset(conn, dataset_name, 'This is a test description', project_id)
-                if dataset_id is None:
-                    continue  # Skip this dataset if creation failed
-                
-                successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, project_name_without_uuid, dataset_name)
-                all_successful_uploads.extend(successful_uploads)
-                all_failed_uploads.extend(failed_uploads)
-
-            # Change ownership of the project
-            self.change_project_ownership(conn, project_id, data_package.user)
+            successful_uploads, failed_uploads = self.upload_files(conn, data_package.base_dir.glob('**/*'), dataset_id, data_package.project, data_package.dataset)
+            all_successful_uploads.extend(successful_uploads)
+            all_failed_uploads.extend(failed_uploads)
 
         except Exception as e:
             self.logger.error(f"Exception during import: {e}")
@@ -119,4 +111,3 @@ class DataPackageImporter:
             self.logger.info(f"Ownership change successful. Output: {result.stdout}")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to change ownership. Error: {e.stderr}")
-    
