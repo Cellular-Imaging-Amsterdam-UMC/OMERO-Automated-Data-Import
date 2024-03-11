@@ -2,14 +2,13 @@
 log_file_path: logs/app.logs
 
 # Main
-directory_structure_file_path: config/directory_structure.json
 max_workers: 4
+upload_orders_dir: .2BUploaded
+failed_uploads_directory: .failed_uploads
+
 
 # Data Mover 
 landing_dir_base_path: /mnt/L-Drive/basic/divg
 staging_dir_base_path: /mnt/datadisk/omero/OMERO_inplace
 monitor_interval: 30
 stable_duration: 30
-
-# Importer
-failed_uploads_directory: /mnt/L-Drive/basic/divg/coreKrawczyk/.failed_uploads
