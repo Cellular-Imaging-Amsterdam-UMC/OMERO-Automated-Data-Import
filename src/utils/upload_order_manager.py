@@ -42,7 +42,6 @@ class UploadOrderManager:
         self.logger.info(log_message)
 
     def get_order_info(self):
-        # This method now returns a tuple of the necessary information
         return (
             self.order_info['Group'],
             self.order_info['Username'],

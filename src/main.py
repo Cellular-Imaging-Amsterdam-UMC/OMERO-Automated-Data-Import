@@ -56,7 +56,7 @@ class IngestionProcess:
             self.log_ingestion_step("Data Imported")
             
             if failed_uploads:
-                self.failure_handler.move_failed_uploads(failed_uploads, self.data_package.user)
+                self.failure_handler.move_failed_uploads(failed_uploads, self.data_package.user, self.data_package.group, self.config)
                 logger.info(f"Failed uploads for data package {self.data_package.project} have been handled.")
                 self.log_ingestion_step("Failed Uploads Handled")
                 
@@ -65,7 +65,7 @@ class IngestionProcess:
             logger.error(f"Error during import_data_package: {e}")
 
     def handle_failure(self):
-        self.failure_handler.move_entire_data_package(self.data_package, self.data_package.staging_path)
+        self.failure_handler.move_entire_data_package(self.data_package, self.data_package.staging_path, self.config)
         logger.error(f"Due to errors, the entire data package {self.data_package.project} has been moved to failed uploads.")
         self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
 
@@ -155,11 +155,9 @@ def main():
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, graceful_exit)
     signal.signal(signal.SIGTERM, graceful_exit)
-
-    # Initialize the DirectoryPoller with the loaded configuration
-    poller = DirectoryPoller(config, executor, logger)
     
     # Start the DirectoryPoller to begin monitoring for changes
+    poller = DirectoryPoller(config, executor, logger)
     poller.start()
     log_ready_flag(logger) # Log the ready flag
     start_time = datetime.datetime.now() # Main loop waits for the shutdown event
