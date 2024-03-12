@@ -1,10 +1,10 @@
 import os
 import subprocess
-import logging
 import ezomero
 from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
 import json
+from .logger import setup_logger
 
 # Load environment variables from .env file
 load_dotenv('.env')
@@ -12,9 +12,7 @@ load_dotenv('.env')
 class DataPackageImporter:
     def __init__(self, config):
         self.config = config
-        logging.basicConfig(level=logging.INFO, filename=self.config['log_file_path'], filemode='a',
-                            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        self.logger = logging.getLogger(__name__)
+        self.logger = setup_logger(__name__, self.config['log_file_path'])
         
         # Set OMERO server details as instance attributes
         self.host = os.getenv('OMERO_HOST')
@@ -44,25 +42,26 @@ class DataPackageImporter:
             self.logger.error(f"Error creating dataset: {e}")
             return None
 
-    def upload_files(self, conn, file_paths, dataset_id, project_name, dataset_name):
+    def upload_files(self, conn, file_paths, dataset_id, dataset_name):
         successful_uploads = []
         failed_uploads = []
         for file_path in file_paths:
             try:
+                # ln_s defines in-place imports. Change to False for normal https transfer
                 file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=False)
                 if file_id is not None:
                     self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
-                    successful_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), file_id))
+                    successful_uploads.append((file_path, dataset_name, os.path.basename(file_path), file_id))
                 else:
                     self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
-                    failed_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), None))
+                    failed_uploads.append((file_path, dataset_name, os.path.basename(file_path), None))
             except Exception as e:
                 self.logger.error(f"Error uploading file {file_path} to dataset ID: {dataset_id}: {e}")
-                failed_uploads.append((file_path, project_name, dataset_name, os.path.basename(file_path), None))
+                failed_uploads.append((file_path, dataset_name, os.path.basename(file_path), None))
         return successful_uploads, failed_uploads
 
     def import_data_package(self, data_package):
-        self.logger.info(f"Starting import for data package: {data_package.project}")
+        self.logger.info(f"Starting import for data package: {data_package.Dataset}")
         
         omero_group_name = self.get_omero_group_name(data_package.group)
         if not omero_group_name:
@@ -79,11 +78,12 @@ class DataPackageImporter:
         all_failed_uploads = []
 
         try:
-            dataset_id = self.create_dataset(conn, data_package.dataset, data_package.uuid)
+            dataset_id = self.create_dataset(conn, data_package.Dataset, data_package.uuid)
             if dataset_id is None:
                 raise Exception("Failed to create dataset.")
 
-            successful_uploads, failed_uploads = self.upload_files(conn, data_package.base_dir.glob('**/*'), dataset_id, data_package.project, data_package.dataset)
+            file_paths = [data_package.base_dir / file_name for file_name in data_package.files]
+            successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.Dataset)
             all_successful_uploads.extend(successful_uploads)
             all_failed_uploads.extend(failed_uploads)
 

@@ -13,9 +13,9 @@ def setup_logger(name, log_file, level=logging.INFO):
 
     return logger
 
-def log_ready_flag(logger):
-    """
-    Logs a decorative flag indicating the system is ready to upload data to OMERO.
-    """
-    line_pattern = "/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
-    logger.info("\n" + line_pattern + "\n         READY TO UPLOAD DATA TO OMERO\n" + line_pattern)
+def log_flag(logger, flag_type):
+    line_pattern = "    /\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
+    if flag_type == 'start':
+        logger.info("\n" + line_pattern + "\n           READY TO UPLOAD DATA TO OMERO\n" + line_pattern)
+    elif flag_type == 'end':
+        logger.info("\n" + line_pattern + "\n           STOPPING AUTOMATIC UPLOAD SERVICE\n" + line_pattern)

@@ -1,6 +1,6 @@
 # Paths settings
 log_file_path: logs/app.logs
-group_list: config/group_list.yml
+group_list: config/groups_list.json
 base_dir: /mnt/L-Drive/basic/divg
 upload_orders_dir_name: .2BUploaded
 data_dir_name: .uploads

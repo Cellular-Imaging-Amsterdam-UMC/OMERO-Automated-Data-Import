@@ -1,18 +1,16 @@
 # main.py
 
-import sys
-import json
 from pathlib import Path
 import time
-import uuid
-from utils.logger import setup_logger, log_ready_flag
 from concurrent.futures import ProcessPoolExecutor
 import signal
 from threading import Event, Thread
 import datetime
+import shutil
 
 #Modules
 from utils.config_manager import load_settings, load_json
+from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
@@ -20,61 +18,57 @@ from utils.ingest_tracker import log_ingestion_step
 from utils.failure_handler import UploadFailureHandler
 
 # Setup Configuration
-config = load_settings(sys.argv[1] if len(sys.argv) > 1 else "config/settings.yml")
+config = load_settings("config/settings.yml")
 groups_info = load_json(config['group_list'])
 executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
-    def __init__(self, uuid, base_dir, group, user, project, dataset):
+    def __init__(self, uuid, base_dir, group, username, dataset, path, files):
         self.uuid = uuid
         self.base_dir = base_dir
         self.group = group
-        self.user = user
-        self.project = project
-        self.dataset = dataset # dir name, cannot be single file
+        self.username = username
+        self.dataset = dataset
+        self.path = path
+        self.files = files
 
-    def update_datapackage_attributes(self, **kwargs):
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-
+#TODO add a function to move the upload order to the ".failed_uploads" or ".Uploaded" directories (in upload_order_manager) 
 class IngestionProcess:
-    def __init__(self, data_package, config, ingestion_uuid):
+    def __init__(self, data_package, config, uuid):
         self.data_package = data_package
         self.config = config
-        self.ingestion_uuid = ingestion_uuid
+        self.uuid = uuid
         self.failure_handler = UploadFailureHandler(config)
     
     def import_data_package(self):
         try:
             importer = DataPackageImporter(self.config)
             successful_uploads, failed_uploads, importer_failed = importer.import_data_package(self.data_package)
-            if importer_failed:
-                raise Exception(f"Import process failed for data package {self.data_package.project}.")
-            logger.info(f"Data package {self.data_package.project} processed successfully with {len(successful_uploads)} successful uploads and {len(failed_uploads)} failed uploads.")
-            self.log_ingestion_step("Data Imported")
             
-            if failed_uploads:
-                self.failure_handler.move_failed_uploads(failed_uploads, self.data_package.user, self.data_package.group, self.config)
-                logger.info(f"Failed uploads for data package {self.data_package.project} have been handled.")
-                self.log_ingestion_step("Failed Uploads Handled")
+            # Check if there are any failed uploads or if the importer itself failed
+            if importer_failed or failed_uploads:
+                raise Exception(f"Import process failed for data package in {self.data_package.dataset} due to failed uploads or importer failure.")
+            
+            logger.info(f"Data package in {self.data_package.dataset} processed successfully with {len(successful_uploads)} successful uploads.")
+            self.log_ingestion_step("Data Imported")
                 
         except Exception as e:
             self.handle_failure()
             logger.error(f"Error during import_data_package: {e}")
 
     def handle_failure(self):
-        self.failure_handler.move_entire_data_package(self.data_package, self.data_package.staging_path, self.config)
-        logger.error(f"Due to errors, the entire data package {self.data_package.project} has been moved to failed uploads.")
+        self.failure_handler.move_upload_order(self.data_package.dataset, self.data_package.username, self.data_package.group, self.config)
+        logger.error(f"Due to errors, the entire upload order for {self.data_package.dataset} has been moved to failed uploads.")
         self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
 
     def log_ingestion_step(self, step_description):
-        log_ingestion_step(self.data_package.group, self.data_package.user, self.data_package.project, step_description, self.ingestion_id)
+        log_ingestion_step(self.data_package.group, self.data_package.username, self.data_package.dataset, step_description, str(self.uuid))
 
 # Handler class
 class DirectoryPoller:
     def __init__(self, config, executor, logger, interval=10):
+        self.config = config
         self.base_dir = Path(config['base_dir'])
         self.core_grp_names = [group["core_grp_name"] for group in load_json(config['group_list']) if "core_grp_name" in group]
         self.upload_orders_dir_name = config['upload_orders_dir_name']
@@ -110,21 +104,22 @@ class DirectoryPoller:
 
     def process_event(self, created_path):
         if created_path.suffix == '.txt':  # Adjust based on your file naming/extension
-            order_manager = UploadOrderManager(str(created_path), 'config/settings.yml')
-            group, user, project, dataset = order_manager.get_order_info()  # Unpack the returned tuple
+            order_manager = UploadOrderManager(str(created_path), self.config)
+            uuid, group, username, dataset, path, files = order_manager.get_order_info()
 
             # Create a DataPackage instance with the unpacked information
-            data_package = DataPackage(uuid.uuid4(), self.base_dir, group, user, project, dataset)
+            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files)
             self.logger.info(
-                f"DataPackage detected:\n"
-                f"Group: {group},\n"
-                f"User: {user},\n"
-                f"Project: {project},\n"
-                f"Dataset: {dataset},\n"
-                f"Ingestion UUID: {data_package.uuid}"
+                f"  DataPackage detected:\n"
+                f"  UUID: {uuid}\n"
+                f"  Group: {group}\n"
+                f"  username: {username}\n"
+                f"  Dataset: {dataset}\n"
+                f"  Path: {path}\n"
+                f"  Files: {files}"
             )
-            log_ingestion_step(group, user, project, "Data Package Detected", data_package.uuid)
-            ingestion_process = IngestionProcess(data_package, self.config, data_package.uuid)
+            log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
+            ingestion_process = IngestionProcess(data_package, self.config, uuid)
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.log_future_exception)
 
@@ -159,25 +154,18 @@ def main():
     # Start the DirectoryPoller to begin monitoring for changes
     poller = DirectoryPoller(config, executor, logger)
     poller.start()
-    log_ready_flag(logger) # Log the ready flag
+    log_flag(logger, 'start')
     start_time = datetime.datetime.now() # Main loop waits for the shutdown event
     try:
         while not shutdown_event.is_set():
             time.sleep(1)
     finally:
         # Cleanup operations
-        logger.info("/\\/\\/ STOPPING aUTOMATIC UPLOAD SERVICE /\\/\\/")
+        log_flag(logger, 'end') 
         poller.stop()  # Stop the DirectoryPoller
         executor.shutdown(wait=True)  # Shutdown the ProcessPoolExecutor
         end_time = datetime.datetime.now()
-        runtime = end_time - start_time
-        logger.info(f"Program completed. Total runtime: {runtime}")
+        logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 
 if __name__ == "__main__":
-    try:
-        CONFIG_PATH = sys.argv[1]
-    except IndexError:
-        print("Usage: python main.py [config_file]")
-        sys.exit(1)
-    config = load_settings(CONFIG_PATH)  # Load the configuration early
     main()
