@@ -6,7 +6,6 @@ from concurrent.futures import ProcessPoolExecutor
 import signal
 from threading import Event, Thread
 import datetime
-import shutil
 
 #Modules
 from utils.config_manager import load_settings, load_json
@@ -113,7 +112,7 @@ class DirectoryPoller:
                 f"  DataPackage detected:\n"
                 f"  UUID: {uuid}\n"
                 f"  Group: {group}\n"
-                f"  username: {username}\n"
+                f"  Username: {username}\n"
                 f"  Dataset: {dataset}\n"
                 f"  Path: {path}\n"
                 f"  Files: {files}"

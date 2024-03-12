@@ -4,6 +4,7 @@ import ezomero
 from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
 import json
+from pathlib import Path
 from .logger import setup_logger
 
 # Load environment variables from .env file
@@ -61,8 +62,9 @@ class DataPackageImporter:
         return successful_uploads, failed_uploads
 
     def import_data_package(self, data_package):
-        self.logger.info(f"Starting import for data package: {data_package.Dataset}")
-        
+        self.logger.info(f"Starting import for data package: {data_package.dataset}")
+        self.logger.info(f"data_package.path: {data_package.path}")  # Debug print
+    
         omero_group_name = self.get_omero_group_name(data_package.group)
         if not omero_group_name:
             self.logger.error("OMERO group name could not be resolved.")
@@ -78,12 +80,12 @@ class DataPackageImporter:
         all_failed_uploads = []
 
         try:
-            dataset_id = self.create_dataset(conn, data_package.Dataset, data_package.uuid)
+            dataset_id = self.create_dataset(conn, data_package.dataset, data_package.uuid)
             if dataset_id is None:
                 raise Exception("Failed to create dataset.")
 
-            file_paths = [data_package.base_dir / file_name for file_name in data_package.files]
-            successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.Dataset)
+            file_paths = [Path(data_package.path) / file_name for file_name in data_package.files]
+            successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.dataset)
             all_successful_uploads.extend(successful_uploads)
             all_failed_uploads.extend(failed_uploads)
 

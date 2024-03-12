@@ -5,7 +5,7 @@ class UploadOrderManager:
         self.settings = settings
         self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
         self.order_info = self._parse_order_file(order_file_path)
-        self._log_parsed_order_info()
+        self.validate_order_info()
 
     def _parse_order_file(self, order_file_path):
         order_info = {}
@@ -16,13 +16,20 @@ class UploadOrderManager:
                     order_info[key] = [file_name.strip() for file_name in value.split(',')]
                 else:
                     order_info[key] = value.strip()
-        self.logger.info(f"Final parsed order info: {order_info}")
         return order_info
 
-    def _log_parsed_order_info(self):
-        # Log the parsed order information for debugging
-        for key, value in self.order_info.items():
-            self.logger.info(f"Parsed Order Info - {key}: {value}")
+    def validate_order_info(self):
+        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Path', 'Files']
+        missing_keys = [key for key in required_keys if key not in self.order_info]
+        empty_keys = [key for key, value in self.order_info.items() if not value]
+
+        if missing_keys:
+            self.logger.error(f"Missing required keys in order info: {', '.join(missing_keys)}")
+        if empty_keys:
+            self.logger.error(f"Empty values found for keys in order info: {', '.join(empty_keys)}")
+
+        if not missing_keys and not empty_keys:
+            self.logger.info("Order info validation passed: All required keys are present and non-empty.")
 
     def get_dataset_full_path(self):
         path = self.order_info.get('Path', '')
