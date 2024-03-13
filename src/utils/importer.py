@@ -5,7 +5,9 @@ from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
 import json
 from pathlib import Path
+
 from .logger import setup_logger
+from utils.ingest_tracker import log_ingestion_step
 
 # Load environment variables from .env file
 load_dotenv('.env')
@@ -88,6 +90,11 @@ class DataPackageImporter:
             successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.dataset)
             all_successful_uploads.extend(successful_uploads)
             all_failed_uploads.extend(failed_uploads)
+
+            # Log the "Data Imported" step here, after successful uploads
+            #TODO extend to support partial imports.
+            if successful_uploads:
+                log_ingestion_step(data_package.group, data_package.username, data_package.dataset, "Data Imported", str(data_package.uuid))
 
         except Exception as e:
             self.logger.error(f"Exception during import: {e}")

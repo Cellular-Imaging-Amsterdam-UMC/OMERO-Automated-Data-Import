@@ -34,11 +34,11 @@ class DataPackage:
 
 #TODO add a function to move the upload order to the ".failed_uploads" or ".Uploaded" directories (in upload_order_manager) 
 class IngestionProcess:
-    def __init__(self, data_package, config, uuid, order_file_path):
+    def __init__(self, data_package, config, uuid, order_manager):
         self.data_package = data_package
         self.config = config
         self.uuid = uuid
-        self.order_manager = UploadOrderManager(order_file_path, config)
+        self.order_manager = order_manager
     
     def import_data_package(self):
         try:
@@ -55,7 +55,6 @@ class IngestionProcess:
             # Handle successful uploads
             self.order_manager.move_upload_order('completed')
             logger.info(f"Data package in {self.data_package.dataset} processed successfully with {len(successful_uploads)} successful uploads.")
-            self.log_ingestion_step("Data Imported")
                 
         except Exception as e:
             logger.error(f"Error during import_data_package: {e}")
@@ -101,12 +100,12 @@ class DirectoryPoller:
             time.sleep(self.interval)
 
     def process_event(self, created_path):
-        if created_path.suffix == '.txt':  # Adjust based on your file naming/extension
+        if created_path.suffix == '.txt': 
             order_manager = UploadOrderManager(str(created_path), self.config)
             uuid, group, username, dataset, path, files = order_manager.get_order_info()
 
             # Create a DataPackage instance with the unpacked information
-            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files, created_path.name)  # Pass created_path.name as the last argument
+            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files, created_path.name)
             self.logger.info(
                 f"  DataPackage detected:\n"
                 f"  UUID: {uuid}\n"
@@ -115,10 +114,12 @@ class DirectoryPoller:
                 f"  Dataset: {dataset}\n"
                 f"  Path: {path}\n"
                 f"  Files: {files}\n"
-                f"  Upload Order Name: {created_path.name}"  # Log the upload order name for confirmation
+                f"  Upload Order Name: {created_path.name}"
             )
             log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
-            ingestion_process = IngestionProcess(data_package, self.config, uuid, str(created_path))
+            
+            # Pass the existing UploadOrderManager instance to IngestionProcess
+            ingestion_process = IngestionProcess(data_package, self.config, uuid, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.log_future_exception)
 
