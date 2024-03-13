@@ -1,7 +1,5 @@
-watchdog
-numpy
-pandas
-ezomero>=2.0.0
-zeroc-ice==3.6.5
-openpyxl==3.0.9
-omero-cli-transfer==0.7.3
+ezomero>=2.1.0
+pandas==2.2.1
+numpy==1.26.4
+openpyxl==3.1.2
+python-dotenv==1.0.1
