@@ -1,4 +1,9 @@
+# upload_order_manager.py
+
+import shutil
+from pathlib import Path
 from .logger import setup_logger
+from .ingest_tracker import log_ingestion_step
 
 class UploadOrderManager:
     def __init__(self, order_file_path, settings):
@@ -30,6 +35,14 @@ class UploadOrderManager:
 
         if not missing_keys and not empty_keys:
             self.logger.info("Order info validation passed: All required keys are present and non-empty.")
+            # Log the validation step in the database
+            log_ingestion_step(
+                self.order_info['Group'],
+                self.order_info['Username'],
+                self.order_info['Dataset'],
+                "New Order Validated",
+                self.order_info['UUID']
+            )
 
     def get_dataset_full_path(self):
         path = self.order_info.get('Path', '')
@@ -55,3 +68,54 @@ class UploadOrderManager:
             self.order_info['Path'],
             self.order_info['Files']
         )
+        
+    def log_order_movement(self, outcome):
+        """
+        Logs the movement of the upload order file to the database.
+        
+        Parameters:
+        - outcome: A string indicating the outcome, either 'failed' or 'completed'.
+        """
+        # Define the stage based on the outcome
+        stage = "Order Moved to Completed" if outcome == 'completed' else "Order Moved to Failed"
+        
+        # Log the step in the database
+        log_ingestion_step(
+            self.order_info['Group'],
+            self.order_info['Username'],
+            self.order_info['Dataset'],
+            stage,
+            self.order_info['UUID']
+        )
+
+    def move_upload_order(self, outcome):
+        """
+        Moves the upload order file based on the outcome of the upload process.
+        
+        Parameters:
+        - outcome: A string indicating the outcome, either 'failed' or 'completed'.
+        """
+        source_file_path = Path(self.order_info['Path'])
+        group = self.order_info['Group']
+        username = self.order_info['Username']
+        dataset_name = self.order_info['Dataset']
+
+        if outcome == 'failed':
+            destination_dir_name = self.settings['failed_uploads_directory_name']
+        elif outcome == 'completed':
+            destination_dir_name = self.settings['completed_orders_dir_name']
+        else:
+            self.logger.error(f"Invalid outcome specified: {outcome}")
+            return
+
+        destination_directory = Path(self.settings['base_dir']) / group / destination_dir_name / username
+        destination_file = destination_directory / source_file_path.name
+
+        try:
+            destination_directory.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source_file_path), str(destination_file))
+            self.logger.info(f"Moved upload order file {source_file_path} to {destination_file}")
+            self.log_order_movement(outcome)
+            
+        except Exception as e:
+            self.logger.error(f"Error moving upload order file {source_file_path} to {destination_file}: {e}")

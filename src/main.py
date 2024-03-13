@@ -14,7 +14,6 @@ from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
 from utils.ingest_tracker import log_ingestion_step
-from utils.failure_handler import UploadFailureHandler
 
 # Setup Configuration
 config = load_settings("config/settings.yml")
@@ -23,7 +22,7 @@ executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
-    def __init__(self, uuid, base_dir, group, username, dataset, path, files):
+    def __init__(self, uuid, base_dir, group, username, dataset, path, files, upload_order_name):
         self.uuid = uuid
         self.base_dir = base_dir
         self.group = group
@@ -31,6 +30,7 @@ class DataPackage:
         self.dataset = dataset
         self.path = path
         self.files = files
+        self.upload_order_name = upload_order_name
 
 #TODO add a function to move the upload order to the ".failed_uploads" or ".Uploaded" directories (in upload_order_manager) 
 class IngestionProcess:
@@ -38,28 +38,27 @@ class IngestionProcess:
         self.data_package = data_package
         self.config = config
         self.uuid = uuid
-        self.failure_handler = UploadFailureHandler(config)
+        self.order_manager = UploadOrderManager(data_package.path, config)
     
     def import_data_package(self):
         try:
             importer = DataPackageImporter(self.config)
             successful_uploads, failed_uploads, importer_failed = importer.import_data_package(self.data_package)
             
-            # Check if there are any failed uploads or if the importer itself failed
             if importer_failed or failed_uploads:
-                raise Exception(f"Import process failed for data package in {self.data_package.dataset} due to failed uploads or importer failure.")
+                # Handle failed uploads
+                self.order_manager.move_upload_order('failed')
+                logger.error(f"Import process failed for data package in {self.data_package.dataset} due to failed uploads or importer failure.")
+                self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
+                return
             
+            # Handle successful uploads
+            self.order_manager.move_upload_order('completed')
             logger.info(f"Data package in {self.data_package.dataset} processed successfully with {len(successful_uploads)} successful uploads.")
             self.log_ingestion_step("Data Imported")
                 
         except Exception as e:
-            self.handle_failure()
             logger.error(f"Error during import_data_package: {e}")
-
-    def handle_failure(self):
-        self.failure_handler.move_upload_order(self.data_package.dataset, self.data_package.username, self.data_package.group, self.config)
-        logger.error(f"Due to errors, the entire upload order for {self.data_package.dataset} has been moved to failed uploads.")
-        self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
 
     def log_ingestion_step(self, step_description):
         log_ingestion_step(self.data_package.group, self.data_package.username, self.data_package.dataset, step_description, str(self.uuid))
@@ -107,7 +106,7 @@ class DirectoryPoller:
             uuid, group, username, dataset, path, files = order_manager.get_order_info()
 
             # Create a DataPackage instance with the unpacked information
-            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files)
+            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files, created_path.name)  # Pass created_path.name as the last argument
             self.logger.info(
                 f"  DataPackage detected:\n"
                 f"  UUID: {uuid}\n"
@@ -115,7 +114,8 @@ class DirectoryPoller:
                 f"  Username: {username}\n"
                 f"  Dataset: {dataset}\n"
                 f"  Path: {path}\n"
-                f"  Files: {files}"
+                f"  Files: {files}\n"
+                f"  Upload Order Name: {created_path.name}"  # Log the upload order name for confirmation
             )
             log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
             ingestion_process = IngestionProcess(data_package, self.config, uuid)

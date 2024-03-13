@@ -31,7 +31,7 @@ def initialize_database():
                                         user_name text NOT NULL,
                                         data_package text NOT NULL,
                                         stage text NOT NULL,
-                                        ingestion_id text NOT NULL,
+                                        uuid text NOT NULL,
                                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
                                     ); """
 
@@ -41,13 +41,12 @@ def initialize_database():
     else:
         print("Error! Cannot create the database connection.")
 
-def log_ingestion_step(group, user, dataset, stage, ingestion_id):
-    """Log an ingestion step for a DataPackage with an ingestion ID."""
+def log_ingestion_step(group, user, dataset, stage, uuid):
     conn = create_connection(DATABASE_PATH)
     with conn:
-        sql = ''' INSERT INTO ingestion_tracking(group_name, user_name, data_package, stage, ingestion_id)
+        sql = ''' INSERT INTO ingestion_tracking(group_name, user_name, data_package, stage, uuid)
                   VALUES(?,?,?,?,?) '''
         cur = conn.cursor()
-        cur.execute(sql, (group, user, dataset, stage, str(ingestion_id)))
+        cur.execute(sql, (group, user, dataset, stage, str(uuid)))
         conn.commit()
         return cur.lastrowid
