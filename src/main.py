@@ -34,11 +34,11 @@ class DataPackage:
 
 #TODO add a function to move the upload order to the ".failed_uploads" or ".Uploaded" directories (in upload_order_manager) 
 class IngestionProcess:
-    def __init__(self, data_package, config, uuid):
+    def __init__(self, data_package, config, uuid, order_file_path):
         self.data_package = data_package
         self.config = config
         self.uuid = uuid
-        self.order_manager = UploadOrderManager(data_package.path, config)
+        self.order_manager = UploadOrderManager(order_file_path, config)
     
     def import_data_package(self):
         try:
@@ -118,7 +118,7 @@ class DirectoryPoller:
                 f"  Upload Order Name: {created_path.name}"  # Log the upload order name for confirmation
             )
             log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
-            ingestion_process = IngestionProcess(data_package, self.config, uuid)
+            ingestion_process = IngestionProcess(data_package, self.config, uuid, str(created_path))
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.log_future_exception)
 

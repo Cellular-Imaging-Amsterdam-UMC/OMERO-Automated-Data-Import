@@ -9,6 +9,7 @@ class UploadOrderManager:
     def __init__(self, order_file_path, settings):
         self.settings = settings
         self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
+        self.order_file_path = Path(order_file_path)  # Store the path to the upload order file
         self.order_info = self._parse_order_file(order_file_path)
         self.validate_order_info()
 
@@ -95,10 +96,10 @@ class UploadOrderManager:
         Parameters:
         - outcome: A string indicating the outcome, either 'failed' or 'completed'.
         """
-        source_file_path = Path(self.order_info['Path'])
+        # Use self.order_file_path directly
+        source_file_path = self.order_file_path
         group = self.order_info['Group']
         username = self.order_info['Username']
-        dataset_name = self.order_info['Dataset']
 
         if outcome == 'failed':
             destination_dir_name = self.settings['failed_uploads_directory_name']
@@ -116,6 +117,5 @@ class UploadOrderManager:
             shutil.move(str(source_file_path), str(destination_file))
             self.logger.info(f"Moved upload order file {source_file_path} to {destination_file}")
             self.log_order_movement(outcome)
-            
         except Exception as e:
             self.logger.error(f"Error moving upload order file {source_file_path} to {destination_file}: {e}")
