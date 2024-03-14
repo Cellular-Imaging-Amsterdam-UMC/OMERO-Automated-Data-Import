@@ -1,0 +1,6 @@
+UUID: 550e8400-e29b-41d4-a716-446655440000
+Group: coreKrawczyk
+Username: rrosas
+Dataset: SampleProject1_2024-03-12-1541
+Path: L:/basic/divg/coreKrawczyk/SampleProject1/2024-01-02/.uploads/2024-02-11-153211
+Files: TileScan25.tif

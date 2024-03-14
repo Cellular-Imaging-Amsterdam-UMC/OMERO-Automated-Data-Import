@@ -1,0 +1,9 @@
+.env
+.devnotes.md
+test
+test_mnt
+logs/*.logs
+**/__pycache__/
+*.egg-info/
+ingestion_tracking.db
+.vscode/
