@@ -51,7 +51,7 @@ class DataPackageImporter:
         for file_path in file_paths:
             try:
                 # ln_s defines in-place imports. Change to False for normal https transfer
-                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=False)
+                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=True)
                 if file_id is not None:
                     self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
                     successful_uploads.append((file_path, dataset_name, os.path.basename(file_path), file_id))
@@ -104,6 +104,7 @@ class DataPackageImporter:
 
         return all_successful_uploads, all_failed_uploads, False  # False indicates no import failure
     
+    # TODO fix this its not working add more logs too.
     def change_project_ownership(self, conn, project_id, new_owner_username):
         new_owner_id = ezomero.get_user_id(conn, new_owner_username)
         if new_owner_id is None:
