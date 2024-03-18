@@ -96,6 +96,9 @@ class DataPackageImporter:
             if successful_uploads:
                 log_ingestion_step(data_package.group, data_package.username, data_package.dataset, "Data Imported", str(data_package.uuid))
 
+            # Change dataset ownership after creation and file upload
+            self.change_dataset_ownership(conn, dataset_id, data_package.username)
+
         except Exception as e:
             self.logger.error(f"Exception during import: {e}")
             return [], [], True  # Indicate any exception as an import failure
@@ -105,19 +108,22 @@ class DataPackageImporter:
         return all_successful_uploads, all_failed_uploads, False  # False indicates no import failure
     
     # TODO fix this its not working add more logs too.
-    def change_project_ownership(self, conn, project_id, new_owner_username):
+    def change_dataset_ownership(self, conn, dataset_id, new_owner_username):
         new_owner_id = ezomero.get_user_id(conn, new_owner_username)
         if new_owner_id is None:
             self.logger.error(f"Failed to find user ID for username: {new_owner_username}")
             return
     
         login_command = f"omero login {self.user}@{self.host}:{self.port} -w {self.password}"
-        chown_command = f"omero chown {new_owner_id} Project:{project_id}"
+        # Updated to target Dataset instead of Project
+        chown_command = f"omero chown {new_owner_id} Dataset:{dataset_id}"
         omero_cli_command = f"{login_command} && {chown_command}"
     
         try:
-            self.logger.info(f"Changing ownership of project ID {project_id} to user ID {new_owner_id}")
+            self.logger.info(f"Executing command: {omero_cli_command}")
             result = subprocess.run(omero_cli_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, executable='/bin/bash')
             self.logger.info(f"Ownership change successful. Output: {result.stdout}")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to change ownership. Error: {e.stderr}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error during ownership change: {e}")
