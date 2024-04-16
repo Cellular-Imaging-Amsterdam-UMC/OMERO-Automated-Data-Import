@@ -82,43 +82,41 @@ class DataPackageImporter:
     def import_data_package(self, data_package):
         self.logger.info(f"Starting import for data package: {data_package.dataset}")
         self.logger.info(f"data_package.path: {data_package.path}")  # Debug print
-    
+
         omero_group_name = self.get_omero_group_name(data_package.group)
         if not omero_group_name:
             self.logger.error("OMERO group name could not be resolved.")
             return [], [], True
 
-        conn = BlitzGateway(self.user, self.password, group=omero_group_name, host=self.host, port=self.port, secure=True)
-        if not conn.connect():
-            self.logger.error("Failed to connect to OMERO.")
-            return [], [], True
+        with BlitzGateway(self.user, self.password, group=omero_group_name, host=self.host, port=self.port, secure=True) as conn:
+            if not conn.connect():
+                self.logger.error("Failed to connect to OMERO.")
+                return [], [], True
 
-        # Initialize the lists to store upload results
-        all_successful_uploads = []
-        all_failed_uploads = []
+            # Initialize the lists to store upload results
+            all_successful_uploads = []
+            all_failed_uploads = []
 
-        try:
-            dataset_id = self.create_dataset(conn, data_package.dataset, data_package.uuid)
-            if dataset_id is None:
-                raise Exception("Failed to create dataset.")
+            try:
+                dataset_id = self.create_dataset(conn, data_package.dataset, data_package.uuid)
+                if dataset_id is None:
+                    raise Exception("Failed to create dataset.")
 
-            file_paths = [Path(data_package.path) / file_name for file_name in data_package.files]
-            successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.dataset)
-            all_successful_uploads.extend(successful_uploads)
-            all_failed_uploads.extend(failed_uploads)
+                file_paths = [Path(data_package.path) / file_name for file_name in data_package.files]
+                successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.dataset)
+                all_successful_uploads.extend(successful_uploads)
+                all_failed_uploads.extend(failed_uploads)
 
-            # Log the "Data Imported" step here, after successful uploads
-            if successful_uploads:
-                log_ingestion_step(data_package.group, data_package.username, data_package.dataset, "Data Imported", str(data_package.uuid))
+                # Log the "Data Imported" step here, after successful uploads
+                if successful_uploads:
+                    log_ingestion_step(data_package.group, data_package.username, data_package.dataset, "Data Imported", str(data_package.uuid))
 
-            # Change dataset ownership after creation and file upload
-            self.change_dataset_ownership(conn, dataset_id, data_package.username)
+                # Change dataset ownership after creation and file upload
+                self.change_dataset_ownership(conn, dataset_id, data_package.username)
 
-        except Exception as e:
-            self.logger.error(f"Exception during import: {e}")
-            return [], [], True  # Indicate any exception as an import failure
-        finally:
-            conn.close()
+            except Exception as e:
+                self.logger.error(f"Exception during import: {e}")
+                return [], [], True  # Indicate any exception as an import failure
 
         return all_successful_uploads, all_failed_uploads, False  # False indicates no import failure
     
