@@ -45,7 +45,11 @@ class DataPackage:
         self.path = path
         self.files = files
         self.upload_order_name = upload_order_name
-
+    
+    def __str__(self):
+        return (f"DataPackage(UUID: {self.uuid}, Group: {self.group}, Username: {self.username}, "
+                f"Dataset: {self.dataset}, Path: {self.path}, Files: {len(self.files)} files, "
+                f"Upload Order: {self.upload_order_name})")
 class IngestionProcess:
     def __init__(self, data_package, config, uuid, order_manager):
         self.data_package = data_package
@@ -120,14 +124,7 @@ class DirectoryPoller:
             # Create a DataPackage instance with the unpacked information
             data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files, created_path.name)
             self.logger.info(
-                f"  DataPackage detected:\n"
-                f"  UUID: {uuid}\n"
-                f"  Group: {group}\n"
-                f"  Username: {username}\n"
-                f"  Dataset: {dataset}\n"
-                f"  Path: {path}\n"
-                f"  Files: {files}\n"
-                f"  Upload Order Name: {created_path.name}"
+                f"DataPackage detected: {data_package}"
             )
             log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
             
