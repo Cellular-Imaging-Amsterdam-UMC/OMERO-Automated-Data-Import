@@ -108,7 +108,6 @@ class DataPackageImporter:
             all_failed_uploads.extend(failed_uploads)
 
             # Log the "Data Imported" step here, after successful uploads
-            #TODO extend to support partial imports.
             if successful_uploads:
                 log_ingestion_step(data_package.group, data_package.username, data_package.dataset, "Data Imported", str(data_package.uuid))
 
@@ -123,7 +122,6 @@ class DataPackageImporter:
 
         return all_successful_uploads, all_failed_uploads, False  # False indicates no import failure
     
-    # TODO fix this its not working add more logs too.
     def change_dataset_ownership(self, conn, dataset_id, new_owner_username):
         new_owner_id = ezomero.get_user_id(conn, new_owner_username)
         if new_owner_id is None:

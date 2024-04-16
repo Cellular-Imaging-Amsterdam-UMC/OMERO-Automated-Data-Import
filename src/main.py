@@ -46,7 +46,6 @@ class DataPackage:
         self.files = files
         self.upload_order_name = upload_order_name
 
-#TODO add a function to move the upload order to the ".failed_uploads" or ".Uploaded" directories (in upload_order_manager) 
 class IngestionProcess:
     def __init__(self, data_package, config, uuid, order_manager):
         self.data_package = data_package
@@ -148,7 +147,6 @@ def main():
     initialize_system(config)
     
     # Define a global shutdown event to manage the graceful shutdown of the application
-    # TODO review this shutdown mechanism, I find it somewhat excessive.
     global shutdown_event
     shutdown_event = Event()
 
