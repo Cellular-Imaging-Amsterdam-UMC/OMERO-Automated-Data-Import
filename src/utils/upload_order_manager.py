@@ -33,7 +33,8 @@ class UploadOrderManager:
             for line in file:
                 key, value = line.strip().split(': ', 1)
                 if key == 'Files':
-                    order_info[key] = [file_name.strip() for file_name in value.split(',')]
+                    files_list = value.strip('[]').split(',')
+                    order_info[key] = [file_name.strip() for file_name in files_list]
                 else:
                     order_info[key] = value.strip()
         return order_info
@@ -59,19 +60,13 @@ class UploadOrderManager:
                 self.order_info['UUID']
             )
 
-    def get_dataset_full_path(self):
-        path = self.order_info.get('Path', '')
-        if not path:
-            raise ValueError("Path is missing from the order information.")
-        return path
-
     def log_upload_order_info(self):
         info_lines = [f"{key}: {value}" for key, value in self.order_info.items()]
         log_message = "Upload Order Information:\n" + "\n".join(info_lines)
         self.logger.info(log_message)
 
     def get_order_info(self):
-        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Path', 'Files']
+        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Files']
         missing_keys = [key for key in required_keys if key not in self.order_info]
         if missing_keys:
             raise KeyError(f"Missing required keys in order info: {', '.join(missing_keys)}")
@@ -80,7 +75,6 @@ class UploadOrderManager:
             self.order_info['Group'],
             self.order_info['Username'],
             self.order_info['Dataset'],
-            self.order_info['Path'],
             self.order_info['Files']
         )
         

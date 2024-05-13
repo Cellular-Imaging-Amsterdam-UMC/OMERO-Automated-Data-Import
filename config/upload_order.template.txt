@@ -1,6 +1,5 @@
-UUID: 550e8400-e29b-41d4-a716-446655440000
-Group: coreKrawczyk
+UUID: 539b3030-5bd4-483c-8ed7-0c542c5187b2
+Group: Demo
 Username: rrosas
-Dataset: SampleProject1_2024-03-12-1541
-Path: L:/basic/divg/coreKrawczyk/SampleProject1/2024-01-02/.uploads/2024-02-11-153211
-Files: TileScan25.tif
+Dataset: 2024_05_13_15-32-58
+Files: [/divg/coreReits/Screens/TestM/Plate1_A1_image1.tif,/divg/coreReits/.omerodata/2024/05/13/15-32-58/Test__image1__image1.lif]

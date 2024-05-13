@@ -36,19 +36,18 @@ executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
-    def __init__(self, uuid, base_dir, group, username, dataset, path, files, upload_order_name):
+    def __init__(self, uuid, base_dir, group, username, dataset, files, upload_order_name):
         self.uuid = uuid
         self.base_dir = base_dir
         self.group = group
         self.username = username
         self.dataset = dataset
-        self.path = path
         self.files = files
         self.upload_order_name = upload_order_name
     
     def __str__(self):
         return (f"DataPackage(UUID: {self.uuid}, Group: {self.group}, Username: {self.username}, "
-                f"Dataset: {self.dataset}, Path: {self.path}, Files: {len(self.files)} files, "
+                f"Dataset: {self.dataset}, Files: {len(self.files)} files, "
                 f"Upload Order: {self.upload_order_name})")
 class IngestionProcess:
     def __init__(self, data_package, config, uuid, order_manager):
@@ -119,13 +118,11 @@ class DirectoryPoller:
     def process_event(self, created_path):
         if created_path.suffix == '.txt': 
             order_manager = UploadOrderManager(str(created_path), self.config)
-            uuid, group, username, dataset, path, files = order_manager.get_order_info()
-
-            # Create a DataPackage instance with the unpacked information
-            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, path, files, created_path.name)
-            self.logger.info(
-                f"DataPackage detected: {data_package}"
-            )
+            uuid, group, username, dataset, files = order_manager.get_order_info()
+    
+            # Create a DataPackage instance
+            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, files, created_path.name)
+            self.logger.info(f"DataPackage detected: {data_package}")
             log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
             
             # Pass the existing UploadOrderManager instance to IngestionProcess
