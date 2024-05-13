@@ -1,6 +1,6 @@
 # OMERO Automated Data Import
 
-This Automated Data Imports (ADI) system enables automatic uploads from the local network to an OMERO server. ADI uses two main components: the lif-pre-processer and the auto-importer. Toguether, they allow users to select LIF datasets to upload to OMERO.
+This Automated Data Imports (ADI) system enables automatic uploads from the local network to an OMERO server. ADI uses two main components: the lif-pre-processer (optionoal) and the auto-importer. Toguether, they allow users to select LIF datasets to upload to OMERO. The lif-pre-processer can be removed and instead auto-importer can be configured to directly upload files to omero.
 
 ### LAN and configurations
 
