@@ -15,6 +15,7 @@
 # upload_order_manager.py
 
 import shutil
+import json
 from pathlib import Path
 from .logger import setup_logger
 from .ingest_tracker import log_ingestion_step
@@ -23,9 +24,22 @@ class UploadOrderManager:
     def __init__(self, order_file_path, settings):
         self.settings = settings
         self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
-        self.order_file_path = Path(order_file_path)  # Store the path to the upload order file
+        self.order_file_path = Path(order_file_path)
         self.order_info = self._parse_order_file(order_file_path)
+        self.remove_divg_from_paths()
+        self.groups_info = self.load_groups_info()
         self.validate_order_info()
+
+    def load_groups_info(self):
+        with open('config/groups_list.json') as f:
+            return json.load(f)
+
+    def get_core_grp_name_from_omero_name(self, omero_grp_name):
+        for group in self.groups_info:
+            if group['omero_grp_name'] == omero_grp_name:
+                return group['core_grp_name']
+        self.logger.error(f"Core group name not found for OMERO group: {omero_grp_name}")
+        return None
 
     def _parse_order_file(self, order_file_path):
         order_info = {}
@@ -39,18 +53,35 @@ class UploadOrderManager:
                     order_info[key] = value.strip()
         return order_info
 
+    def remove_divg_from_paths(self):
+        """
+        Removes the first directory component if it is 'divg' from each file path in the 'Files' list.
+        NOTE: This function will be removed when file paths issue is addressed
+        """
+        updated_files = []
+        for file_path in self.order_info['Files']:
+            parts = Path(file_path).parts
+            if parts[1].lower() == 'divg':
+                new_path = Path(*parts[2:])  # Skip the first component
+                updated_files.append(str(new_path))
+                self.logger.debug(f"Removed 'divg' from path: {file_path} -> {new_path}")
+            else:
+                updated_files.append(file_path)
+        self.order_info['Files'] = updated_files
+        self.logger.debug("Updated file paths after removing 'divg'.")
+
     def validate_order_info(self):
-        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Path', 'Files']
+        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Files']
         missing_keys = [key for key in required_keys if key not in self.order_info]
         empty_keys = [key for key, value in self.order_info.items() if not value]
 
         if missing_keys:
-            self.logger.error(f"Missing required keys in order info: {', '.join(missing_keys)}")
+            self.logger.error(f"Missing required keys in order info (UUID: {self.order_info['UUID']}): {', '.join(missing_keys)}")
         if empty_keys:
-            self.logger.error(f"Empty values found for keys in order info: {', '.join(empty_keys)}")
+            self.logger.error(f"Empty values found for keys in order info (UUID: {self.order_info['UUID']}): {', '.join(empty_keys)}")
 
         if not missing_keys and not empty_keys:
-            self.logger.info("Order info validation passed: All required keys are present and non-empty.")
+            self.logger.info(f"Order info validation passed for UUID: {self.order_info['UUID']}")
             # Log the validation step in the database
             log_ingestion_step(
                 self.order_info['Group'],
@@ -98,15 +129,14 @@ class UploadOrderManager:
         )
 
     def move_upload_order(self, outcome):
-        """
-        Moves the upload order file based on the outcome of the upload process.
-        
-        Parameters:
-        - outcome: A string indicating the outcome, either 'failed' or 'completed'.
-        """
-        # Use self.order_file_path directly
         source_file_path = self.order_file_path
-        group = self.order_info['Group']
+        omero_grp_name = self.order_info['Group']
+        core_grp_name = self.get_core_grp_name_from_omero_name(omero_grp_name)
+
+        if core_grp_name is None:
+            self.logger.error("Failed to retrieve core group name for moving upload order.")
+            return
+
         username = self.order_info['Username']
 
         if outcome == 'failed':
@@ -117,7 +147,7 @@ class UploadOrderManager:
             self.logger.error(f"Invalid outcome specified: {outcome}")
             return
 
-        destination_directory = Path(self.settings['base_dir']) / group / destination_dir_name / username
+        destination_directory = Path(self.settings['base_dir']) / core_grp_name / destination_dir_name / username
         destination_file = destination_directory / source_file_path.name
 
         try:

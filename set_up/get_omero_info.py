@@ -42,7 +42,7 @@ def get_omero_groups(host, username, password, port=4064):
     except Exception as e:
         print(f"Unexpected error: {e}")
 
-def create_groups_json():
+def create_groups_json(): #Enable this after development
     groups_list = []
     try:
         with open('groups_info.csv', newline='') as csvfile:
@@ -101,6 +101,6 @@ if __name__ == "__main__":
         print("Please ensure all environment variables (OMERO_HOST, OMERO_USERNAME, OMERO_PASSWORD, OMERO_PORT) are set.")
     else:
         get_omero_groups(host, username, password, port)
-        create_groups_json()
+        #create_groups_json()
         members_of = get_group_members(host, username, password, port)
         save_members_of_json(members_of)

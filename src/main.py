@@ -36,7 +36,7 @@ executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
-    def __init__(self, uuid, base_dir, group, username, dataset, files, upload_order_name):
+    def __init__(self, uuid, base_dir, group, username, dataset, files, upload_order_name, coreGroup):
         self.uuid = uuid
         self.base_dir = base_dir
         self.group = group
@@ -44,11 +44,13 @@ class DataPackage:
         self.dataset = dataset
         self.files = files
         self.upload_order_name = upload_order_name
-    
+        self.coreGroup = coreGroup  # New attribute for core group name
+
     def __str__(self):
-        return (f"DataPackage(UUID: {self.uuid}, Group: {self.group}, Username: {self.username}, "
+        return (f"DataPackage(UUID: {self.uuid}, Group: {self.group}, Core Group: {self.coreGroup}, Username: {self.username}, "
                 f"Dataset: {self.dataset}, Files: {len(self.files)} files, "
                 f"Upload Order: {self.upload_order_name})")
+    
 class IngestionProcess:
     def __init__(self, data_package, config, uuid, order_manager):
         self.data_package = data_package
@@ -119,9 +121,10 @@ class DirectoryPoller:
         if created_path.suffix == '.txt': 
             order_manager = UploadOrderManager(str(created_path), self.config)
             uuid, group, username, dataset, files = order_manager.get_order_info()
-    
-            # Create a DataPackage instance
-            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, files, created_path.name)
+            coreGroup = order_manager.get_core_grp_name_from_omero_name(group)
+
+            # Create a DataPackage instance with coreGroup
+            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, files, created_path.name, coreGroup)
             self.logger.info(f"DataPackage detected: {data_package}")
             log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
             
@@ -129,6 +132,7 @@ class DirectoryPoller:
             ingestion_process = IngestionProcess(data_package, self.config, uuid, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.log_future_exception)
+
 
     def log_future_exception(self, future):
         try:

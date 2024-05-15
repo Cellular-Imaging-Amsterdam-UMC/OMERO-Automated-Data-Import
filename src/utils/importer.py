@@ -20,13 +20,13 @@ import ezomero
 from omero.gateway import BlitzGateway
 from dotenv import load_dotenv
 import json
-from pathlib import Path
+#from pathlib import Path
 
 from .logger import setup_logger
 from utils.ingest_tracker import log_ingestion_step
 
 # Load environment variables from .env file
-load_dotenv('.env')
+load_dotenv('.env') #TODO check if I can get rid of this
 
 class DataPackageImporter:
     def __init__(self, config):
@@ -43,14 +43,7 @@ class DataPackageImporter:
     def load_groups_info(self):
         with open('config/groups_list.json') as f:
             return json.load(f)
-
-    def get_omero_group_name(self, core_group_name):
-        for group in self.groups_info:
-            if group.get('core_grp_name') == core_group_name or group.get('core_group_name') == core_group_name:
-                return group.get('omero_grp_name')
-        self.logger.error(f"OMERO group name not found for core group: {core_group_name}")
-        return None
-
+    
     def create_dataset(self, conn, dataset_name, uuid, project_id=None):
         description = f"uploaded through datapackage uuid: {uuid}"
         try:
@@ -82,12 +75,10 @@ class DataPackageImporter:
     def import_data_package(self, data_package):
         self.logger.info(f"Starting import for data package: {data_package.dataset}")
     
-        omero_group_name = self.get_omero_group_name(data_package.group)
-        if not omero_group_name:
-            self.logger.error("OMERO group name could not be resolved.")
-            return [], [], True
-    
-        with BlitzGateway(self.user, self.password, group=omero_group_name, host=self.host, port=self.port, secure=True) as conn:
+        # Log the connection parameters as a debug message
+        self.logger.debug(f"Attempting to connect to OMERO with User: {self.user}, Host: {self.host}, Port: {self.port}, Group: {data_package.group}")
+        
+        with BlitzGateway(self.user, self.password, group=data_package.group, host=self.host, port=self.port, secure=True) as conn:
             if not conn.connect():
                 self.logger.error("Failed to connect to OMERO.")
                 return [], [], True
@@ -118,7 +109,7 @@ class DataPackageImporter:
                 self.logger.error(f"Exception during import: {e}")
                 return [], [], True  # Indicate any exception as an import failure
     
-        return all_successful_uploads, all_failed_uploads, False  # False indicates no import failure
+        return all_successful_uploads, all_failed_uploads, False  # False indicates
     
     def change_dataset_ownership(self, conn, dataset_id, new_owner_username):
         new_owner_id = ezomero.get_user_id(conn, new_owner_username)
@@ -132,9 +123,9 @@ class DataPackageImporter:
         omero_cli_command = f"{login_command} && {chown_command}"
     
         try:
-            self.logger.info(f"Executing command: {omero_cli_command}")
+            self.logger.debug(f"Executing command: {omero_cli_command}")
             result = subprocess.run(omero_cli_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, executable='/bin/bash')
-            self.logger.info(f"Ownership change successful. Output: {result.stdout}")
+            self.logger.debug(f"Ownership change successful. Output: {result.stdout}")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to change ownership. Error: {e.stderr}")
         except Exception as e:
