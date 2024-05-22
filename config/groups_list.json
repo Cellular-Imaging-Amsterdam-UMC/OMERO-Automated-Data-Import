@@ -2,6 +2,11 @@
   {
     "core_grp_name": "coreReits",
     "omero_grp_name": "Reits",
-    "omero_grp_id": 53
+    "omero_grp_id": 134
+  },
+  {
+    "core_grp_name": "coreKrawczyk",
+    "omero_grp_name": "Krawczyk",
+    "omero_grp_id": 234
   }
 ]
