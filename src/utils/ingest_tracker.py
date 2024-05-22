@@ -17,7 +17,7 @@
 import sqlite3
 from sqlite3 import Error
 
-DATABASE_PATH = 'ingestion_tracking.db'
+DATABASE_PATH = '/OMERO/ingestion_tracking.db'
 
 def create_connection(db_file):
     """Create a database connection to a SQLite database."""

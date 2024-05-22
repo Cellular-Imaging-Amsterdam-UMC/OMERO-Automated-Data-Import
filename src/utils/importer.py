@@ -60,12 +60,12 @@ class DataPackageImporter:
         for file_path in file_paths:
             try:
                 # ln_s defines in-place imports. Change to False for normal https transfer
-                file_id = ezomero.ezimport(conn, str(file_path), dataset=dataset_id, ln_s=True)
+                file_id = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
                 if file_id is not None:
                     self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
                     successful_uploads.append((file_path, dataset_name, os.path.basename(file_path), file_id))
                 else:
-                    self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
+                    self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned ({file_id}).")
                     failed_uploads.append((file_path, dataset_name, os.path.basename(file_path), None))
             except Exception as e:
                 self.logger.error(f"Error uploading file {file_path} to dataset ID: {dataset_id}: {e}")
@@ -77,7 +77,7 @@ class DataPackageImporter:
     
         # Log the connection parameters as a debug message
         self.logger.debug(f"Attempting to connect to OMERO with User: {self.user}, Host: {self.host}, Port: {self.port}, Group: {data_package.group}")
-        
+
         with BlitzGateway(self.user, self.password, group=data_package.group, host=self.host, port=self.port, secure=True) as conn:
             if not conn.connect():
                 self.logger.error("Failed to connect to OMERO.")

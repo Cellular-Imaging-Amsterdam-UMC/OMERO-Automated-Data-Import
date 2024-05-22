@@ -26,7 +26,7 @@ class UploadOrderManager:
         self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
         self.order_file_path = Path(order_file_path)
         self.order_info = self._parse_order_file(order_file_path)
-        self.remove_divg_from_paths()
+        self.switch_path_prefix()
         self.groups_info = self.load_groups_info()
         self.validate_order_info()
 
@@ -53,22 +53,21 @@ class UploadOrderManager:
                     order_info[key] = value.strip()
         return order_info
 
-    def remove_divg_from_paths(self):
+    def switch_path_prefix(self):
         """
-        Removes the first directory component if it is 'divg' from each file path in the 'Files' list.
-        NOTE: This function will be removed when file paths issue is addressed
+        Switches the '/divg' prefix with '/data' for each file path in the 'Files' list.
         """
         updated_files = []
         for file_path in self.order_info['Files']:
             parts = Path(file_path).parts
             if parts[1].lower() == 'divg':
-                new_path = Path(*parts[2:])  # Skip the first component
+                new_path = Path('/data', *parts[2:])  # Replace the first component with '/data'
                 updated_files.append(str(new_path))
-                self.logger.debug(f"Removed 'divg' from path: {file_path} -> {new_path}")
+                self.logger.debug(f"Switched 'divg' to 'data' in path: {file_path} -> {new_path}")
             else:
                 updated_files.append(file_path)
         self.order_info['Files'] = updated_files
-        self.logger.debug("Updated file paths after removing 'divg'.")
+        self.logger.debug("Updated file paths after switching 'divg' to 'data'.")
 
     def validate_order_info(self):
         required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Files']
