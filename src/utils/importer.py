@@ -18,15 +18,10 @@ import os
 import subprocess
 import ezomero
 from omero.gateway import BlitzGateway
-from dotenv import load_dotenv
 import json
-#from pathlib import Path
 
 from .logger import setup_logger
 from utils.ingest_tracker import log_ingestion_step
-
-# Load environment variables from .env file
-load_dotenv('.env') #TODO check if I can get rid of this
 
 class DataPackageImporter:
     def __init__(self, config):
@@ -107,9 +102,9 @@ class DataPackageImporter:
     
             except Exception as e:
                 self.logger.error(f"Exception during import: {e}")
-                return [], [], True  # Indicate any exception as an import failure
+                return [], [], True
     
-        return all_successful_uploads, all_failed_uploads, False  # False indicates
+        return all_successful_uploads, all_failed_uploads, False
     
     def change_dataset_ownership(self, conn, dataset_id, new_owner_username):
         new_owner_id = ezomero.get_user_id(conn, new_owner_username)
