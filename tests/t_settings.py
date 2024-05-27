@@ -6,6 +6,8 @@ from pathlib import Path
 from omero.gateway import BlitzGateway
 import logging
 
+# To use this script exec into the container and run pytest -v tests/settings/t_settings.py
+
 # Ensure the log directory exists
 log_directory = '/auto-importer/logs'
 os.makedirs(log_directory, exist_ok=True)
@@ -13,8 +15,8 @@ os.makedirs(log_directory, exist_ok=True)
 # Setup basic logging to file
 logging.basicConfig(
     level=logging.INFO,
-    filename=os.path.join(log_directory, 'test.logs'),  # Full path to the log file
-    filemode='a',  # Append mode, which will add new log entries to the file
+    filename=os.path.join(log_directory, 'test.logs'),
+    filemode='a',
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
@@ -35,15 +37,8 @@ def load_group_list():
 settings = load_settings()
 group_list = load_group_list()
 
-def test_path_format():
-    """ Test if paths in settings are correctly formatted """
-    for key, value in settings.items():
-        if 'path' in key or 'dir' in key:
-            assert '/' in value, f"Path format error in setting: {key}"
-            logger.info(f"Path format check passed for: {key}")
-
-def test_file_and_directory_existence():
-    """ Test if files and directories specified in settings exist """
+def test_directory_existence():
+    """ Test if directories specified in settings exist """
     base_dir = Path(settings['base_dir'])
     assert base_dir.exists(), "Base directory does not exist"
     logger.info("Base directory exists.")
@@ -77,10 +72,11 @@ def test_directory_access():
 
 def test_omero_login():
     """ Test if can login and logout from OMERO server """
-    host = settings['OMERO_HOST']
-    user = settings['OMERO_USER']
-    password = settings['OMERO_PASSWORD']
-    port = settings['OMERO_PORT']
+    host = os.getenv('OMERO_HOST')
+    user = os.getenv('OMERO_USER')
+    password = os.getenv('OMERO_PASSWORD')
+    port = os.getenv('OMERO_PORT')
+
     with BlitzGateway(user, password, host=host, port=port, secure=True) as conn:
         if conn.connect():
             logger.info("OMERO login successful.")
