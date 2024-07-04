@@ -47,3 +47,20 @@ Prepare the configuration of the ADI system using the tools in the set_up direct
 Filling in the field in the .env and the "core_grp_name" field in the group_lis.json will be requiered. Additionally, the process to create folders for each group and and for each group member will have to be done in accordance to your institutional workflows.
 
 
+## Checking the Setup
+
+To check the setup, you can execute the following commands:
+
+1. Enter the running `omeroadi` container:
+
+```bash
+docker exec -it omeroadi /bin/bash
+```
+
+2. Run the test script:
+```bash
+python tests/t_main.py
+```
+
+This will help verify that the setup is correct and the system is functioning as expected by uploading a sample TIF image to the omero server.
+Upload logs will be visible in the console and if successful, the image should be visible via omero web in the 

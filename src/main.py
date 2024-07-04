@@ -47,8 +47,9 @@ class DataPackage:
         self.coreGroup = coreGroup  # New attribute for core group name
 
     def __str__(self):
+        file_list = ', '.join(self.files)
         return (f"DataPackage(UUID: {self.uuid}, Group: {self.group}, Core Group: {self.coreGroup}, Username: {self.username}, "
-                f"Dataset: {self.dataset}, Files: {len(self.files)} files, "
+                f"Dataset: {self.dataset}, Files: {len(self.files)} files ({file_list}), "
                 f"Upload Order: {self.upload_order_name})")
     
 class IngestionProcess:

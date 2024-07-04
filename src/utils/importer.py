@@ -53,6 +53,7 @@ class DataPackageImporter:
         successful_uploads = []
         failed_uploads = []
         for file_path in file_paths:
+            self.logger.debug(f"Uploading file: {file_path}")  # Debug log for file path
             try:
                 # ln_s defines in-place imports. Change to False for normal https transfer
                 file_id = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
@@ -89,6 +90,7 @@ class DataPackageImporter:
     
                 # Use the full paths directly from data_package.files
                 file_paths = data_package.files
+                self.logger.debug(f"File paths to be uploaded: {file_paths}")  # Debug log for file paths
                 successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id, data_package.dataset)
                 all_successful_uploads.extend(successful_uploads)
                 all_failed_uploads.extend(failed_uploads)
@@ -111,7 +113,12 @@ class DataPackageImporter:
         if new_owner_id is None:
             self.logger.error(f"Failed to find user ID for username: {new_owner_username}")
             return
-    
+        
+        omero_user_id = ezomero.get_user_id(conn, self.user)
+        if new_owner_id == omero_user_id:
+            self.logger.info(f"{self.user} already owns dataset: {dataset_id}")
+            return
+            
         login_command = f"omero login {self.user}@{self.host}:{self.port} -w {self.password}"
         # Updated to target Dataset instead of Project
         chown_command = f"omero chown {new_owner_id} Dataset:{dataset_id}"
