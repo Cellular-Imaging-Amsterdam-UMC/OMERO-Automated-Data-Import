@@ -29,8 +29,8 @@ RUN mkdir /auto-importer/logs
 RUN chmod +x /auto-importer/src/main.py
 
 # Create a group and user with specified GID and UID
-RUN groupadd -g 10004 autoimportgroup && \
-    useradd -m -r -u 10004 -g autoimportgroup autoimportuser
+RUN groupadd -g 10000 autoimportgroup && \
+    useradd -m -r -u 10000 -g autoimportgroup autoimportuser
 
 # Giving access to the new user
 RUN chown -R autoimportuser:autoimportgroup /auto-importer
