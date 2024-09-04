@@ -18,11 +18,16 @@ ENV PATH /opt/conda/envs/auto-import-env/bin:$PATH
 COPY requirements.txt /auto-importer/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the auto-importerlication code
+# Copy the auto-importer application code
 COPY src /auto-importer/src
 
 # Copy the configuration files
 COPY config /auto-importer/config
+
+# Copy the tests directory
+COPY tests /auto-importer/tests
+
+# Copy the logs directory
 RUN mkdir /auto-importer/logs
 
 # Ensure your application's startup script is executable
