@@ -21,9 +21,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the auto-importer application code
 COPY src /auto-importer/src
 
-# Copy the configuration files
-COPY config /auto-importer/config
-
 # Copy the tests directory
 COPY tests /auto-importer/tests
 
