@@ -1,5 +1,9 @@
-UUID: 539b3030-5bd4-483c-8ed7-0c542c5187b2
-Group: Demo
-Username: rrosas
-Dataset: 2024_05_13_15-32-58
-Files: [/divg/coreReits/Screens/TestM/Plate1_A1_image1.tif,/divg/coreReits/.omerodata/2024/05/13/15-32-58/Test__image1__image1.lif]
+Version: 2.0
+UUID: afe38fe0-ea2b-43e6-949d-364827c66230
+Username: "rrosas"
+Group: "Demo"
+UserID: 102
+GroupID: 3
+ProjectID: 455
+DatasetID: 807
+Files: ["/divg/coreKrawczyk/Carrousell pictures/Retina_LAM+occln_20201204_Series007Snapshot1_ch00.tif"]

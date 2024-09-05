@@ -27,25 +27,40 @@ base_dir = Path(config['base_dir'])
 
 # Function to create upload order file
 def create_upload_order(group, core_group_name, username, dataset, files):
-    files_str = ', '.join(files)  # Join file paths without extra quotes
-    order_content = (
-        f"UUID: {uuid.uuid4()}\n"
-        f"Group: {group}\n"
-        f"Username: {username}\n"
-        f"Dataset: {dataset}\n"
-        f"Files: [{files_str}]\n"
-    )
+    order_content = {
+        "Version": "2.0",
+        "UUID": str(uuid.uuid4()),
+        "Username": username,
+        "Group": group,
+        "UserID": 34,
+        "GroupID": 134,
+        "ProjectID": 951,
+        "DatasetID": 1651,
+        "Files": files
+    }
+    
     upload_order_dir = base_dir / core_group_name / config['upload_orders_dir_name']
     upload_order_dir.mkdir(parents=True, exist_ok=True)
     upload_order_path = upload_order_dir / f"{dataset}.txt"
+    
     with open(upload_order_path, 'w') as file:
-        file.write(order_content)
+        for key, value in order_content.items():
+            if key == "Files":
+                file.write(f"{key}: {value}\n")
+            else:
+                file.write(f"{key}: \"{value}\"\n")
+    
     logger.info(f"Created upload order for group '{group}' at '{upload_order_path}'")
+    
+    # Print the contents of the created file
+    with open(upload_order_path, 'r') as file:
+        logger.info(f"Contents of upload order file:\n{file.read()}")
+    
     return upload_order_path
 
 # Function to copy sample image to the target directory
 def copy_sample_image(core_group_name, dataset):
-    target_dir = base_dir / core_group_name / ".omerodata" / dataset.replace('_', '/')
+    target_dir = base_dir / core_group_name / ".omerodata2" / dataset.replace('_', '/')
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"sample_image_{core_group_name}.tif"
     shutil.copy(sample_image, target_path)
@@ -63,8 +78,12 @@ for group_info in groups_info:
     group = group_info['omero_grp_name']
     core_group_name = group_info['core_grp_name']
     dataset = datetime.datetime.now().strftime("%Y_%m_%d_%H-%M-%S")
-    files = [str(copy_sample_image(core_group_name, dataset))]
-
+    files = [f"/divg/{core_group_name}/.omerodata/{dataset.replace('_', '/')}/sample_image_{core_group_name}.tif"]
+    
+    # Copy the sample image
+    copy_sample_image(core_group_name, dataset)
+    
+    # Create the upload order
     create_upload_order(group, core_group_name, username, dataset, files)
 
 logger.info("Upload orders created successfully. Check logs/app.logs to view test results.")

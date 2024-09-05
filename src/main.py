@@ -14,6 +14,7 @@
 
 # main.py
 
+# Standard library imports
 from pathlib import Path
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -21,7 +22,7 @@ import signal
 from threading import Event, Thread
 import datetime
 
-#Modules
+# Local module imports
 from utils.config_manager import load_settings, load_json
 from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
@@ -36,54 +37,100 @@ executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
-    def __init__(self, uuid, base_dir, group, username, dataset, files, upload_order_name, coreGroup):
-        self.uuid = uuid
+    """
+    Represents a data package containing information from the upload order.
+    """
+    def __init__(self, order_data, base_dir):
+        """
+        Initialize the DataPackage with order data and base directory.
+        
+        :param order_data: Dictionary containing order information
+        :param base_dir: Base directory for the data package
+        """
+        self.__dict__.update(order_data)
         self.base_dir = base_dir
-        self.group = group
-        self.username = username
-        self.dataset = dataset
-        self.files = files
-        self.upload_order_name = upload_order_name
-        self.coreGroup = coreGroup  # New attribute for core group name
 
     def __str__(self):
-        file_list = ', '.join(self.files)
-        return (f"DataPackage(UUID: {self.uuid}, Group: {self.group}, Core Group: {self.coreGroup}, Username: {self.username}, "
-                f"Dataset: {self.dataset}, Files: {len(self.files)} files ({file_list}), "
-                f"Upload Order: {self.upload_order_name})")
-    
+        """
+        Return a string representation of the DataPackage.
+        """
+        attributes = [f"{key}: {value}" for key, value in self.__dict__.items() if key != 'Files']
+        file_count = len(self.Files) if hasattr(self, 'Files') else 0
+        return f"DataPackage({', '.join(attributes)}, Files: {file_count} files)"
+
+    def get(self, key, default=None):
+        """
+        Safely get an attribute value with a default if not found.
+        
+        :param key: Attribute name to retrieve
+        :param default: Default value if attribute is not found
+        :return: Attribute value or default
+        """
+        return self.__dict__.get(key, default)
+
 class IngestionProcess:
-    def __init__(self, data_package, config, uuid, order_manager):
+    """
+    Handles the ingestion process for a data package.
+    """
+    def __init__(self, data_package, config, order_manager):
+        """
+        Initialize the IngestionProcess with a data package, config, and order manager.
+        
+        :param data_package: DataPackage object to be ingested
+        :param config: Configuration dictionary
+        :param order_manager: UploadOrderManager object
+        """
         self.data_package = data_package
         self.config = config
-        self.uuid = uuid
         self.order_manager = order_manager
     
     def import_data_package(self):
+        """
+        Import the data package and handle the outcome.
+        """
         try:
             importer = DataPackageImporter(self.config)
             successful_uploads, failed_uploads, importer_failed = importer.import_data_package(self.data_package)
             
             if importer_failed or failed_uploads:
-                # Handle failed uploads
                 self.order_manager.move_upload_order('failed')
-                logger.error(f"Import process failed for data package in {self.data_package.dataset} due to failed uploads or importer failure.")
+                logger.error(f"Import process failed for data package in {self.data_package.get('Dataset', 'Unknown')} due to failed uploads or importer failure.")
                 self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
                 return
             
-            # Handle successful uploads
             self.order_manager.move_upload_order('completed')
-            logger.info(f"Data package in {self.data_package.dataset} processed successfully with {len(successful_uploads)} successful uploads.")
+            logger.info(f"Data package in {self.data_package.get('Dataset', 'Unknown')} processed successfully with {len(successful_uploads)} successful uploads.")
                 
         except Exception as e:
             logger.error(f"Error during import_data_package: {e}")
 
     def log_ingestion_step(self, step_description):
-        log_ingestion_step(self.data_package.group, self.data_package.username, self.data_package.dataset, step_description, str(self.uuid))
+        """
+        Log an ingestion step to the database.
+        
+        :param step_description: Description of the ingestion step
+        """
+        log_ingestion_step(
+            self.data_package.get('Group', 'Unknown'),
+            self.data_package.get('Username', 'Unknown'),
+            self.data_package.get('Dataset', 'Unknown'),
+            step_description,
+            str(self.data_package.get('UUID', 'Unknown'))
+        )
 
-# Handler class
 class DirectoryPoller:
+    """
+    Polls directories for new upload order files and processes them.
+    """
     def __init__(self, config, executor, logger, interval=10):
+        """
+        Initialize the DirectoryPoller.
+        
+        :param config: Configuration dictionary
+        :param executor: ProcessPoolExecutor object
+        :param logger: Logger object
+        :param interval: Polling interval in seconds
+        """
         self.config = config
         self.base_dir = Path(config['base_dir'])
         self.core_grp_names = [group["core_grp_name"] for group in load_json(config['group_list']) if "core_grp_name" in group]
@@ -94,14 +141,19 @@ class DirectoryPoller:
         self.shutdown_event = Event()
 
     def start(self):
+        """Start the directory polling thread."""
         self.polling_thread = Thread(target=self.poll_directory_changes)
         self.polling_thread.start()
 
     def stop(self):
+        """Stop the directory polling thread."""
         self.shutdown_event.set()
         self.polling_thread.join()
 
     def poll_directory_changes(self):
+        """
+        Continuously poll directories for changes and process new files.
+        """
         last_checked = {}
         while not self.shutdown_event.is_set():
             for core_grp_name in self.core_grp_names:
@@ -109,39 +161,52 @@ class DirectoryPoller:
                 if not group_folder.exists():
                     continue
                 for item in group_folder.iterdir():
-                    # Check if the item is a directory or a file
                     if item.is_dir() or item.is_file():
                         package_name = item.name
-                        # Determine if the item is new or has been modified since last checked
                         if package_name not in last_checked or item.stat().st_mtime > last_checked.get(package_name, 0):
                             self.process_event(item)
                             last_checked[package_name] = item.stat().st_mtime
             time.sleep(self.interval)
 
     def process_event(self, created_path):
+        """
+        Process a newly created or modified file.
+        
+        :param created_path: Path to the new or modified file
+        """
         if created_path.suffix == '.txt': 
             order_manager = UploadOrderManager(str(created_path), self.config)
-            uuid, group, username, dataset, files = order_manager.get_order_info()
-            coreGroup = order_manager.get_core_grp_name_from_omero_name(group)
-
-            # Create a DataPackage instance with coreGroup
-            data_package = DataPackage(uuid, self.base_dir, group, username, dataset, files, created_path.name, coreGroup)
-            self.logger.info(f"DataPackage detected: {data_package}")
-            log_ingestion_step(group, username, dataset, "Data Package Detected", str(uuid))
+            order_info = order_manager.get_order_info()
             
-            # Pass the existing UploadOrderManager instance to IngestionProcess
-            ingestion_process = IngestionProcess(data_package, self.config, uuid, order_manager)
+            data_package = DataPackage(order_info, self.base_dir)
+            self.logger.info(f"DataPackage detected: {data_package}")
+            log_ingestion_step(
+                data_package.get('Group', 'Unknown'),
+                data_package.get('Username', 'Unknown'),
+                data_package.get('Dataset', 'Unknown'),
+                "Data Package Detected",
+                str(data_package.get('UUID', 'Unknown'))
+            )
+            
+            ingestion_process = IngestionProcess(data_package, self.config, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.log_future_exception)
 
-
     def log_future_exception(self, future):
+        """
+        Log any exceptions that occur in the future tasks.
+        
+        :param future: Future object to check for exceptions
+        """
         try:
             future.result()
         except Exception as e:
             self.logger.error(f"Error in background task: {e}")
 
 def main():
+    """
+    Main function to run the OMERO Automated Data Import system.
+    """
     # Initialize system configurations and logging
     initialize_system(config)
     
@@ -149,7 +214,6 @@ def main():
     global shutdown_event
     shutdown_event = Event()
 
-    # Function to handle graceful exit signals (SIGINT/SIGTERM)
     def graceful_exit(signum, frame):
         """
         Signal handler for graceful shutdown.
@@ -166,7 +230,9 @@ def main():
     poller = DirectoryPoller(config, executor, logger)
     poller.start()
     log_flag(logger, 'start')
-    start_time = datetime.datetime.now() # Main loop waits for the shutdown event
+    start_time = datetime.datetime.now()
+
+    # Main loop waits for the shutdown event
     try:
         while not shutdown_event.is_set():
             time.sleep(1)
