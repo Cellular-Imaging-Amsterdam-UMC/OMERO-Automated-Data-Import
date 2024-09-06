@@ -90,19 +90,23 @@ class IngestionProcess:
         """
         try:
             importer = DataPackageImporter(self.config)
-            successful_uploads, failed_uploads, importer_failed = importer.import_data_package(self.data_package)
+            successful_uploads, failed_uploads, import_failed = importer.import_data_package(self.data_package)
             
-            if importer_failed or failed_uploads:
+            if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
                 logger.error(f"Import process failed for data package in {self.data_package.get('Dataset', 'Unknown')} due to failed uploads or importer failure.")
                 self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
-                return
+            else:
+                self.order_manager.move_upload_order('completed')
+                logger.info(f"Data package in {self.data_package.get('Dataset', 'Unknown')} processed successfully with {len(successful_uploads)} successful uploads.")
+                self.log_ingestion_step("Process Completed - Moved to Completed Uploads")
             
-            self.order_manager.move_upload_order('completed')
-            logger.info(f"Data package in {self.data_package.get('Dataset', 'Unknown')} processed successfully with {len(successful_uploads)} successful uploads.")
-                
+            return successful_uploads, failed_uploads, import_failed
         except Exception as e:
             logger.error(f"Error during import_data_package: {e}")
+            self.order_manager.move_upload_order('failed')
+            self.log_ingestion_step("Process Failed - Unexpected Error")
+            return [], [], True
 
     def log_ingestion_step(self, step_description):
         """
@@ -122,7 +126,7 @@ class DirectoryPoller:
     """
     Polls directories for new upload order files and processes them.
     """
-    def __init__(self, config, executor, logger, interval=10):
+    def __init__(self, config, executor, logger, interval=3):
         """
         Initialize the DirectoryPoller.
         
@@ -139,6 +143,7 @@ class DirectoryPoller:
         self.logger = logger
         self.interval = interval
         self.shutdown_event = Event()
+        self.processing_orders = set()
 
     def start(self):
         """Start the directory polling thread."""
@@ -154,19 +159,28 @@ class DirectoryPoller:
         """
         Continuously poll directories for changes and process new files.
         """
-        last_checked = {}
         while not self.shutdown_event.is_set():
             for core_grp_name in self.core_grp_names:
                 group_folder = self.base_dir / core_grp_name / self.upload_orders_dir_name
                 if not group_folder.exists():
                     continue
-                for item in group_folder.iterdir():
-                    if item.is_dir() or item.is_file():
-                        package_name = item.name
-                        if package_name not in last_checked or item.stat().st_mtime > last_checked.get(package_name, 0):
-                            self.process_event(item)
-                            last_checked[package_name] = item.stat().st_mtime
+                for item in sorted(group_folder.iterdir(), key=lambda x: x.stat().st_mtime):
+                    if item.is_file() and self.is_valid_order_file(item):
+                        self.process_event(item)
             time.sleep(self.interval)
+
+    def is_valid_order_file(self, file_path):
+        """
+        Check if the file name is a valid order file name.
+        
+        :param file_path: Path to the file
+        :return: True if the file name is valid, False otherwise
+        """
+        try:
+            datetime.datetime.strptime(file_path.stem, "%Y_%m_%d_%H-%M-%S")
+            return True
+        except ValueError:
+            return False
 
     def process_event(self, created_path):
         """
@@ -174,7 +188,12 @@ class DirectoryPoller:
         
         :param created_path: Path to the new or modified file
         """
-        if created_path.suffix == '.txt': 
+        if str(created_path) in self.processing_orders:
+            self.logger.info(f"Order {created_path} is already being processed. Skipping.")
+            return  # Order is already being processed
+
+        self.logger.info(f"Processing new upload order: {created_path}")
+        try:
             order_manager = UploadOrderManager(str(created_path), self.config)
             order_info = order_manager.get_order_info()
             
@@ -190,7 +209,29 @@ class DirectoryPoller:
             
             ingestion_process = IngestionProcess(data_package, self.config, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
-            future.add_done_callback(self.log_future_exception)
+            future.add_done_callback(self.order_completed)
+            
+            self.processing_orders.add(str(created_path))
+        except Exception as e:
+            self.logger.error(f"Error processing upload order {created_path}: {e}")
+
+    def order_completed(self, future):
+        """
+        Handle the completion of an upload order.
+        
+        :param future: Future object representing the completed order
+        """
+        try:
+            result = future.result()
+            # Handle the result if needed
+        except Exception as e:
+            self.logger.error(f"Error in processing order: {e}")
+        finally:
+            # Remove the completed order from processing_orders
+            completed_orders = [order for order in self.processing_orders if order not in self.executor._pending_work_items]
+            for order in completed_orders:
+                self.processing_orders.remove(order)
+                self.logger.info(f"Order completed and removed from processing list: {order}")
 
     def log_future_exception(self, future):
         """

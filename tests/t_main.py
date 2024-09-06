@@ -12,13 +12,9 @@ os.chdir(Path(__file__).resolve().parent.parent)
 sys.path.append(str(Path(__file__).resolve().parent.parent / 'src'))
 
 from utils.config_manager import load_settings, load_json
-from utils.logger import setup_logger
 
-# Setup logging
+# Load configuration
 config = load_settings("config/settings.yml")
-logger = setup_logger(__name__, config['log_file_path'])
-
-# Load group information
 groups_info = load_json("config/groups_list.json")
 
 # Sample image and base directory
@@ -45,16 +41,18 @@ def create_upload_order(group, core_group_name, username, dataset, files):
     
     with open(upload_order_path, 'w') as file:
         for key, value in order_content.items():
-            if key == "Files":
+            if key in ["Username", "Group"]:
+                file.write(f'{key}: "{value}"\n')
+            elif key == "Files":
                 file.write(f"{key}: {value}\n")
             else:
-                file.write(f"{key}: \"{value}\"\n")
+                file.write(f"{key}: {value}\n")
     
-    logger.info(f"Created upload order for group '{group}' at '{upload_order_path}'")
+    print(f"Created upload order for group '{group}' at '{upload_order_path}'")
     
     # Print the contents of the created file
     with open(upload_order_path, 'r') as file:
-        logger.info(f"Contents of upload order file:\n{file.read()}")
+        print(f"Contents of upload order file:\n{file.read()}")
     
     return upload_order_path
 
@@ -64,21 +62,21 @@ def copy_sample_image(core_group_name, dataset):
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"sample_image_{core_group_name}.tif"
     shutil.copy(sample_image, target_path)
-    logger.info(f"Copied sample image to '{target_path}'")
+    print(f"Copied sample image to '{target_path}'")
     return target_path
 
 # Ensure OMERO_USER environment variable is set
 username = os.getenv('OMERO_USER')
 if not username:
-    logger.error("OMERO_USER environment variable is not set.")
-    sys.exit("Error: OMERO_USER environment variable is not set.")
+    print("Error: OMERO_USER environment variable is not set.")
+    sys.exit(1)
 
 # Create upload orders and copy sample image for each group
 for group_info in groups_info:
     group = group_info['omero_grp_name']
     core_group_name = group_info['core_grp_name']
     dataset = datetime.datetime.now().strftime("%Y_%m_%d_%H-%M-%S")
-    files = [f"/divg/{core_group_name}/.omerodata/{dataset.replace('_', '/')}/sample_image_{core_group_name}.tif"]
+    files = [f"/divg/{core_group_name}/.omerodata2/{dataset.replace('_', '/')}/sample_image_{core_group_name}.tif"]
     
     # Copy the sample image
     copy_sample_image(core_group_name, dataset)
@@ -86,4 +84,4 @@ for group_info in groups_info:
     # Create the upload order
     create_upload_order(group, core_group_name, username, dataset, files)
 
-logger.info("Upload orders created successfully. Check logs/app.logs to view test results.")
+print("Upload orders created successfully.")

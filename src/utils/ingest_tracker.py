@@ -12,57 +12,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#ingest_tracker.py
+# ingest_tracker.py
 
 import sqlite3
 from sqlite3 import Error
+from .logger import setup_logger
 
-DATABASE_PATH = '/OMERO/ingestion_tracking.db'
+class IngestTracker:
+    def __init__(self, config):
+        self.database_path = config['ingest_tracking_db']
+        self.logger = setup_logger(__name__, config['log_file_path'])
 
-def create_connection(db_file):
-    """Create a database connection to a SQLite database."""
-    conn = None
-    try:
-        conn = sqlite3.connect(db_file)
-        return conn
-    except Error as e:
-        print(e)
-    return conn
+    def create_connection(self):
+        """Create a database connection to the SQLite database."""
+        try:
+            return sqlite3.connect(self.database_path)
+        except Error as e:
+            self.logger.error(f"Error connecting to database: {e}")
+        return None
 
-def create_table(conn, create_table_sql):
-    """Create a table from the create_table_sql statement."""
-    try:
-        c = conn.cursor()
-        c.execute(create_table_sql)
-    except Error as e:
-        print(e)
+    def log_ingestion_step(self, group, user, dataset, stage, uuid):
+        """Log an ingestion step to the database."""
+        conn = self.create_connection()
+        if conn is not None:
+            try:
+                sql = ''' INSERT INTO ingestion_tracking(group_name, user_name, data_package, stage, uuid)
+                          VALUES(?,?,?,?,?) '''
+                cur = conn.cursor()
+                cur.execute(sql, (group, user, dataset, stage, str(uuid)))
+                conn.commit()
+                self.logger.info(f"Logged ingestion step: {group}, {user}, {dataset}, {stage}, {uuid}")
+                return cur.lastrowid
+            except Error as e:
+                self.logger.error(f"Error logging ingestion step: {e}")
+            finally:
+                conn.close()
+        else:
+            self.logger.error("Error! Cannot create the database connection for logging ingestion step.")
 
-def initialize_database():
-    """Initialize the database with the required tables."""
-    database = DATABASE_PATH
+# Global instance of IngestTracker
+ingest_tracker = None
 
-    sql_create_ingestion_table = """ CREATE TABLE IF NOT EXISTS ingestion_tracking (
-                                        id integer PRIMARY KEY,
-                                        group_name text NOT NULL,
-                                        user_name text NOT NULL,
-                                        data_package text NOT NULL,
-                                        stage text NOT NULL,
-                                        uuid text NOT NULL,
-                                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                                    ); """
-
-    conn = create_connection(database)
-    if conn is not None:
-        create_table(conn, sql_create_ingestion_table)
-    else:
-        print("Error! Cannot create the database connection.")
+def initialize_ingest_tracker(config):
+    """Initialize the global IngestTracker instance."""
+    global ingest_tracker
+    ingest_tracker = IngestTracker(config)
 
 def log_ingestion_step(group, user, dataset, stage, uuid):
-    conn = create_connection(DATABASE_PATH)
-    with conn:
-        sql = ''' INSERT INTO ingestion_tracking(group_name, user_name, data_package, stage, uuid)
-                  VALUES(?,?,?,?,?) '''
-        cur = conn.cursor()
-        cur.execute(sql, (group, user, dataset, stage, str(uuid)))
-        conn.commit()
-        return cur.lastrowid
+    """Global function to log ingestion steps using the IngestTracker instance."""
+    if ingest_tracker is not None:
+        return ingest_tracker.log_ingestion_step(group, user, dataset, stage, uuid)
+    else:
+        print("Error: IngestTracker not initialized. Call initialize_ingest_tracker first.")

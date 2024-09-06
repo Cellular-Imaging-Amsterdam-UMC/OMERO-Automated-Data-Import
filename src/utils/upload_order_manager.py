@@ -70,11 +70,14 @@ class UploadOrderManager:
         data = {}
         for line in lines:
             key, value = line.split(': ', 1)
-            if key == 'Files':
-                files_list = value.strip('[]').split(',')
-                data[key] = [file.strip().strip('"') for file in files_list]
-            else:
+            if key in ["Username", "Group"]:
                 data[key] = value.strip().strip('"')
+            elif key in ["UserID", "GroupID", "ProjectID", "DatasetID"]:
+                data[key] = int(value)
+            elif key == "Files":
+                data[key] = eval(value)  # This safely evaluates the list string
+            else:
+                data[key] = value.strip()
         return json.dumps(data)
 
     def switch_path_prefix(self):
@@ -93,7 +96,7 @@ class UploadOrderManager:
                 else:
                     updated_files.append(file_path)
             self.order_info['Files'] = updated_files
-            self.logger.debug("Updated file paths after switching 'divg' to 'data'.")
+            self.logger.debug(f"Updated {len(updated_files)} file paths after switching 'divg' to 'data'.")
 
     def log_upload_order_info(self):
         """Log the upload order information for debugging purposes."""

@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-#initialize.py
+# initialize.py
 
 import os
 import shutil
 import sys
-import json
-from .ingest_tracker import initialize_database
+import sqlite3
+from sqlite3 import Error
 from .logger import setup_logger
 from .config_manager import load_json
+from .ingest_tracker import initialize_ingest_tracker
 
 def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
     """
@@ -52,6 +53,26 @@ def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
         log.error(f"Access check failed for {path}: {e}")
         return False
 
+def initialize_database(database_path, logger):
+    """Initialize the database with the required tables."""
+    sql_create_ingestion_table = """ CREATE TABLE IF NOT EXISTS ingestion_tracking (
+                                        id integer PRIMARY KEY,
+                                        group_name text NOT NULL,
+                                        user_name text NOT NULL,
+                                        data_package text NOT NULL,
+                                        stage text NOT NULL,
+                                        uuid text NOT NULL,
+                                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                                    ); """
+    try:
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+        c.execute(sql_create_ingestion_table)
+        conn.close()
+        logger.info("Ingest tracking database initialized successfully.")
+    except Error as e:
+        logger.error(f"Error initializing database: {e}")
+        sys.exit(1)
 
 def initialize_system(config):
     """
@@ -63,10 +84,8 @@ def initialize_system(config):
     # Check access to directories for each group
     access_checks_passed = True
     for group_info in load_json(config['group_list']):
-        # Use 'core_grp_name' as the directory name
         group_base_path = os.path.join(config['base_dir'], group_info['core_grp_name'])
         
-        # Check access for each specific directory within the group directory
         for dir_name in [config['upload_orders_dir_name'], config['completed_orders_dir_name'], config['failed_uploads_directory_name']]:
             dir_path = os.path.join(group_base_path, dir_name)
             if not check_directory_access(dir_path, logger):
@@ -76,8 +95,10 @@ def initialize_system(config):
         logger.error("Insufficient access to one or more required directories. Please check permissions.")
         sys.exit(1)
 
-    # Initialize the database for ingest tracking
-    initialize_database()
-    logger.info("Database has been successfully created and initialized.")
+    # Initialize the ingest tracking database
+    initialize_database(config['ingest_tracking_db'], logger)
+
+    # Initialize the global IngestTracker instance
+    initialize_ingest_tracker(config)
 
     logger.info("System initialization complete.")

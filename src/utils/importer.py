@@ -55,10 +55,16 @@ class DataPackageImporter:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
                 # ln_s defines in-place imports. Change to False for normal https transfer
-                file_id = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
-                if file_id is not None:
-                    self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with File ID: {file_id}")
-                    successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), file_id))
+                image_id = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
+                if image_id is not None:
+                    # Ensure image_id is a single integer, not a list
+                    if isinstance(image_id, list):
+                        if len(image_id) == 1:
+                            image_id = image_id[0]
+                        else:
+                            raise ValueError(f"Unexpected multiple image IDs returned for file {file_path}: {image_id}")
+                    self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with Image ID: {image_id}")
+                    successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
                 else:
                     self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
                     failed_uploads.append((file_path, dataset_id, os.path.basename(file_path), None))
@@ -72,14 +78,14 @@ class DataPackageImporter:
         Import a data package into OMERO.
 
         :param data_package: DataPackage object containing import information
-        :return: Tuple of successful uploads, failed uploads, and import status
+        :return: Tuple of (successful_uploads, failed_uploads, import_status)
         """
         self.logger.info(f"Starting import for data package: {data_package.get('UUID', 'Unknown')}")
         self.logger.debug(f"Data package contents: {data_package}")
     
-        self.logger.debug(f"Attempting to connect to OMERO with User: {self.user}, Host: {self.host}, Port: {self.port}, Group: {data_package.get('GroupID')}")
+        self.logger.debug(f"Attempting to connect to OMERO with User: {self.user}, Host: {self.host}, Port: {self.port}, Group: {data_package.get('Group')}")
 
-        with BlitzGateway(self.user, self.password, group=str(data_package.get('GroupID')), host=self.host, port=self.port, secure=True) as conn:
+        with BlitzGateway(self.user, self.password, group=data_package.get('Group'), host=self.host, port=self.port, secure=True) as conn:
             if not conn.connect():
                 self.logger.error("Failed to connect to OMERO.")
                 return [], [], True
@@ -90,7 +96,7 @@ class DataPackageImporter:
             try:
                 dataset_id = data_package.get('DatasetID')
                 if dataset_id is None:
-                    raise Exception("Dataset ID not provided in data package.")
+                    raise ValueError("Dataset ID not provided in data package.")
     
                 file_paths = data_package.get('Files', [])
                 self.logger.debug(f"File paths to be uploaded: {file_paths}")
@@ -100,7 +106,13 @@ class DataPackageImporter:
     
                 # Log the "Data Imported" step here, after successful uploads
                 if successful_uploads:
-                    log_ingestion_step(data_package.get('Group'), data_package.get('Username'), data_package.get('Dataset'), "Data Imported", str(data_package.get('UUID')))
+                    log_ingestion_step(
+                        data_package.get('Group', 'Unknown'),
+                        data_package.get('Username', 'Unknown'),
+                        data_package.get('DatasetID', 'Unknown'),  # Ensure DatasetID is used
+                        "Data Imported",
+                        str(data_package.get('UUID', 'Unknown'))
+                    )
     
                 # Change image ownership after upload
                 self.change_image_ownership(conn, successful_uploads, data_package.get('UserID'))
@@ -137,4 +149,4 @@ class DataPackageImporter:
             except subprocess.CalledProcessError as e:
                 self.logger.error(f"Failed to change ownership for Image:{image_id}. Error: {e.stderr}")
             except Exception as e:
-                self.logger.error(f"Unexpected error during ownership change for Image:{image_id}: {e}")
+                self.logger.error(f"Unexpected error during ownership change for Image:{image_id}: {str(e)}")
