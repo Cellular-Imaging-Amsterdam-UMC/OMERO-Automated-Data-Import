@@ -162,39 +162,36 @@ class DirectoryPoller:
         while not self.shutdown_event.is_set():
             for core_grp_name in self.core_grp_names:
                 group_folder = self.base_dir / core_grp_name / self.upload_orders_dir_name
-                if not group_folder.exists():
-                    continue
-                for item in sorted(group_folder.iterdir(), key=lambda x: x.stat().st_mtime):
-                    if item.is_file() and self.is_valid_order_file(item):
-                        self.process_event(item)
+                for order_file in sorted(group_folder.iterdir(), key=lambda x: x.stat().st_mtime):
+                    if order_file.is_file() and self.is_valid_order_file(order_file):
+                        self.process_event(order_file)
             time.sleep(self.interval)
 
-    def is_valid_order_file(self, file_path):
+    def is_valid_order_file(self, order_file):
         """
         Check if the file name is a valid order file name.
         
-        :param file_path: Path to the file
+        :param order_file: Path to the file
         :return: True if the file name is valid, False otherwise
         """
         try:
-            datetime.datetime.strptime(file_path.stem, "%Y_%m_%d_%H-%M-%S")
+            datetime.datetime.strptime(order_file.stem, "%Y_%m_%d_%H-%M-%S")
             return True
         except ValueError:
             return False
 
-    def process_event(self, created_path):
+    def process_event(self, order_file):
         """
         Process a newly created or modified file.
         
-        :param created_path: Path to the new or modified file
+        :param order_file: Path to the new or modified file
         """
-        if str(created_path) in self.processing_orders:
-            self.logger.info(f"Order {created_path} is already being processed. Skipping.")
+        if str(order_file) in self.processing_orders:
             return  # Order is already being processed
 
-        self.logger.info(f"Processing new upload order: {created_path}")
+        self.logger.info(f"Processing new upload order: {order_file}")
         try:
-            order_manager = UploadOrderManager(str(created_path), self.config)
+            order_manager = UploadOrderManager(str(order_file), self.config)
             order_info = order_manager.get_order_info()
             
             data_package = DataPackage(order_info, self.base_dir)
@@ -211,9 +208,9 @@ class DirectoryPoller:
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.order_completed)
             
-            self.processing_orders.add(str(created_path))
+            self.processing_orders.add(str(order_file))
         except Exception as e:
-            self.logger.error(f"Error processing upload order {created_path}: {e}")
+            self.logger.error(f"Error processing upload order {order_file}: {e}")
 
     def order_completed(self, future):
         """
