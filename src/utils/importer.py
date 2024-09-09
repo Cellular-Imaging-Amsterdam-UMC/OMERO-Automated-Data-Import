@@ -19,8 +19,6 @@ import ezomero
 from omero.gateway import BlitzGateway
 from .logger import setup_logger
 from utils.ingest_tracker import log_ingestion_step
-from omero.cmd import Chown2, DoAll
-from omero.callbacks import CmdCallbackI
 
 class DataPackageImporter:
     """
@@ -46,7 +44,6 @@ class DataPackageImporter:
         Upload files to a specified dataset in OMERO.
 
         :param conn: OMERO connection object
-        :param file_paths: List of file paths to upload
         :param dataset_id: ID of the dataset to upload files to
         :param file_paths: List of file paths to upload
         :param uuid: UUID of the data package
@@ -68,7 +65,7 @@ class DataPackageImporter:
                         successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
-                        # Decide if you want to consider this a failed upload or not
+                        # Still consider it a successful upload even if annotation fails
                         successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
                 else:
                     self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
@@ -80,36 +77,53 @@ class DataPackageImporter:
 
     def import_data_package(self, data_package):
         """
-        Import a data package into OMERO.
+        Import a data package into OMERO as the intended user.
 
         :param data_package: DataPackage object containing import information
         :return: Tuple of (successful_uploads, failed_uploads, import_status)
         """
         self.logger.info(f"Starting import for data package: {data_package.get('UUID', 'Unknown')}")
         self.logger.debug(f"Data package contents: {data_package}")
-    
-        self.logger.debug(f"Attempting to connect to OMERO with User: {self.user}, Host: {self.host}, Port: {self.port}, Group: {data_package.get('Group')}")
 
-        with BlitzGateway(self.user, self.password, group=data_package.get('Group'), host=self.host, port=self.port, secure=True) as conn:
-            if not conn.connect():
-                self.logger.error("Failed to connect to OMERO.")
+        intended_username = data_package.get('Username')
+        group_id = data_package.get('GroupID')
+        group_name = data_package.get('Group')
+
+        if not intended_username or not group_id or not group_name:
+            self.logger.error("Required user or group information not provided in data package.")
+            return [], [], True
+
+        # Connect as root
+        with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
+            if not root_conn.connect():
+                self.logger.error("Failed to connect to OMERO as root.")
                 return [], [], True
-    
-            all_successful_uploads = []
-            all_failed_uploads = []
-    
+
             try:
+                # Create a new connection as the intended user
+                user_conn = root_conn.suConn(intended_username)
+                if not user_conn:
+                    self.logger.error(f"Failed to create connection as user {intended_username}")
+                    return [], [], True
+
+                # Set the correct group for the session
+                user_conn.setGroupForSession(group_id)
+
+                self.logger.info(f"Connected as user {intended_username} in group {group_name}")
+
+                all_successful_uploads = []
+                all_failed_uploads = []
+
                 dataset_id = data_package.get('DatasetID')
                 if dataset_id is None:
                     raise ValueError("Dataset ID not provided in data package.")
-    
+
                 file_paths = data_package.get('Files', [])
                 self.logger.debug(f"File paths to be uploaded: {file_paths}")
-                successful_uploads, failed_uploads = self.upload_files(conn, dataset_id, file_paths, data_package.get('UUID'))
+                successful_uploads, failed_uploads = self.upload_files(user_conn, dataset_id, file_paths, data_package.get('UUID'))
                 all_successful_uploads.extend(successful_uploads)
                 all_failed_uploads.extend(failed_uploads)
-    
-                # Log the "Data Imported" step here, after successful uploads
+
                 if successful_uploads:
                     log_ingestion_step(
                         data_package.get('Group', 'Unknown'),
@@ -118,14 +132,14 @@ class DataPackageImporter:
                         "Data Imported",
                         str(data_package.get('UUID', 'Unknown'))
                     )
-    
-                # Change image ownership after all uploads
-                self.change_image_ownership(conn, successful_uploads, data_package.get('UserID'))
-    
+
             except Exception as e:
                 self.logger.error(f"Exception during import: {e}")
                 return [], [], True
-    
+            finally:
+                if 'user_conn' in locals() and user_conn:
+                    user_conn.close()
+
         return all_successful_uploads, all_failed_uploads, False
     
     def add_image_annotations(self, conn, image_id, uuid, file_path):
@@ -153,60 +167,3 @@ class DataPackageImporter:
             
         except Exception as e:
             self.logger.error(f"Failed to add annotations to Image:{image_id}. Error: {str(e)}")
-    
-    def change_image_ownership(self, conn, successful_uploads, new_owner_id):
-        """
-        Change the ownership of uploaded images to the specified user.
-
-        :param conn: OMERO connection object
-        :param successful_uploads: List of successfully uploaded files
-        :param new_owner_id: UserID of the new owner for the images
-        """
-        try:
-            # Get the current user's ID
-            current_user = conn.getUser()
-            current_user_id = current_user.getId()
-
-            if new_owner_id == current_user_id:
-                self.logger.info(f"Current user (ID: {current_user_id}) already owns the uploaded images.")
-                return
-
-            self.logger.info(f"Attempting to change ownership of images to user ID: {new_owner_id}")
-
-            for _, _, _, image_id in successful_uploads:
-                try:
-                    # Get the image object
-                    image = conn.getObject("Image", image_id)
-                    if not image:
-                        self.logger.warning(f"Image with ID {image_id} not found. Skipping ownership change.")
-                        continue
-
-                    # Prepare the Chown2 command
-                    chown = Chown2(targetObjects={'Image': [image_id]}, userId=new_owner_id)
-                    
-                    # Execute the command
-                    handle = conn.c.submit(DoAll([chown]))
-                    cb = CmdCallbackI(conn.c, handle)
-                    
-                    # Wait for the command to complete
-                    cb.loop(10, 500)  # Wait for a maximum of 5 seconds
-                    
-                    # Get the response and check for errors
-                    rsp = cb.getResponse()
-                    if isinstance(rsp, dict) and rsp.get('Category') == 'Error':
-                        self.logger.error(f"Error changing ownership for Image:{image_id}. Response: {rsp}")
-                    else:
-                        self.logger.info(f"Ownership change command executed for Image:{image_id}")
-
-                    # Verify the ownership change
-                    updated_image = conn.getObject("Image", image_id)
-                    if updated_image.getOwner().getId() == new_owner_id:
-                        self.logger.info(f"Verified: Image:{image_id} ownership changed to user ID: {new_owner_id}")
-                    else:
-                        self.logger.warning(f"Ownership change failed for Image:{image_id}. Current owner: {updated_image.getOwner().getId()}")
-
-                except Exception as e:
-                    self.logger.error(f"Failed to change or verify ownership for Image:{image_id}. Error: {str(e)}")
-
-        except Exception as e:
-            self.logger.error(f"Error in change_image_ownership: {str(e)}")
