@@ -49,6 +49,12 @@ class DataPackage:
         """
         self.__dict__.update(order_data)
         self.base_dir = base_dir
+        
+        # Verify that ID fields are integers
+        for field in ['UserID', 'GroupID', 'ProjectID', 'DatasetID']:
+            if field in self.__dict__:
+                if not isinstance(self.__dict__[field], int):
+                    logger.warning(f"{field} is not an integer: {self.__dict__[field]}")
 
     def __str__(self):
         """
@@ -117,7 +123,7 @@ class IngestionProcess:
         log_ingestion_step(
             self.data_package.get('Group', 'Unknown'),
             self.data_package.get('Username', 'Unknown'),
-            self.data_package.get('Dataset', 'Unknown'),
+            self.data_package.get('DatasetID', 'Unknown'),
             step_description,
             str(self.data_package.get('UUID', 'Unknown'))
         )

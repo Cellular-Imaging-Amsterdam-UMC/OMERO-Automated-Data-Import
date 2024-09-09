@@ -26,12 +26,12 @@ def create_upload_order(group, core_group_name, username, dataset, files):
     order_content = {
         "Version": "2.0",
         "UUID": str(uuid.uuid4()),
-        "Username": username,
+        "Username": "rrosas", #Remember to also change the UserID
         "Group": group,
         "UserID": 34,
         "GroupID": 134,
-        "ProjectID": 951,
-        "DatasetID": 1651,
+        "ProjectID": 1001,
+        "DatasetID": 1701,
         "Files": files
     }
     

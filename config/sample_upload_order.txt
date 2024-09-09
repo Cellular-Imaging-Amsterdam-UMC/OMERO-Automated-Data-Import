@@ -6,4 +6,4 @@ UserID: 102
 GroupID: 3
 ProjectID: 455
 DatasetID: 807
-Files: ["/divg/coreKrawczyk/Carrousell pictures/Retina_LAM+occln_20201204_Series007Snapshot1_ch00.tif"]
+Files: ["/divg/coreKrawczyk/Carrousell pictures/Retina_LAM+occln_20201204_Series007Snapshot1_ch00.tif","/divg/coreKrawczyk/Carrousell pictures/Retina_LAM+occln_20201204_Series007Snapshot1_ch00.tif"]

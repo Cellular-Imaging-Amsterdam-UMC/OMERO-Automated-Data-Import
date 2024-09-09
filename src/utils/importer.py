@@ -15,11 +15,12 @@
 # importer.py
 
 import os
-import subprocess
 import ezomero
 from omero.gateway import BlitzGateway
 from .logger import setup_logger
 from utils.ingest_tracker import log_ingestion_step
+from omero.cmd import Chown2, DoAll
+from omero.callbacks import CmdCallbackI
 
 class DataPackageImporter:
     """
@@ -40,13 +41,15 @@ class DataPackageImporter:
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
 
-    def upload_files(self, conn, file_paths, dataset_id):
+    def upload_files(self, conn, dataset_id, file_paths, uuid):
         """
         Upload files to a specified dataset in OMERO.
 
         :param conn: OMERO connection object
         :param file_paths: List of file paths to upload
         :param dataset_id: ID of the dataset to upload files to
+        :param file_paths: List of file paths to upload
+        :param uuid: UUID of the data package
         :return: Tuple of successful and failed uploads
         """
         successful_uploads = []
@@ -55,16 +58,18 @@ class DataPackageImporter:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
                 # ln_s defines in-place imports. Change to False for normal https transfer
-                image_id = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
-                if image_id is not None:
-                    # Ensure image_id is a single integer, not a list
-                    if isinstance(image_id, list):
-                        if len(image_id) == 1:
-                            image_id = image_id[0]
-                        else:
-                            raise ValueError(f"Unexpected multiple image IDs returned for file {file_path}: {image_id}")
-                    self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with Image ID: {image_id}")
-                    successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
+                image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
+                if image_ids:
+                    # Ensure we're working with a single integer ID
+                    image_id = image_ids[0] if isinstance(image_ids, list) else image_ids
+                    try:
+                        self.add_image_annotations(conn, image_id, uuid, file_path)
+                        self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with Image ID: {image_id}")
+                        successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
+                    except Exception as annotation_error:
+                        self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
+                        # Decide if you want to consider this a failed upload or not
+                        successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
                 else:
                     self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
                     failed_uploads.append((file_path, dataset_id, os.path.basename(file_path), None))
@@ -100,7 +105,7 @@ class DataPackageImporter:
     
                 file_paths = data_package.get('Files', [])
                 self.logger.debug(f"File paths to be uploaded: {file_paths}")
-                successful_uploads, failed_uploads = self.upload_files(conn, file_paths, dataset_id)
+                successful_uploads, failed_uploads = self.upload_files(conn, dataset_id, file_paths, data_package.get('UUID'))
                 all_successful_uploads.extend(successful_uploads)
                 all_failed_uploads.extend(failed_uploads)
     
@@ -109,12 +114,12 @@ class DataPackageImporter:
                     log_ingestion_step(
                         data_package.get('Group', 'Unknown'),
                         data_package.get('Username', 'Unknown'),
-                        data_package.get('DatasetID', 'Unknown'),  # Ensure DatasetID is used
+                        data_package.get('DatasetID', 'Unknown'),
                         "Data Imported",
                         str(data_package.get('UUID', 'Unknown'))
                     )
     
-                # Change image ownership after upload
+                # Change image ownership after all uploads
                 self.change_image_ownership(conn, successful_uploads, data_package.get('UserID'))
     
             except Exception as e:
@@ -123,30 +128,85 @@ class DataPackageImporter:
     
         return all_successful_uploads, all_failed_uploads, False
     
+    def add_image_annotations(self, conn, image_id, uuid, file_path):
+        """Add UUID and filepath as annotations to the image."""
+        try:
+            annotation_dict = {'UUID': str(uuid), 'Filepath': str(file_path)}
+            ns = "custom.namespace.for.image.annotations"  # Define your custom namespace here
+            
+            self.logger.debug(f"Attempting to add annotations to Image:{image_id}")
+            self.logger.debug(f"Annotation dict: {annotation_dict}")
+            
+            map_ann_id = ezomero.post_map_annotation(
+                conn=conn, 
+                object_type="Image", 
+                object_id=image_id, 
+                kv_dict=annotation_dict, 
+                ns=ns,
+                across_groups=False  # Set to False if you don't want cross-group behavior
+            )
+            
+            if map_ann_id:
+                self.logger.info(f"Successfully added annotations to Image:{image_id}. MapAnnotation ID: {map_ann_id}")
+            else:
+                self.logger.warning(f"MapAnnotation created for Image:{image_id}, but no ID was returned.")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to add annotations to Image:{image_id}. Error: {str(e)}")
+    
     def change_image_ownership(self, conn, successful_uploads, new_owner_id):
         """
         Change the ownership of uploaded images to the specified user.
 
         :param conn: OMERO connection object
         :param successful_uploads: List of successfully uploaded files
-        :param new_owner_id: ID of the new owner for the images
+        :param new_owner_id: UserID of the new owner for the images
         """
-        omero_user_id = ezomero.get_user_id(conn, self.user)
-        if new_owner_id == omero_user_id:
-            self.logger.info(f"{self.user} already owns the uploaded images.")
-            return
-            
-        login_command = f"omero login {self.user}@{self.host}:{self.port} -w {self.password}"
-        
-        for _, _, _, image_id in successful_uploads:
-            chown_command = f"omero chown {new_owner_id} Image:{image_id}"
-            omero_cli_command = f"{login_command} && {chown_command}"
-    
-            try:
-                self.logger.debug(f"Executing command: {omero_cli_command}")
-                result = subprocess.run(omero_cli_command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, executable='/bin/bash')
-                self.logger.debug(f"Ownership change successful for Image:{image_id}. Output: {result.stdout}")
-            except subprocess.CalledProcessError as e:
-                self.logger.error(f"Failed to change ownership for Image:{image_id}. Error: {e.stderr}")
-            except Exception as e:
-                self.logger.error(f"Unexpected error during ownership change for Image:{image_id}: {str(e)}")
+        try:
+            # Get the current user's ID
+            current_user = conn.getUser()
+            current_user_id = current_user.getId()
+
+            if new_owner_id == current_user_id:
+                self.logger.info(f"Current user (ID: {current_user_id}) already owns the uploaded images.")
+                return
+
+            self.logger.info(f"Attempting to change ownership of images to user ID: {new_owner_id}")
+
+            for _, _, _, image_id in successful_uploads:
+                try:
+                    # Get the image object
+                    image = conn.getObject("Image", image_id)
+                    if not image:
+                        self.logger.warning(f"Image with ID {image_id} not found. Skipping ownership change.")
+                        continue
+
+                    # Prepare the Chown2 command
+                    chown = Chown2(targetObjects={'Image': [image_id]}, userId=new_owner_id)
+                    
+                    # Execute the command
+                    handle = conn.c.submit(DoAll([chown]))
+                    cb = CmdCallbackI(conn.c, handle)
+                    
+                    # Wait for the command to complete
+                    cb.loop(10, 500)  # Wait for a maximum of 5 seconds
+                    
+                    # Get the response and check for errors
+                    rsp = cb.getResponse()
+                    if isinstance(rsp, dict) and rsp.get('Category') == 'Error':
+                        self.logger.error(f"Error changing ownership for Image:{image_id}. Response: {rsp}")
+                    else:
+                        self.logger.info(f"Ownership change command executed for Image:{image_id}")
+
+                    # Verify the ownership change
+                    updated_image = conn.getObject("Image", image_id)
+                    if updated_image.getOwner().getId() == new_owner_id:
+                        self.logger.info(f"Verified: Image:{image_id} ownership changed to user ID: {new_owner_id}")
+                    else:
+                        self.logger.warning(f"Ownership change failed for Image:{image_id}. Current owner: {updated_image.getOwner().getId()}")
+
+                except Exception as e:
+                    self.logger.error(f"Failed to change or verify ownership for Image:{image_id}. Error: {str(e)}")
+
+        except Exception as e:
+            self.logger.error(f"Error in change_image_ownership: {str(e)}")
