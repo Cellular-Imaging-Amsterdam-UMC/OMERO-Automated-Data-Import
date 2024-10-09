@@ -75,7 +75,7 @@ To run the pytest unit tests:
    ```bash
    python -m venv venv
    ```
-2. Install the right IcePy wheel directly for your os & py version:
+2. Install the right IcePy wheel directly for your [os & py version](https://www.glencoesoftware.com/blog/2023/12/08/ice-binaries-for-omero.html):
    ```bash
    venv/Scripts/python -m pip install https://github.com/glencoesoftware/zeroc-ice-py-win-x86_64/releases/download/20240325/zeroc_ice-3.6.5-cp310-cp310-win_amd64.whl
    ```
