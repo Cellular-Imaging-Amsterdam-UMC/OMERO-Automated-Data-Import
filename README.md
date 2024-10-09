@@ -64,3 +64,28 @@ python tests/t_main.py
 
 This will help verify that the setup is correct and the system is functioning as expected by uploading a sample TIF image to the omero server.
 Upload logs will be visible in the console and if successful, the image should be visible via omero web in the 
+
+## Unit tests
+
+## Unit Tests
+
+To run the pytest unit tests:
+
+1. Create a virtual environment:
+   ```bash
+   python -m venv venv
+   ```
+2. Install the right IcePy wheel directly for your os & py version:
+   ```bash
+   venv/Scripts/python -m pip install https://github.com/glencoesoftware/zeroc-ice-py-win-x86_64/releases/download/20240325/zeroc_ice-3.6.5-cp310-cp310-win_amd64.whl
+   ```
+3. Install this package (editable):
+   ```bash
+   venv/Scripts/python -m pip install --editable .
+   ```
+4. Run the unit tests with pytest:
+   ```bash
+   venv/Scripts/pytest .\tests\unittests\
+   ```
+
+

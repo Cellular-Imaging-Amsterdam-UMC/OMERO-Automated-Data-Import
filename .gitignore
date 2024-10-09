@@ -2,4 +2,7 @@
 src/__pycache__/
 src/utils/__pycache__/
 config/groups_list.json
- 
+venv/
+test_logfile.log
+omeroadi.egg-info/
+**/__pycache__

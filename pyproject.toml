@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "omeroadi"
+dynamic = ["version"]
+description = "OMERO Automated Data Import (ADI) System"
+authors = [{ name = "Rodrigo Rosas-Bertolini", email = "cellularimaging@amsterdamumc.nl" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+readme = "README.md"  
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "ezomero>=2.1.0",
+    "pandas==2.2.1",
+    "numpy==1.26.4",
+    "openpyxl==3.1.2",
+    "python-dotenv==1.0.1",
+    "pytest==8.2.1"
+]
+
+[tool.setuptools.packages]
+find = { where = ["src"] }
+
+[tool.setuptools_scm]
+
+[project.urls]
+"Homepage" = "https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import"
