@@ -17,11 +17,26 @@
 import os
 import shutil
 import sys
-import sqlite3
-from sqlite3 import Error
 from .logger import setup_logger
 from .config_manager import load_json
 from .ingest_tracker import initialize_ingest_tracker
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime
+
+Base = declarative_base()
+
+class IngestionTracking(Base):
+    __tablename__ = 'ingestion_tracking'
+
+    id = Column(Integer, primary_key=True)
+    group_name = Column(String, nullable=False)
+    user_name = Column(String, nullable=False)
+    data_package = Column(String, nullable=False)
+    stage = Column(String, nullable=False)
+    uuid = Column(String, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
 def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
     """
@@ -55,22 +70,11 @@ def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
 
 def initialize_database(database_path, logger):
     """Initialize the database with the required tables."""
-    sql_create_ingestion_table = """ CREATE TABLE IF NOT EXISTS ingestion_tracking (
-                                        id integer PRIMARY KEY,
-                                        group_name text NOT NULL,
-                                        user_name text NOT NULL,
-                                        data_package text NOT NULL,
-                                        stage text NOT NULL,
-                                        uuid text NOT NULL,
-                                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-                                    ); """
     try:
-        conn = sqlite3.connect(database_path)
-        c = conn.cursor()
-        c.execute(sql_create_ingestion_table)
-        conn.close()
+        engine = create_engine(f'sqlite:///{database_path}')
+        Base.metadata.create_all(engine)
         logger.info("Ingest tracking database initialized successfully.")
-    except Error as e:
+    except Exception as e:
         logger.error(f"Error initializing database: {e}")
         sys.exit(1)
 

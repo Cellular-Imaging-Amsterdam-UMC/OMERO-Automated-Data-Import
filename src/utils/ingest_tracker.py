@@ -14,41 +14,37 @@
 
 # ingest_tracker.py
 
-import sqlite3
-from sqlite3 import Error
 from .logger import setup_logger
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from .initialize import IngestionTracking
 
 class IngestTracker:
     def __init__(self, config):
         self.database_path = config['ingest_tracking_db']
         self.logger = setup_logger(__name__, config['log_file_path'])
-
-    def create_connection(self):
-        """Create a database connection to the SQLite database."""
-        try:
-            return sqlite3.connect(self.database_path)
-        except Error as e:
-            self.logger.error(f"Error connecting to database: {e}")
-        return None
+        self.engine = create_engine(f'sqlite:///{self.database_path}')
+        self.Session = sessionmaker(bind=self.engine)
 
     def log_ingestion_step(self, group, user, dataset, stage, uuid):
         """Log an ingestion step to the database."""
-        conn = self.create_connection()
-        if conn is not None:
+        with self.Session() as session:
             try:
-                sql = ''' INSERT INTO ingestion_tracking(group_name, user_name, data_package, stage, uuid)
-                          VALUES(?,?,?,?,?) '''
-                cur = conn.cursor()
-                cur.execute(sql, (group, user, dataset, stage, str(uuid)))
-                conn.commit()
+                new_entry = IngestionTracking(
+                    group_name=group,
+                    user_name=user,
+                    data_package=dataset,
+                    stage=stage,
+                    uuid=str(uuid)
+                )
+                session.add(new_entry)
+                session.commit()
                 self.logger.info(f"Logged ingestion step: {group}, {user}, {dataset}, {stage}, {uuid}")
-                return cur.lastrowid
-            except Error as e:
+                return new_entry.id
+            except Exception as e:
+                session.rollback()
                 self.logger.error(f"Error logging ingestion step: {e}")
-            finally:
-                conn.close()
-        else:
-            self.logger.error("Error! Cannot create the database connection for logging ingestion step.")
+                return None
 
 # Global instance of IngestTracker
 ingest_tracker = None
