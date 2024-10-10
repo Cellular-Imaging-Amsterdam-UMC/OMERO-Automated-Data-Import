@@ -65,8 +65,6 @@ python tests/t_main.py
 This will help verify that the setup is correct and the system is functioning as expected by uploading a sample TIF image to the omero server.
 Upload logs will be visible in the console and if successful, the image should be visible via omero web in the 
 
-## Unit tests
-
 ## Unit Tests
 
 To run the pytest unit tests:
