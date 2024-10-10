@@ -30,6 +30,13 @@ dependencies = [
     "pytest==8.2.1"
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest-cov",
+    "mock",
+    "psycopg2-binary"
+]
+
 [tool.setuptools.packages]
 find = { where = ["src"] }
 
