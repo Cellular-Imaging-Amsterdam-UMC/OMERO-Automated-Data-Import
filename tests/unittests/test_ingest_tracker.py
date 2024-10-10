@@ -1,8 +1,8 @@
 import os
 import pytest
-import sqlite3
 from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step
-from unittest.mock import patch
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 import tempfile
 
 TEST_LOG_PATH = 'test_logfile.log'  # Static log file path
@@ -11,26 +11,36 @@ TEST_LOG_PATH = 'test_logfile.log'  # Static log file path
 @pytest.fixture(scope='module', autouse=True)
 def setup_database():
     """Set up a temporary SQLite database before tests run and clean up afterward."""
-    # Create a temporary file
+    # Create a temporary SQLite database file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as temp_db:
         TEST_DB_PATH = temp_db.name
 
     config = {
-        'ingest_tracking_db': TEST_DB_PATH,
+        'ingest_tracking_db': f"sqlite:///{TEST_DB_PATH}",  # Correct URI format for SQLite
         'log_file_path': TEST_LOG_PATH
     }
 
+    # Initialize the ingest tracker with the SQLite database
     initialize_ingest_tracker(config)
 
-    yield TEST_DB_PATH  # Yield the path for use in tests
+    yield config  # Yield the config for use in tests
 
+    # Dispose the global ingest_tracker
+    from utils.ingest_tracker import ingest_tracker
+    if ingest_tracker:
+        ingest_tracker.dispose()
+        
     # Clean up the database file after tests
-    # os.remove(TEST_DB_PATH)
+    if os.path.exists(TEST_DB_PATH):
+        os.remove(TEST_DB_PATH)
+    # Clean up the log file
+    if os.path.exists(TEST_LOG_PATH):
+        os.remove(TEST_LOG_PATH)
 
 
 def test_log_ingestion_step(setup_database):
     """Test logging an ingestion step."""
-    TEST_DB_PATH = setup_database  # Get the temp database path
+    config = setup_database  # Get the configuration, including the temp database path
 
     group = 'test_group'
     user = 'test_user'
@@ -44,17 +54,21 @@ def test_log_ingestion_step(setup_database):
     # Check if the returned ID is not None
     assert ingestion_id is not None
 
-    # Verify that the ingestion step was logged correctly
-    conn = sqlite3.connect(TEST_DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('SELECT * FROM ingestion_tracking WHERE uuid = ?', (uuid,))
-    record = cursor.fetchone()
-    assert record is not None
-    assert record[1] == group  # group_name
-    assert record[2] == user   # user_name
-    assert record[3] == dataset # data_package
-    assert record[4] == stage   # stage
-    assert record[5] == uuid    # uuid
-    
-    conn.close()
+    # Verify that the ingestion step was logged correctly using SQLAlchemy
+    engine = create_engine(config['ingest_tracking_db'])
+    Session = sessionmaker(bind=engine)
+
+    # Use 'with session' for session management
+    with Session() as session:
+        # Use the text() function to wrap raw SQL queries
+        result = session.execute(text('SELECT * FROM ingestion_tracking WHERE uuid = :uuid'), {'uuid': uuid}).fetchone()
+
+        assert result is not None
+        assert result.group_name == group  # group_name
+        assert result.user_name == user    # user_name
+        assert result.data_package == dataset  # data_package
+        assert result.stage == stage   # stage
+        assert result.uuid == uuid     # uuid
+        
+    # Close the engine explicitly to release resources
+    engine.dispose()

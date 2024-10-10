@@ -1,17 +1,3 @@
-# Copyright 2023 Rodrigo Rosas-Bertolini
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # ingest_tracker.py
 
 from .logger import setup_logger
@@ -20,6 +6,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from datetime import datetime
 
 Base = declarative_base()
+
 
 class IngestionTracking(Base):
     __tablename__ = 'ingestion_tracking'
@@ -32,13 +19,29 @@ class IngestionTracking(Base):
     uuid = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+
 class IngestTracker:
     def __init__(self, config):
-        self.database_path = config['ingest_tracking_db']
+        self.database_url = config['ingest_tracking_db']
         self.logger = setup_logger(__name__, config['log_file_path'])
-        self.engine = create_engine(f'sqlite:///{self.database_path}')
+        self.engine = create_engine(self.database_url)
         self.Session = sessionmaker(bind=self.engine)
-        Base.metadata.create_all(self.engine)  # Create tables if they don't exist
+        # Create tables if they don't exist
+        Base.metadata.create_all(self.engine)
+        
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Clean up resources when the class instance is destroyed or goes out of scope."""
+        self.dispose()
+
+    def dispose(self):
+        """Dispose of the database session and logger resources."""
+        # Close the logger handlers
+        for handler in self.logger.handlers:
+            handler.close()
+            self.logger.removeHandler(handler)
+
+        # Dispose of the database engine
+        self.engine.dispose()
 
     def log_ingestion_step(self, group, user, dataset, stage, uuid):
         """Log an ingestion step to the database."""
@@ -60,13 +63,16 @@ class IngestTracker:
                 self.logger.error(f"Error logging ingestion step: {e}")
                 return None
 
+
 # Global instance of IngestTracker
 ingest_tracker = None
+
 
 def initialize_ingest_tracker(config):
     """Initialize the global IngestTracker instance."""
     global ingest_tracker
     ingest_tracker = IngestTracker(config)
+
 
 def log_ingestion_step(group, user, dataset, stage, uuid):
     """Global function to log ingestion steps using the IngestTracker instance."""
