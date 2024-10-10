@@ -2,7 +2,6 @@ import os
 import pytest
 import sqlite3
 from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step
-from utils.initialize import initialize_database
 from unittest.mock import patch
 import tempfile
 
@@ -21,21 +20,12 @@ def setup_database():
         'log_file_path': TEST_LOG_PATH
     }
 
-    # Use patch to mock the logger
-    with patch('utils.logger.setup_logger') as mock_logger:
-        # Initialize the ingest tracking database
-        initialize_database(config['ingest_tracking_db'], mock_logger)
-        
-        # Check that the logger was called
-        mock_logger.info.assert_called_with("Ingest tracking database initialized successfully.")
-        mock_logger.error.assert_not_called()  # Ensure no error was logged
-
     initialize_ingest_tracker(config)
 
     yield TEST_DB_PATH  # Yield the path for use in tests
 
     # Clean up the database file after tests
-    os.remove(TEST_DB_PATH)
+    # os.remove(TEST_DB_PATH)
 
 
 def test_log_ingestion_step(setup_database):

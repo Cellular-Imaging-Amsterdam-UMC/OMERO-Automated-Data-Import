@@ -15,9 +15,22 @@
 # ingest_tracker.py
 
 from .logger import setup_logger
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from .initialize import IngestionTracking
+from sqlalchemy import create_engine, Column, String, Integer, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base
+from datetime import datetime
+
+Base = declarative_base()
+
+class IngestionTracking(Base):
+    __tablename__ = 'ingestion_tracking'
+
+    id = Column(Integer, primary_key=True)
+    group_name = Column(String, nullable=False)
+    user_name = Column(String, nullable=False)
+    data_package = Column(String, nullable=False)
+    stage = Column(String, nullable=False)
+    uuid = Column(String, nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
 
 class IngestTracker:
     def __init__(self, config):
@@ -25,6 +38,7 @@ class IngestTracker:
         self.logger = setup_logger(__name__, config['log_file_path'])
         self.engine = create_engine(f'sqlite:///{self.database_path}')
         self.Session = sessionmaker(bind=self.engine)
+        Base.metadata.create_all(self.engine)  # Create tables if they don't exist
 
     def log_ingestion_step(self, group, user, dataset, stage, uuid):
         """Log an ingestion step to the database."""
