@@ -20,6 +20,14 @@ RUN apt-get update && apt-get install -y git
 # Clone the specific branch of the repository
 RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
 
+# Install psycopg2 system prerequisites for postgres interaction
+RUN apt-get update && apt-get install -y \
+    python3-dev \
+    libpq-dev \
+    build-essential
+# Update PATH manually based on known locations
+ENV PATH="/usr/pgsql-12/bin:/usr/pgsql-14/bin:${PATH}"
+
 # Install toml
 RUN pip install /auto-importer
 
