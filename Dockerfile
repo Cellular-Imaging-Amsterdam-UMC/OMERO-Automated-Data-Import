@@ -14,15 +14,14 @@ RUN conda install -n auto-import-env -c conda-forge omero-py -y && \
 # Activate the environment by setting the path to environment's bin directory
 ENV PATH /opt/conda/envs/auto-import-env/bin:$PATH
 
-# Copy the requirements.txt first to leverage Docker cache
-COPY requirements.txt /auto-importer/
-RUN pip install --no-cache-dir -r requirements.txt
+# Install git
+RUN apt-get update && apt-get install -y git
 
-# Copy the auto-importer application code
-COPY src /auto-importer/src
+# Clone the specific branch of the repository
+RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
 
-# Copy the tests directory
-COPY tests /auto-importer/tests
+# Install toml
+RUN pip install /auto-importer
 
 # Copy the logs directory
 RUN mkdir /auto-importer/logs
