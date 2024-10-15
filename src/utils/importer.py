@@ -20,6 +20,7 @@ from omero.gateway import BlitzGateway
 from .logger import setup_logger
 from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
 import Ice
+import time
 
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries (in seconds)
