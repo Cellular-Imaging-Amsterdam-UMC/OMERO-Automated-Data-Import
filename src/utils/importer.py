@@ -144,20 +144,20 @@ class DataPackageImporter:
                                 data_package.get('Files', ['Unknown'])
                             )
                             
-                    return all_successful_uploads, all_failed_uploads, False
-
-            except Ice.ConnectionRefusedException as e:
-                retry_count += 1
-                self.logger.error(f"Connection refused (attempt {retry_count}/{MAX_RETRIES}): {e}")
-                if retry_count < MAX_RETRIES:
-                    self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
-                    time.sleep(RETRY_DELAY)
-                else:
-                    self.logger.error("Max retries reached. Aborting import.")
-                    return [], [], True  # Fail after max retries
+                    return all_successful_uploads, all_failed_uploads, False    
             except Exception as e:
-                self.logger.error(f"Exception during import: {e}, {type(e)}")
-                return [], [], True
+                if isinstance(e, Ice.ConnectionRefusedException) or "connect" in f"{e}".lower():
+                    retry_count += 1
+                    self.logger.error(f"Connection refused (attempt {retry_count}/{MAX_RETRIES}): {e}")
+                    if retry_count < MAX_RETRIES:
+                        self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        self.logger.error("Max retries reached. Aborting import.")
+                        return [], [], True  # Fail after max retries
+                else:
+                    self.logger.error(f"Exception during import: {e}, {type(e)}")
+                    return [], [], True
             # finally:
             #     if 'user_conn' in locals() and user_conn:
             #         user_conn.close()
