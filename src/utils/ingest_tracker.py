@@ -18,6 +18,7 @@ from .logger import setup_logger
 from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.ext.hybrid import hybrid_property
+from sqlalchemy.sql import func
 from datetime import datetime, timezone
 import json
 
@@ -38,7 +39,7 @@ class IngestionTracking(Base):
     data_package = Column(String, nullable=False)
     stage = Column(String, nullable=False)
     uuid = Column(String, nullable=False)
-    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)  # Underlying storage
     
     @property
