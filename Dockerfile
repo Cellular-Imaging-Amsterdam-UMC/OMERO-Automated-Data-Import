@@ -25,7 +25,7 @@ RUN apt-get update && apt-get install -y \
     build-essential
 
 # Clone the specific branch of the repository
-ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=postgres-database&per_page=1" latest_commit
+ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=postgres-database&per_page=1" /latest_commit
 RUN git clone -b postgres-database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
 
 # Install the Python dependencies from the repository

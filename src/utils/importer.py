@@ -19,6 +19,10 @@ import ezomero
 from omero.gateway import BlitzGateway
 from .logger import setup_logger
 from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
+import Ice
+
+MAX_RETRIES = 5  # Maximum number of retries
+RETRY_DELAY = 5  # Delay between retries (in seconds)
 
 class DataPackageImporter:
     """
@@ -95,9 +99,26 @@ class DataPackageImporter:
 
         # Connect as root
         with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
-            if not root_conn.connect():
-                self.logger.error("Failed to connect to OMERO as root.")
-                return [], [], True
+            # Retry mechanism for the connection
+            retry_count = 0
+            while retry_count < MAX_RETRIES:
+                try:
+                    if not root_conn.connect():
+                        self.logger.error("Failed to connect to OMERO as root.")
+                        return [], [], True
+                    else:
+                        self.logger.info("Connected to OMERO as root.")
+                        break
+                except Ice.ConnectionRefusedException as e:
+                    retry_count += 1
+                    self.logger.error(f"Connection refused (attempt {retry_count}/{MAX_RETRIES}): {e}")
+                    if retry_count < MAX_RETRIES:
+                        self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
+                        time.sleep(RETRY_DELAY)
+                    else:
+                        self.logger.error("Max retries reached. Aborting import.")
+                        self.logger.error("Failed to connect to OMERO as root.")
+                        return [], [], True  # Fail after max retries
 
             try:
                 # Create a new connection as the intended user
@@ -135,7 +156,7 @@ class DataPackageImporter:
                     )
 
             except Exception as e:
-                self.logger.error(f"Exception during import: {e}")
+                self.logger.error(f"Exception during import: {e}, {type(e)}")
                 return [], [], True
             finally:
                 if 'user_conn' in locals() and user_conn:
