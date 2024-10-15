@@ -1,3 +1,4 @@
+import json
 import os
 import pytest
 from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step
@@ -47,9 +48,10 @@ def test_log_ingestion_step(setup_database):
     dataset = 'test_dataset'
     stage = 'test_stage'
     uuid = '123e4567-e89b-12d3-a456-426614174000'
+    files = ["test_file.tif", "/path/to/second/file.qptiff"]
     
     # Call the logging function
-    ingestion_id = log_ingestion_step(group, user, dataset, stage, uuid)
+    ingestion_id = log_ingestion_step(group, user, dataset, stage, uuid, files)
 
     # Check if the returned ID is not None
     assert ingestion_id is not None
@@ -69,6 +71,7 @@ def test_log_ingestion_step(setup_database):
         assert result.data_package == dataset  # data_package
         assert result.stage == stage   # stage
         assert result.uuid == uuid     # uuid
+        assert result.files == json.dumps(files)    # files
         
     # Close the engine explicitly to release resources
     engine.dispose()

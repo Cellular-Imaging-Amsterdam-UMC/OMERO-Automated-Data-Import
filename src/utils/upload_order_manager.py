@@ -18,7 +18,7 @@ import shutil
 import json
 from pathlib import Path
 from .logger import setup_logger
-from .ingest_tracker import log_ingestion_step
+from .ingest_tracker import STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
 
 class UploadOrderManager:
     def __init__(self, order_file_path, settings):
@@ -110,13 +110,14 @@ class UploadOrderManager:
         
         :param outcome: A string indicating the outcome, either 'failed' or 'completed'.
         """
-        stage = "Order Moved to Completed" if outcome == 'completed' else "Order Moved to Failed"
+        stage = STAGE_MOVED_COMPLETED if outcome == 'completed' else STAGE_MOVED_FAILED
         log_ingestion_step(
             self.order_info.get('Group', 'Unknown'),
             self.order_info.get('Username', 'Unknown'),
             self.order_info.get('Dataset', 'Unknown'),
             stage,
-            self.order_info.get('UUID', 'Unknown')
+            self.order_info.get('UUID', 'Unknown'),
+            self.order_info.get('Files', ['Unknown'])
         )
 
     def move_upload_order(self, outcome):

@@ -28,7 +28,7 @@ from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import log_ingestion_step
+from utils.ingest_tracker import STAGE_DETECTED, log_ingestion_step
 
 # Setup Configuration
 config = load_settings("config/settings.yml")
@@ -125,7 +125,8 @@ class IngestionProcess:
             self.data_package.get('Username', 'Unknown'),
             self.data_package.get('DatasetID', 'Unknown'),
             step_description,
-            str(self.data_package.get('UUID', 'Unknown'))
+            str(self.data_package.get('UUID', 'Unknown')),
+            self.data_package.get('Files', 'Unknown')
         )
 
 class DirectoryPoller:
@@ -206,8 +207,9 @@ class DirectoryPoller:
                 data_package.get('Group', 'Unknown'),
                 data_package.get('Username', 'Unknown'),
                 data_package.get('Dataset', 'Unknown'),
-                "Data Package Detected",
-                str(data_package.get('UUID', 'Unknown'))
+                STAGE_DETECTED,
+                str(data_package.get('UUID', 'Unknown')),
+                data_package.get('Files', ['Unknown'])
             )
             
             ingestion_process = IngestionProcess(data_package, self.config, order_manager)

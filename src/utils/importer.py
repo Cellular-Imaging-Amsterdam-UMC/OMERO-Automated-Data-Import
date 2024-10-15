@@ -18,7 +18,7 @@ import os
 import ezomero
 from omero.gateway import BlitzGateway
 from .logger import setup_logger
-from utils.ingest_tracker import log_ingestion_step
+from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
 
 class DataPackageImporter:
     """
@@ -124,13 +124,14 @@ class DataPackageImporter:
                 all_successful_uploads.extend(successful_uploads)
                 all_failed_uploads.extend(failed_uploads)
 
-                if successful_uploads:
+                if successful_uploads: 
                     log_ingestion_step(
                         data_package.get('Group', 'Unknown'),
                         data_package.get('Username', 'Unknown'),
                         data_package.get('DatasetID', 'Unknown'),
-                        "Data Imported",
-                        str(data_package.get('UUID', 'Unknown'))
+                        STAGE_IMPORTED,
+                        str(data_package.get('UUID', 'Unknown')),
+                        data_package.get('Files', ['Unknown'])
                     )
 
             except Exception as e:

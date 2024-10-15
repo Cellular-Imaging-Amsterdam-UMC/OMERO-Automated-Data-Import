@@ -15,9 +15,16 @@
 # ingest_tracker.py
 
 from .logger import setup_logger
-from sqlalchemy import create_engine, Column, String, Integer, DateTime
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text
 from sqlalchemy.orm import sessionmaker, declarative_base
-from datetime import datetime
+from sqlalchemy.ext.hybrid import hybrid_property
+from datetime import datetime, timezone
+import json
+
+STAGE_IMPORTED = "Data Imported"
+STAGE_MOVED_COMPLETED = "Order Moved to Completed"
+STAGE_MOVED_FAILED = "Order Moved to Failed"
+STAGE_DETECTED = "Data Package Detected"
 
 Base = declarative_base()
 
@@ -31,7 +38,16 @@ class IngestionTracking(Base):
     data_package = Column(String, nullable=False)
     stage = Column(String, nullable=False)
     uuid = Column(String, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    _files = Column("files", Text, nullable=False)  # Underlying storage
+    
+    @property
+    def files(self):
+        return json.loads(self._files)
+
+    @files.setter
+    def files(self, files):
+        self._files = json.dumps(files)
 
 
 class IngestTracker:
@@ -57,16 +73,18 @@ class IngestTracker:
         # Dispose of the database engine
         self.engine.dispose()
 
-    def log_ingestion_step(self, group, user, dataset, stage, uuid):
+    def log_ingestion_step(self, group, user, dataset, stage, uuid, files):
         """Log an ingestion step to the database."""
         with self.Session() as session:
             try:
+                print(files)
                 new_entry = IngestionTracking(
                     group_name=group,
                     user_name=user,
                     data_package=dataset,
                     stage=stage,
-                    uuid=str(uuid)
+                    uuid=str(uuid),
+                    files=files
                 )
                 session.add(new_entry)
                 session.commit()
@@ -88,9 +106,9 @@ def initialize_ingest_tracker(config):
     ingest_tracker = IngestTracker(config)
 
 
-def log_ingestion_step(group, user, dataset, stage, uuid):
+def log_ingestion_step(group, user, dataset, stage, uuid, files):
     """Global function to log ingestion steps using the IngestTracker instance."""
     if ingest_tracker is not None:
-        return ingest_tracker.log_ingestion_step(group, user, dataset, stage, uuid)
+        return ingest_tracker.log_ingestion_step(group, user, dataset, stage, uuid, files)
     else:
         print("Error: IngestTracker not initialized. Call initialize_ingest_tracker first.")
