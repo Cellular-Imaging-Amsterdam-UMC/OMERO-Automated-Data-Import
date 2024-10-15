@@ -97,72 +97,72 @@ class DataPackageImporter:
             self.logger.error("Required user or group information not provided in data package.")
             return [], [], True
 
-        # Connect as root
-        with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
-            # Retry mechanism for the connection
-            retry_count = 0
-            while retry_count < MAX_RETRIES:
-                try:
+        # Retry mechanism for the connection
+        retry_count = 0
+        while retry_count < MAX_RETRIES:
+            try:
+                # Connect as root
+                with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:           
                     if not root_conn.connect():
                         self.logger.error("Failed to connect to OMERO as root.")
                         return [], [], True
                     else:
                         self.logger.info("Connected to OMERO as root.")
-                        break
-                except Ice.ConnectionRefusedException as e:
-                    retry_count += 1
-                    self.logger.error(f"Connection refused (attempt {retry_count}/{MAX_RETRIES}): {e}")
-                    if retry_count < MAX_RETRIES:
-                        self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
-                        time.sleep(RETRY_DELAY)
-                    else:
-                        self.logger.error("Max retries reached. Aborting import.")
-                        self.logger.error("Failed to connect to OMERO as root.")
-                        return [], [], True  # Fail after max retries
+                            
+                    # Create a new connection as the intended user
+                    with root_conn.suConn(intended_username) as user_conn:
+                        if not user_conn:
+                            self.logger.error(f"Failed to create connection as user {intended_username}")
+                            return [], [], True
 
-            try:
-                # Create a new connection as the intended user
-                user_conn = root_conn.suConn(intended_username)
-                if not user_conn:
-                    self.logger.error(f"Failed to create connection as user {intended_username}")
-                    return [], [], True
+                        # Set the correct group for the session
+                        user_conn.setGroupForSession(group_id)
 
-                # Set the correct group for the session
-                user_conn.setGroupForSession(group_id)
+                        self.logger.info(f"Connected as user {intended_username} in group {group_name}")
 
-                self.logger.info(f"Connected as user {intended_username} in group {group_name}")
+                        all_successful_uploads = []
+                        all_failed_uploads = []
 
-                all_successful_uploads = []
-                all_failed_uploads = []
+                        dataset_id = data_package.get('DatasetID')
+                        if dataset_id is None:
+                            raise ValueError("Dataset ID not provided in data package.")
 
-                dataset_id = data_package.get('DatasetID')
-                if dataset_id is None:
-                    raise ValueError("Dataset ID not provided in data package.")
+                        file_paths = data_package.get('Files', [])
+                        self.logger.debug(f"File paths to be uploaded: {file_paths}")
+                        successful_uploads, failed_uploads = self.upload_files(user_conn, dataset_id, file_paths, data_package.get('UUID'))
+                        all_successful_uploads.extend(successful_uploads)
+                        all_failed_uploads.extend(failed_uploads)
 
-                file_paths = data_package.get('Files', [])
-                self.logger.debug(f"File paths to be uploaded: {file_paths}")
-                successful_uploads, failed_uploads = self.upload_files(user_conn, dataset_id, file_paths, data_package.get('UUID'))
-                all_successful_uploads.extend(successful_uploads)
-                all_failed_uploads.extend(failed_uploads)
+                        if successful_uploads: 
+                            log_ingestion_step(
+                                data_package.get('Group', 'Unknown'),
+                                data_package.get('Username', 'Unknown'),
+                                data_package.get('DatasetID', 'Unknown'),
+                                STAGE_IMPORTED,
+                                str(data_package.get('UUID', 'Unknown')),
+                                data_package.get('Files', ['Unknown'])
+                            )
+                            
+                    return all_successful_uploads, all_failed_uploads, False
 
-                if successful_uploads: 
-                    log_ingestion_step(
-                        data_package.get('Group', 'Unknown'),
-                        data_package.get('Username', 'Unknown'),
-                        data_package.get('DatasetID', 'Unknown'),
-                        STAGE_IMPORTED,
-                        str(data_package.get('UUID', 'Unknown')),
-                        data_package.get('Files', ['Unknown'])
-                    )
-
+            except Ice.ConnectionRefusedException as e:
+                retry_count += 1
+                self.logger.error(f"Connection refused (attempt {retry_count}/{MAX_RETRIES}): {e}")
+                if retry_count < MAX_RETRIES:
+                    self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
+                    time.sleep(RETRY_DELAY)
+                else:
+                    self.logger.error("Max retries reached. Aborting import.")
+                    return [], [], True  # Fail after max retries
             except Exception as e:
                 self.logger.error(f"Exception during import: {e}, {type(e)}")
                 return [], [], True
-            finally:
-                if 'user_conn' in locals() and user_conn:
-                    user_conn.close()
+            # finally:
+            #     if 'user_conn' in locals() and user_conn:
+            #         user_conn.close()
 
-        return all_successful_uploads, all_failed_uploads, False
+        # return all_successful_uploads, all_failed_uploads, False
+        return [], [], True
     
     def add_image_annotations(self, conn, image_id, uuid, file_path):
         """Add UUID and filepath as annotations to the image."""

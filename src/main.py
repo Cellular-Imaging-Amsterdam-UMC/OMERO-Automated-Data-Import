@@ -109,7 +109,7 @@ class IngestionProcess:
             
             return successful_uploads, failed_uploads, import_failed
         except Exception as e:
-            logger.error(f"Error during import_data_package: {e}, {type(e)}")
+            logger.error(f"Error during import_data_package: {e}")
             self.order_manager.move_upload_order('failed')
             self.log_ingestion_step("Process Failed - Unexpected Error")
             return [], [], True
