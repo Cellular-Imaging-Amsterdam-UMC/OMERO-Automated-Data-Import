@@ -99,7 +99,7 @@ for group_info in groups_info:
     
     # Copy the sample image
     file = copy_sample_image(core_group_name, dataset)
-    files = [file.replace(base_dir, "/divg")]
+    files = [str(file).replace(base_dir, "/divg")]
     
     # Create the upload order
     create_upload_order(group, core_group_name, username, dataset, files)
