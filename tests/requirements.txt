@@ -17,6 +17,7 @@ pyyaml
 python-dotenv
 requests
 tqdm
+pytest 
 
 # Development dependencies
 pytest
