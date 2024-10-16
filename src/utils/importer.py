@@ -44,45 +44,52 @@ class DataPackageImporter:
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
 
-    def upload_files(self, conn, dataset_id, file_paths, uuid):
+    def upload_files(self, conn, file_paths, uuid, dataset_id=None, screen_id=None):
         """
-        Upload files to a specified dataset in OMERO.
+        Upload files to a specified dataset or screen in OMERO.
 
         :param conn: OMERO connection object
-        :param dataset_id: ID of the dataset to upload files to
         :param file_paths: List of file paths to upload
         :param uuid: UUID of the data package
+        :param dataset_id: (Optional) ID of the dataset to upload files to
+        :param screen_id: (Optional) ID of the screen to upload files to
         :return: Tuple of successful and failed uploads
         """
+        if dataset_id and screen_id:
+            raise ValueError("Cannot specify both dataset_id and screen_id. Please provide only one.")
+        if not dataset_id and not screen_id:
+            raise ValueError("Either dataset_id or screen_id must be specified.")
+
         successful_uploads = []
         failed_uploads = []
+
         for file_path in file_paths:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
-                # Check if the file is a Zarr directory and assume it's a screen
-                if file_path.endswith('.zarr'):
-                    self.logger.debug(f"Detected Zarr file. Uploading as a screen: {file_path}, assuming {dataset_id} is a screen.")
-                    image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=dataset_id, transfer="ln_s")
-                else:
-                # ln_s defines in-place imports. Change to False for normal https transfer
+                if screen_id:
+                    self.logger.debug(f"Uploading to screen: {screen_id}")
+                    image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s")
+                else:  # Only dataset_id can be here
+                    self.logger.debug(f"Uploading to dataset: {dataset_id}")
                     image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
+
                 if image_ids:
                     # Ensure we're working with a single integer ID
                     image_id = image_ids[0] if isinstance(image_ids, list) else image_ids
                     try:
                         self.add_image_annotations(conn, image_id, uuid, file_path)
-                        self.logger.info(f"Uploaded file: {file_path} to dataset ID: {dataset_id} with Image ID: {image_id}")
-                        successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
+                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with Image ID: {image_id}")
+                        successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_id))
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
                         # Still consider it a successful upload even if annotation fails
-                        successful_uploads.append((file_path, dataset_id, os.path.basename(file_path), image_id))
+                        successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_id))
                 else:
-                    self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset ID: {dataset_id}. No ID returned.")
-                    failed_uploads.append((file_path, dataset_id, os.path.basename(file_path), None))
+                    self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset/screen ID: {dataset_id or screen_id}. No ID returned.")
+                    failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
             except Exception as e:
-                self.logger.error(f"Error uploading file {file_path} to dataset ID: {dataset_id}: {e}")
-                failed_uploads.append((file_path, dataset_id, os.path.basename(file_path), None))
+                self.logger.error(f"Error uploading file {file_path} to dataset/screen ID: {dataset_id or screen_id}: {e}")
+                failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
         return successful_uploads, failed_uploads
 
     def import_data_package(self, data_package):
@@ -130,12 +137,26 @@ class DataPackageImporter:
                         all_failed_uploads = []
 
                         dataset_id = data_package.get('DatasetID')
-                        if dataset_id is None:
-                            raise ValueError("Dataset ID not provided in data package.")
+                        screen_id = data_package.get('ScreenID')
+
+                        # Validation for dataset_id and screen_id
+                        if dataset_id and screen_id:
+                            raise ValueError("Cannot specify both DatasetID and ScreenID in the data package. Please provide only one.")
+                        if not dataset_id and not screen_id:
+                            raise ValueError("Either DatasetID or ScreenID must be provided in the data package.")
 
                         file_paths = data_package.get('Files', [])
                         self.logger.debug(f"File paths to be uploaded: {file_paths}")
-                        successful_uploads, failed_uploads = self.upload_files(user_conn, dataset_id, file_paths, data_package.get('UUID'))
+
+                        # Call upload_files with the appropriate ID
+                        successful_uploads, failed_uploads = self.upload_files(
+                            user_conn,
+                            file_paths,
+                            data_package.get('UUID'),
+                            dataset_id=dataset_id,
+                            screen_id=screen_id
+                        )
+                        
                         all_successful_uploads.extend(successful_uploads)
                         all_failed_uploads.extend(failed_uploads)
 
@@ -143,7 +164,7 @@ class DataPackageImporter:
                             log_ingestion_step(
                                 data_package.get('Group', 'Unknown'),
                                 data_package.get('Username', 'Unknown'),
-                                data_package.get('DatasetID', 'Unknown'),
+                                dataset_id or screen_id,
                                 STAGE_IMPORTED,
                                 str(data_package.get('UUID', 'Unknown')),
                                 data_package.get('Files', ['Unknown'])
