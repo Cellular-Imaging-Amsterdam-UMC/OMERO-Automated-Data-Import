@@ -43,7 +43,6 @@ ENV_NAME="auto-import-env"
 # Check if the --clean flag is passed
 if [[ "$1" == "--clean" ]]; then
     echo "Cleaning up existing environment..."
-    conda deactivate
     conda env remove --name $ENV_NAME -y
     echo "Existing environment removed."
 fi
@@ -51,8 +50,11 @@ fi
 # Create a new Conda environment with Python 3.10
 conda create -n $ENV_NAME python=3.10 -y
 
+# Initialize conda for shell interaction
+eval "$(conda shell.bash hook)"
+
 # Activate the new environment
-source activate $ENV_NAME
+conda activate $ENV_NAME
 
 # Install packages from conda-forge and bioconda
 conda install -c conda-forge omero-py -y
@@ -62,19 +64,8 @@ conda install -c conda-forge psycopg2 libffi==3.3 -y
 # Install git (if not already installed)
 command -v git >/dev/null 2>&1 || { conda install git -y; }
 
-# Clone the repository (if not already cloned)
-if [ ! -d "OMERO-Automated-Data-Import" ]; then
-    git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git
-fi
-
-# Navigate to the cloned repository
-cd OMERO-Automated-Data-Import
-
-# Install remaining packages from requirements.txt
-pip install -r requirements.txt
-
 # Install the package in editable mode
-pip install -e .
+pip install -e .[test]
 
 # Create a logs directory (if it doesn't exist)
 mkdir -p logs

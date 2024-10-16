@@ -52,6 +52,16 @@ After setting up the Conda environment and ensuring your local OMERO instance is
 
 If these commands work successfully, your test environment is properly set up and connected to your local OMERO instance.
 
+## Running Tests with Coverage
+
+To run the tests with coverage, use the following command from the root directory of the project:
+
+```
+pytest tests/unittests/ --cov=src/
+```
+
+This command will run all the tests in the `tests/unittests/` directory and provide a coverage report for the `src/` directory.
+
 Remember to deactivate the Conda environment when you're done testing:
 ```
 conda deactivate
