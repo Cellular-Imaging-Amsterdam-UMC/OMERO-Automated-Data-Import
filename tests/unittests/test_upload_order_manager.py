@@ -1,52 +1,46 @@
 import unittest
 import os
-import sys
 import json
 from unittest.mock import patch
 from pathlib import Path
-
-# Add the src directory to the Python path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, os.path.join(project_root, 'src'))
-
-# Mock the problematic imports
-sys.modules['ezomero'] = unittest.mock.MagicMock()
-sys.modules['utils.importer'] = unittest.mock.MagicMock()
-sys.modules['utils.ingest_tracker'] = unittest.mock.MagicMock()
+import yaml
 
 from utils.upload_order_manager import UploadOrderManager
 
 class TestUploadOrderManager(unittest.TestCase):
 
     def setUp(self):
-        self.config = {
-            'log_file_path': 'test_log.log',
-            'base_dir': '/tmp',
-            'group_list': 'test_groups.json'
-        }
+        # Path to the test config directory
+        test_config_dir = Path(__file__).parent / 'test_config'
+        
+        # Load settings from YAML file
+        with open(test_config_dir / 'settings.yml', 'r') as f:
+            self.config = yaml.safe_load(f)
         
         # Path to the existing sample upload order file
-        self.order_file_path = os.path.join(project_root, 'tests', 'unittests', 'test_config', 'sample_upload_order.txt')
+        self.order_file_path = test_config_dir / 'sample_upload_order.txt'
 
         # Ensure the sample upload order file exists
-        if not os.path.exists(self.order_file_path):
+        if not self.order_file_path.exists():
             raise FileNotFoundError(f"Sample upload order file not found at {self.order_file_path}")
 
         # Create a mock groups.json file
-        self.groups_file_path = os.path.join(os.path.dirname(self.order_file_path), 'test_groups.json')
+        self.groups_file_path = test_config_dir / 'test_groups.json'
         with open(self.groups_file_path, 'w') as f:
             json.dump([{"omero_grp_name": "Reits", "core_grp_name": "coreReits"}], f)
 
-        self.config['group_list'] = self.groups_file_path
+        # Update config with test-specific paths
+        self.config['group_list'] = str(self.groups_file_path)
+        self.config['log_file_path'] = str(test_config_dir / 'test_log.log')
 
     def tearDown(self):
         # Clean up temporary files
-        if os.path.exists(self.groups_file_path):
-            os.remove(self.groups_file_path)
+        if self.groups_file_path.exists():
+            self.groups_file_path.unlink()
 
     @patch('utils.upload_order_manager.setup_logger')
     def test_parse_order_file(self, mock_logger):
-        manager = UploadOrderManager(self.order_file_path, self.config)
+        manager = UploadOrderManager(str(self.order_file_path), self.config)
         order_info = manager.get_order_info()
 
         # Check if all attributes are correctly parsed
@@ -74,7 +68,7 @@ class TestUploadOrderManager(unittest.TestCase):
 
     @patch('utils.upload_order_manager.setup_logger')
     def test_switch_path_prefix(self, mock_logger):
-        manager = UploadOrderManager(self.order_file_path, self.config)
+        manager = UploadOrderManager(str(self.order_file_path), self.config)
         manager.switch_path_prefix()
         order_info = manager.get_order_info()
 
@@ -96,7 +90,7 @@ class TestUploadOrderManager(unittest.TestCase):
 
     @patch('utils.upload_order_manager.setup_logger')
     def test_get_core_grp_name_from_omero_name(self, mock_logger):
-        manager = UploadOrderManager(self.order_file_path, self.config)
+        manager = UploadOrderManager(str(self.order_file_path), self.config)
         
         # Test with existing group
         core_name = manager.get_core_grp_name_from_omero_name('Reits')
