@@ -18,7 +18,7 @@ config = load_settings("config/settings.yml")
 groups_info = load_json("config/groups_list.json")
 
 # Sample image and base directory
-sample_image = Path("/auto-importer/tests/Barbie.tif")
+sample_image = Path(config.get('sample_image', '/auto-importer/tests/Barbie.tif'))
 base_dir = Path(config['base_dir'])
 
 # Function to create upload order file
@@ -60,9 +60,15 @@ def create_upload_order(group, core_group_name, username, dataset, files):
 def copy_sample_image(core_group_name, dataset):
     target_dir = base_dir / core_group_name / ".omerodata2" / dataset.replace('_', '/')
     target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"sample_image_{core_group_name}.tif"
-    shutil.copy(sample_image, target_path)
-    print(f"Copied sample image to '{target_path}'")
+    # Determine target path
+    if sample_image.suffix == '.zarr':  # Check if it's a Zarr directory
+        target_path = target_dir / f"sample_image_{core_group_name}.zarr"
+        shutil.copytree(sample_image, target_path)
+        print(f"Copied Zarr directory to '{target_path}'")
+    else:
+        target_path = target_dir / f"sample_image_{core_group_name}.tif"
+        shutil.copy(sample_image, target_path)
+        print(f"Copied sample image to '{target_path}'")
     return target_path
 
 # Ensure OMERO_USER environment variable is set
