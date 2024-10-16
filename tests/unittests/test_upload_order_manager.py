@@ -1,7 +1,7 @@
 import unittest
 import os
 import json
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 from pathlib import Path
 import yaml
 
@@ -99,6 +99,11 @@ class TestUploadOrderManager(unittest.TestCase):
         # Test with non-existing group
         core_name = manager.get_core_grp_name_from_omero_name('NonExistingGroup')
         self.assertIsNone(core_name)
+
+    @patch('utils.upload_order_manager.setup_logger')
+    def test_validate_order_attributes_success(self, mock_logger):
+        # All required attributes are present
+        self.config['upload_order_attributes'] = ['Version', 'UUID', 'Username', 'Group', 'Files']
 
 if __name__ == '__main__':
     unittest.main()

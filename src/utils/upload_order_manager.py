@@ -35,6 +35,7 @@ class UploadOrderManager:
         self.order_info = self._parse_order_file()
         self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))
         self._create_file_names_list()
+        self.validate_order_attributes()
 
     def load_groups_info(self, group_list_path):
         """Load group information from the JSON configuration file."""
@@ -88,6 +89,23 @@ class UploadOrderManager:
             order_data[key] = parsed_value
 
         return order_data  # Dictionary representation of the upload order
+
+
+    def validate_order_attributes(self):
+        """
+        Validate the attributes of the upload order against those specified in settings.yml.
+        Raises a ValueError if any required attribute is missing.
+        """
+        required_attributes = self.settings.get('upload_order_attributes', [])
+        missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
+        
+        if missing_attributes:
+            error_message = f"Missing required attributes in upload order: {', '.join(missing_attributes)}"
+            self.logger.error(error_message)
+            raise ValueError(error_message)
+        
+        self.logger.info("All required attributes are present in the upload order.")
+
 
     def switch_path_prefix(self):
         """
