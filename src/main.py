@@ -51,7 +51,7 @@ class DataPackage:
         self.base_dir = base_dir
         
         # Verify that ID fields are integers
-        for field in ['UserID', 'GroupID', 'ProjectID', 'DatasetID']:
+        for field in ['UserID', 'GroupID', 'ProjectID', 'DatasetID', 'ScreenID']:
             if field in self.__dict__:
                 if not isinstance(self.__dict__[field], int):
                     logger.warning(f"{field} is not an integer: {self.__dict__[field]}")
@@ -97,14 +97,14 @@ class IngestionProcess:
         try:
             importer = DataPackageImporter(self.config)
             successful_uploads, failed_uploads, import_failed = importer.import_data_package(self.data_package)
-            
+            parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID','Unknown'))
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
-                logger.error(f"Import process failed for data package in {self.data_package.get('Dataset', 'Unknown')} due to failed uploads or importer failure.")
+                logger.error(f"Import process failed for data package in {parent_id} due to failed uploads or importer failure.")
                 log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             else:
                 self.order_manager.move_upload_order('completed')
-                logger.info(f"Data package in {self.data_package.get('Dataset', 'Unknown')} processed successfully with {len(successful_uploads)} successful uploads.")
+                logger.info(f"Data package in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")
                 log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_COMPLETED)
             
             return successful_uploads, failed_uploads, import_failed

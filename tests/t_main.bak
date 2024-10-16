@@ -18,7 +18,7 @@ config = load_settings("config/settings.yml")
 groups_info = load_json("config/groups_list.json")
 
 # Sample image and base directory
-sample_image = Path("/auto-importer/tests/Barbie.tif")
+sample_image = Path(config.get('sample_image', '/auto-importer/tests/Barbie.tif'))
 base_dir = Path(config['base_dir'])
 
 # Function to create upload order file
@@ -26,15 +26,23 @@ def create_upload_order(group, core_group_name, username, dataset, files):
     order_content = {
         "Version": "2.0",
         "UUID": str(uuid.uuid4()),
-        "Username": "rrosas", #Remember to also change the UserID
+        "Username": "rrosas",  # Remember to also change the UserID
         "Group": group,
         "UserID": 34,
         "GroupID": 134,
         "ProjectID": 1001,
-        "DatasetID": 1701,
         "Files": files
     }
-    
+
+    # Use sample_dataset_id if available, else default to 1701
+    sample_dataset_id = config.get('sample_dataset_id', 1701)
+    sample_screen_id = config.get('sample_screen_id')
+
+    if sample_screen_id:  # If screen_id exists, replace DatasetID with ScreenID
+        order_content["ScreenID"] = sample_screen_id
+    else:
+        order_content["DatasetID"] = sample_dataset_id
+        
     upload_order_dir = base_dir / core_group_name / config['upload_orders_dir_name']
     upload_order_dir.mkdir(parents=True, exist_ok=True)
     upload_order_path = upload_order_dir / f"{dataset}.txt"
@@ -58,11 +66,22 @@ def create_upload_order(group, core_group_name, username, dataset, files):
 
 # Function to copy sample image to the target directory
 def copy_sample_image(core_group_name, dataset):
+    # Shortcut: If sample_image is already within base_dir, just return the path
+    if sample_image.is_relative_to(base_dir / core_group_name):
+        print(f"Sample image is already in base directory, returning path: {sample_image}")
+        return sample_image
+    
     target_dir = base_dir / core_group_name / ".omerodata2" / dataset.replace('_', '/')
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / f"sample_image_{core_group_name}.tif"
-    shutil.copy(sample_image, target_path)
-    print(f"Copied sample image to '{target_path}'")
+    target_dir.mkdir(parents=True, exist_ok=True) 
+    # Determine target path
+    if sample_image.suffix == '.zarr':  # Check if it's a Zarr directory
+        target_path = target_dir / f"sample_image_{core_group_name}.zarr"
+        shutil.copytree(sample_image, target_path)
+        print(f"Copied Zarr directory to '{target_path}'")
+    else:
+        target_path = target_dir / f"sample_image_{core_group_name}.tif"
+        shutil.copy(sample_image, target_path)
+        print(f"Copied sample image to '{target_path}'")
     return target_path
 
 # Ensure OMERO_USER environment variable is set
@@ -76,10 +95,11 @@ for group_info in groups_info:
     group = group_info['omero_grp_name']
     core_group_name = group_info['core_grp_name']
     dataset = datetime.datetime.now().strftime("%Y_%m_%d_%H-%M-%S")
-    files = [f"/divg/{core_group_name}/.omerodata2/{dataset.replace('_', '/')}/sample_image_{core_group_name}.tif"]
+    # files = [f"/divg/{core_group_name}/.omerodata2/{dataset.replace('_', '/')}/sample_image_{core_group_name}.tif"]
     
     # Copy the sample image
-    copy_sample_image(core_group_name, dataset)
+    file = copy_sample_image(core_group_name, dataset)
+    files = [file.replace(base_dir, "/divg")]
     
     # Create the upload order
     create_upload_order(group, core_group_name, username, dataset, files)
