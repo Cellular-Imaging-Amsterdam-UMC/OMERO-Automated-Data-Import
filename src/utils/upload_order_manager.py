@@ -14,6 +14,7 @@
 
 # upload_order_manager.py
 
+import ast
 import shutil
 import json
 from pathlib import Path
@@ -32,12 +33,12 @@ class UploadOrderManager:
         self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
         self.order_file_path = Path(order_file_path)
         self.order_info = self._parse_order_file()
-        self.switch_path_prefix()
-        self.groups_info = self.load_groups_info()
+        self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))
+        self._create_file_names_list()
 
-    def load_groups_info(self):
+    def load_groups_info(self, group_list_path):
         """Load group information from the JSON configuration file."""
-        with open('config/groups_list.json') as f:
+        with open(group_list_path) as f:
             return json.load(f)
 
     def get_core_grp_name_from_omero_name(self, omero_grp_name):
@@ -54,31 +55,39 @@ class UploadOrderManager:
         return None
 
     def _parse_order_file(self):
-        """Parse the upload order file and return its content as a dictionary."""
-        with open(self.order_file_path, 'r') as file:
-            content = file.read()
-            return json.loads(self._text_to_json(content))
-
-    def _text_to_json(self, text):
         """
-        Convert the text content of the upload order file to JSON format.
+        Parse the upload order file and return its content as a dictionary.
         
-        :param text: Raw text content of the upload order file
-        :return: JSON string representation of the upload order
+        :return: Dictionary representation of the upload order
         """
-        lines = text.strip().split('\n')
-        data = {}
+        try:
+            with open(self.order_file_path, 'r') as file_obj:
+                lines = file_obj.read().strip().split('\n')
+        except (FileNotFoundError, IOError) as e:
+            raise Exception(f"Unable to read the file at {self.order_file_path}: {e}")
+
+        order_data = {}
         for line in lines:
+            # Skip empty lines or lines without the expected separator
+            if not line.strip() or ': ' not in line:
+                continue  # Or handle accordingly
+
             key, value = line.split(': ', 1)
-            if key in ["Username", "Group"]:
-                data[key] = value.strip().strip('"')
-            elif key in ["UserID", "GroupID", "ProjectID", "DatasetID"]:
-                data[key] = int(value)
-            elif key == "Files":
-                data[key] = eval(value)  # This safely evaluates the list string
-            else:
-                data[key] = value.strip()
-        return json.dumps(data)
+            key = key.strip()
+            value = value.strip().strip('"')  # Remove surrounding whitespace and quotes
+
+            # Attempt to parse the value into an appropriate data type
+            parsed_value = value  # Default to the original string
+            for conversion_func in (int, float, ast.literal_eval):
+                try:
+                    parsed_value = conversion_func(value)
+                    break  # Exit loop if conversion is successful
+                except (ValueError, SyntaxError):
+                    continue  # Try the next conversion function
+
+            order_data[key] = parsed_value
+
+        return order_data  # Dictionary representation of the upload order
 
     def switch_path_prefix(self):
         """
@@ -97,6 +106,17 @@ class UploadOrderManager:
                     updated_files.append(file_path)
             self.order_info['Files'] = updated_files
             self.logger.debug(f"Updated {len(updated_files)} file paths after switching 'divg' to 'data'.")
+
+    def _create_file_names_list(self):
+        """
+        Create a list of file names from the 'Files' attribute and add it as 'file_names' to order_info.
+        """
+        if 'Files' in self.order_info:
+            self.order_info['file_names'] = [Path(file_path).name for file_path in self.order_info['Files']]
+            self.logger.debug(f"Created file_names list with {len(self.order_info['file_names'])} entries")
+        else:
+            self.order_info['file_names'] = []
+            self.logger.warning("No 'Files' attribute found in order_info. Created empty file_names list.")
 
     def log_upload_order_info(self):
         """Log the upload order information for debugging purposes."""

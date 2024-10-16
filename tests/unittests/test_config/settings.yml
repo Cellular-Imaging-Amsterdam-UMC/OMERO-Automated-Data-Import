@@ -1,0 +1,27 @@
+# Paths settings
+log_file_path: logs/app.logs
+group_list: config/groups_list.json
+base_dir: /data
+upload_orders_dir_name: .2BUploaded
+data_dir_name: .omerodata
+failed_uploads_directory_name: .failed_uploads
+completed_orders_dir_name: .Uploaded
+
+# Worker settings
+max_workers: 4
+
+# Upload order attributes
+# Note: This ordered list of attributes is used to verify upload orders.
+# It must be kept up to date with any changes to the upload order format.
+# The order of these attributes should match the order in the upload order files.
+# For an upload order example, view sample_upload_order.json
+upload_order_attributes:
+  - Version
+  - UUID
+  - Username
+  - Group
+  - UserID
+  - GroupID
+  - ProjectID
+  - DatasetID
+  - Files
