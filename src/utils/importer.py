@@ -59,8 +59,13 @@ class DataPackageImporter:
         for file_path in file_paths:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
+                # Check if the file is a Zarr directory and assume it's a screen
+                if file_path.endswith('.zarr'):
+                    self.logger.debug(f"Detected Zarr file. Uploading as a screen: {file_path}, assuming {dataset_id} is a screen.")
+                    image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=dataset_id, transfer="ln_s")
+                else:
                 # ln_s defines in-place imports. Change to False for normal https transfer
-                image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
+                    image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
                 if image_ids:
                     # Ensure we're working with a single integer ID
                     image_id = image_ids[0] if isinstance(image_ids, list) else image_ids
