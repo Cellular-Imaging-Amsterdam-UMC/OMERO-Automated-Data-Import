@@ -1,7 +1,7 @@
 import json
 import os
 import pytest
-from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step
+from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step, STAGE_IMPORTED
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import tempfile
@@ -43,15 +43,20 @@ def test_log_ingestion_step(setup_database):
     """Test logging an ingestion step."""
     config = setup_database  # Get the configuration, including the temp database path
 
-    group = 'test_group'
-    user = 'test_user'
-    dataset = 'test_dataset'
-    stage = 'test_stage'
-    uuid = '123e4567-e89b-12d3-a456-426614174000'
-    files = ["test_file.tif", "/path/to/second/file.qptiff"]
+    # Create a mock order_info dictionary
+    order_info = {
+        'Group': 'test_group',
+        'Username': 'test_user',
+        'Dataset': 'test_dataset',
+        'UUID': '123e4567-e89b-12d3-a456-426614174000',
+        'Files': ["/path/to/test_file.tif", "/path/to/second/file.qptiff"],
+        'file_names': ["test_file.tif", "file.qptiff"]  # Add this line to include file names
+    }
     
-    # Call the logging function
-    ingestion_id = log_ingestion_step(group, user, dataset, stage, uuid, files)
+    stage = STAGE_IMPORTED
+
+    # Call the logging function with the updated signature
+    ingestion_id = log_ingestion_step(order_info, stage)
 
     # Check if the returned ID is not None
     assert ingestion_id is not None
@@ -62,16 +67,15 @@ def test_log_ingestion_step(setup_database):
 
     # Use 'with session' for session management
     with Session() as session:
-        # Use the text() function to wrap raw SQL queries
-        result = session.execute(text('SELECT * FROM ingestion_tracking WHERE uuid = :uuid'), {'uuid': uuid}).fetchone()
+        result = session.execute(text('SELECT * FROM ingestion_tracking WHERE uuid = :uuid'), {'uuid': order_info['UUID']}).fetchone()
 
         assert result is not None
-        assert result.group_name == group  # group_name
-        assert result.user_name == user    # user_name
-        assert result.data_package == dataset  # data_package
-        assert result.stage == stage   # stage
-        assert result.uuid == uuid     # uuid
-        assert result.files == json.dumps(files)    # files
+        assert result.group_name == order_info['Group']
+        assert result.user_name == order_info['Username']
+        assert result.data_package == order_info['Dataset']
+        assert result.stage == stage
+        assert result.uuid == order_info['UUID']
+        assert json.loads(result.files) == order_info['Files']
         
     # Close the engine explicitly to release resources
     engine.dispose()

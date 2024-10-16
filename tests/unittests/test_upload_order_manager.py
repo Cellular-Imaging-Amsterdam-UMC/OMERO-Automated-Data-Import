@@ -47,11 +47,11 @@ class TestUploadOrderManager(unittest.TestCase):
         self.assertEqual(order_info['Version'], 2.0)
         self.assertEqual(order_info['UUID'], 'afe38fe0-ea2b-43e6-949d-364827c66230')
         self.assertEqual(order_info['Username'], 'rrosas')
-        self.assertEqual(order_info['Group'], 'Reits')
-        self.assertEqual(order_info['UserID'], 102)
+        self.assertEqual(order_info['Group'], 'Private')
+        self.assertEqual(order_info['UserID'], 52)
         self.assertEqual(order_info['GroupID'], 3)
-        self.assertEqual(order_info['ProjectID'], 455)
-        self.assertEqual(order_info['DatasetID'], 807)
+        self.assertEqual(order_info['ProjectID'], 51)
+        self.assertEqual(order_info['DatasetID'], 101)
         self.assertEqual(order_info['Files'], [
             '/divg/coreReits/.omerodata2/2024/09/09/14-04-57/sample_image1_coreReits.tif',
             '/divg/coreReits/.omerodata2/2024/09/09/14-04-57/sample_image2_coreReits.tif',

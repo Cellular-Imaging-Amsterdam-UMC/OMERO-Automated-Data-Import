@@ -41,6 +41,7 @@ class IngestionTracking(Base):
     uuid = Column(String, nullable=False)
     timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)  # Underlying storage
+    _file_names = Column("file_names", Text, nullable=True)  # New column for file names
     
     @property
     def files(self):
@@ -49,6 +50,14 @@ class IngestionTracking(Base):
     @files.setter
     def files(self, files):
         self._files = json.dumps(files)
+
+    @property
+    def file_names(self):
+        return json.loads(self._file_names) if self._file_names else []
+
+    @file_names.setter
+    def file_names(self, file_names):
+        self._file_names = json.dumps(file_names)
 
 
 class IngestTracker:
@@ -74,28 +83,28 @@ class IngestTracker:
         # Dispose of the database engine
         self.engine.dispose()
 
-    def log_ingestion_step(self, group, user, dataset, stage, uuid, files):
+    def db_log_ingestion_event(self, order_info, stage):
         """Log an ingestion step to the database."""
         with self.Session() as session:
             try:
-                print(files)
                 new_entry = IngestionTracking(
-                    group_name=group,
-                    user_name=user,
-                    data_package=dataset,
+                    group_name=order_info.get('Group', 'Unknown'),
+                    user_name=order_info.get('Username', 'Unknown'),
+                    data_package=order_info.get('Dataset', 'Unknown'),
                     stage=stage,
-                    uuid=str(uuid),
-                    files=files
+                    uuid=str(order_info.get('UUID', 'Unknown')),
+                    files=order_info.get('Files', ['Unknown']),
+                    file_names=order_info.get('file_names', [])  # Add this line
                 )
                 session.add(new_entry)
                 session.commit()
-                self.logger.info(f"Logged ingestion step: {group}, {user}, {dataset}, {stage}, {uuid}")
+                self.logger.info(f"Ingestion event logged: {stage} | UUID: {new_entry.uuid} | Group: {new_entry.group_name} | User: {new_entry.user_name} | Dataset: {new_entry.data_package}")
                 return new_entry.id
             except Exception as e:
                 session.rollback()
                 self.logger.error(f"Error logging ingestion step: {e}")
                 return None
-
+        
 
 # Global instance of IngestTracker
 ingest_tracker = None
@@ -107,9 +116,9 @@ def initialize_ingest_tracker(config):
     ingest_tracker = IngestTracker(config)
 
 
-def log_ingestion_step(group, user, dataset, stage, uuid, files):
+def log_ingestion_step(order_info, stage):
     """Global function to log ingestion steps using the IngestTracker instance."""
     if ingest_tracker is not None:
-        return ingest_tracker.log_ingestion_step(group, user, dataset, stage, uuid, files)
+        return ingest_tracker.db_log_ingestion_event(order_info, stage)
     else:
         print("Error: IngestTracker not initialized. Call initialize_ingest_tracker first.")

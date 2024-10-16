@@ -1,7 +1,7 @@
 [
     {
-        "core_grp_name": "name of direcotry in /data",
-        "omero_grp_name": "corresponding group name in omero",
-        "omero_grp_id": 1
+        "core_grp_name": "coreReits",
+        "omero_grp_name": "Private",
+        "omero_grp_id": 103
     }
 ]

@@ -28,7 +28,7 @@ from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import STAGE_DETECTED, log_ingestion_step
+from utils.ingest_tracker import STAGE_DETECTED, STAGE_IMPORTED, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
 
 # Setup Configuration
 config = load_settings("config/settings.yml")
@@ -101,33 +101,18 @@ class IngestionProcess:
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
                 logger.error(f"Import process failed for data package in {self.data_package.get('Dataset', 'Unknown')} due to failed uploads or importer failure.")
-                self.log_ingestion_step("Process Failed - Moved to Failed Uploads")
+                log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             else:
                 self.order_manager.move_upload_order('completed')
                 logger.info(f"Data package in {self.data_package.get('Dataset', 'Unknown')} processed successfully with {len(successful_uploads)} successful uploads.")
-                self.log_ingestion_step("Process Completed - Moved to Completed Uploads")
+                log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_COMPLETED)
             
             return successful_uploads, failed_uploads, import_failed
         except Exception as e:
             logger.error(f"Error during import_data_package: {e}")
             self.order_manager.move_upload_order('failed')
-            self.log_ingestion_step("Process Failed - Unexpected Error")
+            log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             return [], [], True
-
-    def log_ingestion_step(self, step_description):
-        """
-        Log an ingestion step to the database.
-        
-        :param step_description: Description of the ingestion step
-        """
-        log_ingestion_step(
-            self.data_package.get('Group', 'Unknown'),
-            self.data_package.get('Username', 'Unknown'),
-            self.data_package.get('DatasetID', 'Unknown'),
-            step_description,
-            str(self.data_package.get('UUID', 'Unknown')),
-            self.data_package.get('Files', 'Unknown')
-        )
 
 class DirectoryPoller:
     """
@@ -203,14 +188,9 @@ class DirectoryPoller:
             
             data_package = DataPackage(order_info, self.base_dir)
             self.logger.info(f"DataPackage detected: {data_package}")
-            log_ingestion_step(
-                data_package.get('Group', 'Unknown'),
-                data_package.get('Username', 'Unknown'),
-                data_package.get('Dataset', 'Unknown'),
-                STAGE_DETECTED,
-                str(data_package.get('UUID', 'Unknown')),
-                data_package.get('Files', ['Unknown'])
-            )
+            
+            # Update this part to use the new log_ingestion_step signature
+            log_ingestion_step(data_package.__dict__, STAGE_DETECTED)
             
             ingestion_process = IngestionProcess(data_package, self.config, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)

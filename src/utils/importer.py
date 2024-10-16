@@ -135,14 +135,7 @@ class DataPackageImporter:
                         all_failed_uploads.extend(failed_uploads)
 
                         if successful_uploads: 
-                            log_ingestion_step(
-                                data_package.get('Group', 'Unknown'),
-                                data_package.get('Username', 'Unknown'),
-                                data_package.get('DatasetID', 'Unknown'),
-                                STAGE_IMPORTED,
-                                str(data_package.get('UUID', 'Unknown')),
-                                data_package.get('Files', ['Unknown'])
-                            )
+                            log_ingestion_step(data_package, STAGE_IMPORTED)
                             
                     return all_successful_uploads, all_failed_uploads, False    
             except Exception as e:

@@ -135,33 +135,31 @@ class UploadOrderManager:
         else:
             self.order_info['file_names'] = []
             self.logger.warning("No 'Files' attribute found in order_info. Created empty file_names list.")
-
-    def log_upload_order_info(self):
-        """Log the upload order information for debugging purposes."""
-        info_lines = [f"{key}: {value}" for key, value in self.order_info.items()]
-        log_message = "Upload Order Information:\n" + "\n".join(info_lines)
-        self.logger.info(log_message)
         
     def log_order_movement(self, outcome):
         """
-        Log the movement of the upload order file to the database.
-        
+        Log the movement of the upload order file to the database using the ingest tracker.
+    
+        This method uses the global log_ingestion_step function from the ingest_tracker module
+        to record the movement event in the database. It determines the appropriate stage
+        based on the outcome and passes the order information along with the stage to the
+        logging function.
+
         :param outcome: A string indicating the outcome, either 'failed' or 'completed'.
         """
         stage = STAGE_MOVED_COMPLETED if outcome == 'completed' else STAGE_MOVED_FAILED
-        log_ingestion_step(
-            self.order_info.get('Group', 'Unknown'),
-            self.order_info.get('Username', 'Unknown'),
-            self.order_info.get('Dataset', 'Unknown'),
-            stage,
-            self.order_info.get('UUID', 'Unknown'),
-            self.order_info.get('Files', ['Unknown'])
-        )
+        log_ingestion_step(self.order_info, stage)
 
     def move_upload_order(self, outcome):
         """
-        Move the upload order file to the appropriate directory based on the outcome.
-        
+        Move the upload order file to the appropriate directory based on the outcome
+        and log the movement using the ingest tracker.
+
+        This method performs the following actions:
+        1. Determines the destination directory based on the outcome ('failed' or 'completed').
+        2. Moves the upload order file to the appropriate directory.
+        3. Logs the movement event using the ingest tracker, which records the action in the database.
+
         :param outcome: A string indicating the outcome, either 'failed' or 'completed'.
         """
         source_file_path = self.order_file_path
@@ -174,11 +172,13 @@ class UploadOrderManager:
 
         username = self.order_info.get('Username', 'Unknown')
 
-        if outcome == 'failed':
-            destination_dir_name = self.settings['failed_uploads_directory_name']
-        elif outcome == 'completed':
-            destination_dir_name = self.settings['completed_orders_dir_name']
-        else:
+        outcome_dirs = {
+            'failed': self.settings['failed_uploads_directory_name'],
+            'completed': self.settings['completed_orders_dir_name']
+        }
+
+        destination_dir_name = outcome_dirs.get(outcome)
+        if destination_dir_name is None:
             self.logger.error(f"Invalid outcome specified: {outcome}")
             return
 
