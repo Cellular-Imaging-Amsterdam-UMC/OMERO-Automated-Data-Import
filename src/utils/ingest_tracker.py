@@ -90,7 +90,7 @@ class IngestTracker:
                 new_entry = IngestionTracking(
                     group_name=order_info.get('Group', 'Unknown'),
                     user_name=order_info.get('Username', 'Unknown'),
-                    data_package=order_info.get('Dataset', 'Unknown'),
+                    data_package=order_info.get('DatasetID', order_info.get('ScreenID','Unknown')),
                     stage=stage,
                     uuid=str(order_info.get('UUID', 'Unknown')),
                     files=order_info.get('Files', ['Unknown']),

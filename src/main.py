@@ -118,17 +118,13 @@ class IngestionProcess:
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
                 self.logger.error(f"Import process failed for data package in {parent_id} due to failed uploads or importer failure.")
-                log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             else:
                 self.order_manager.move_upload_order('completed')
-                self.logger.info(f"Data package in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")
-                log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_COMPLETED)
-            
+                self.logger.info(f"Data package in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")            
             return successful_uploads, failed_uploads, import_failed
         except Exception as e:
             self.logger.error(f"Error during import_data_package: {e}")
             self.order_manager.move_upload_order('failed')
-            log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             return [], [], True
 
 class DirectoryPoller:
