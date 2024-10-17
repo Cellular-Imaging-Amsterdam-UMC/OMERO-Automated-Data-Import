@@ -11,11 +11,32 @@ os.chdir(Path(__file__).resolve().parent.parent)
 # Add the src directory to the PYTHONPATH
 sys.path.append(str(Path(__file__).resolve().parent.parent / 'src'))
 
-from utils.config_manager import load_settings, load_json
+# from utils.config_manager import load_settings, load_json
+
+def load_settings(file_path):
+    """
+    Load settings from either a YAML or JSON file.
+    
+    :param file_path: Path to the settings file
+    :return: Loaded settings as a dictionary
+    """
+    with open(file_path, 'r') as file:
+        if file_path.endswith('.yml') or file_path.endswith('.yaml'):
+            return yaml.safe_load(file)
+        elif file_path.endswith('.json'):
+            return json.load(file)
+        else:
+            raise ValueError(f"Unsupported file format: {file_path}")
+
+def load_config(settings_path="config/settings.yml"):
+    config = load_settings(settings_path)
+    groups_info = load_settings(config['group_list'])
+    return config, groups_info
 
 # Load configuration
-config = load_settings("config/settings.yml")
-groups_info = load_json("config/groups_list.json")
+config, groups_info = load_config("config/settings.yml")
+# groups_info = load_json("config/groups_list.json")
+
 
 # Sample image and base directory
 sample_image = Path(config.get('sample_image', '/auto-importer/tests/Barbie.tif'))

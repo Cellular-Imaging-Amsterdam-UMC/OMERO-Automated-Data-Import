@@ -31,6 +31,9 @@ RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMER
 # Install the Python dependencies from the repository
 RUN pip install /auto-importer
 
+# Make the logs directory
+RUN mkdir /auto-importer/logs
+
 # Ensure your application's startup script is executable
 RUN chmod +x /auto-importer/src/main.py
 
