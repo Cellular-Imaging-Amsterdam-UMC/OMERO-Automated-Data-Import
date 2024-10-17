@@ -17,10 +17,16 @@
 import os
 import ezomero
 from omero.gateway import BlitzGateway
+from omero.sys import Parameters
 from .logger import setup_logger
 from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
 import Ice
 import time
+from omero.cli import CLI
+from omero.rtypes import rstring
+from omero.plugins.sessions import SessionsControl
+from importlib import import_module
+ImportControl = import_module("omero.plugins.import").ImportControl
 
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries (in seconds)
@@ -43,6 +49,99 @@ class DataPackageImporter:
         self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
+        
+    def import_to_omero(self, conn, file_path, target_id, target_type, transfer_type="ln_s", depth=None):
+        """
+        Import a file to OMERO using CLI, either to a dataset or screen.
+
+        :param conn: OMERO connection object
+        :param file_path: Path to the file to import
+        :param target_id: ID of the target dataset or screen
+        :param target_type: Type of the target ('dataset' or 'screen')
+        :param transfer_type: File transfer method, default is 'ln_s'
+        :param depth: Optional depth argument for import
+        :return: None
+        """
+        cli = CLI()
+        cli.register('import', ImportControl, '_')
+        cli.register('sessions', SessionsControl, '_')
+        
+        # Common CLI arguments for importing
+        arguments = ['import',
+                    '-k', conn.getSession().getUuid().val,
+                    '-s', conn.host,
+                    '-p', str(conn.port),
+                    f'--transfer={transfer_type}',
+                    '--no-upgrade',
+                    '--file', 'logs/cli.logs',
+                    '--errs', 'logs/cli.errs']
+        
+        # Add depth argument if provided
+        if depth:
+            arguments.append(f'--depth={depth}')
+        
+        # Add target-specific argument
+        if target_type == 'screen':
+            arguments.extend(['-r', str(target_id)])
+        elif target_type == 'dataset':
+            arguments.extend(['-d', str(target_id)])
+        else:
+            raise ValueError("Invalid target_type. Must be 'dataset' or 'screen'.")
+        
+        # Add the file path to the arguments
+        arguments.append(str(file_path))
+        
+        # Invoke the CLI with the constructed arguments
+        cli.invoke(arguments)
+        
+        if cli.rv == 0:
+            self.imported = True
+            self.logger.info(f'Imported {str(file_path)}')
+            return True
+        else:
+            self.imported = False
+            self.logger.error(f'Import of {str(file_path)} has failed!')
+            return False
+
+
+    def get_plate_ids(self, conn, file_path):
+        """Get the Ids of imported plates.
+        Note that this will not find plates if they have not been imported.
+        Also, while plate_ids are returned, this method also sets
+        ``self.plate_ids``.
+        Returns
+        -------
+        plate_ids : list of ints
+            Ids of plates imported from the specified client path, which
+            itself is derived from ``self.file_path`` and ``self.filename``.
+        """
+        if self.imported is not True:
+            self.logger.error(f'File {file_path} has not been imported')
+            return None
+        else:
+            self.logger.debug("time to get some IDs")
+            q = conn.getQueryService()
+            self.logger.debug(q)
+            params = Parameters()
+            path_query = str(file_path).strip('/')
+            self.logger.debug(f"path query: {path_query}")
+            params.map = {"cpath": rstring(path_query)}
+            self.logger.debug(params)
+            results = q.projection(
+                "SELECT DISTINCT p.id FROM Plate p "
+                " JOIN p.wells w "
+                " JOIN w.wellSamples ws "
+                " JOIN ws.image i "
+                " JOIN i.fileset fs "
+                " JOIN fs.usedFiles u "
+                " WHERE u.clientPath = :cpath",
+                params,
+                conn.SERVICE_OPTS
+            )
+            self.logger.debug(results)
+            plate_ids = [r[0].val for r in results]
+            return plate_ids
+
 
     def upload_files(self, conn, file_paths, uuid, dataset_id=None, screen_id=None):
         """
@@ -68,7 +167,14 @@ class DataPackageImporter:
             try:
                 if screen_id:
                     self.logger.debug(f"Uploading to screen: {screen_id}")
-                    image_ids = ezomero.ezimport(conn, str(file_path), None, None, screen_id, None, None, "no-upgrade", transfer="ln_s", depth=10)
+                    imported = self.import_to_omero(conn=conn, 
+                            file_path=str(file_path),
+                            target_id=screen_id, 
+                            target_type='screen',
+                            depth=10)
+                    image_ids = self.get_plate_ids(conn, str(file_path))
+                    # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
+                    # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
                 else:  # Only dataset_id can be here
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
                     image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
@@ -121,13 +227,17 @@ class DataPackageImporter:
                         return [], [], True
                     else:
                         self.logger.info("Connected to OMERO as root.")
+                        
+                    root_conn.keepAlive() 
                             
                     # Create a new connection as the intended user
-                    with root_conn.suConn(intended_username) as user_conn:
+                    # timeout in ms (60000 per minute, default is 1 min)
+                    with root_conn.suConn(intended_username, ttl=60000000) as user_conn:
                         if not user_conn:
                             self.logger.error(f"Failed to create connection as user {intended_username}")
                             return [], [], True
 
+                        user_conn.keepAlive() 
                         # Set the correct group for the session
                         user_conn.setGroupForSession(group_id)
 

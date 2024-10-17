@@ -118,11 +118,10 @@ for group_info in groups_info:
     group = group_info['omero_grp_name']
     core_group_name = group_info['core_grp_name']
     dataset = datetime.datetime.now().strftime("%Y_%m_%d_%H-%M-%S")
-    # files = [f"/divg/{core_group_name}/.omerodata2/{dataset.replace('_', '/')}/sample_image_{core_group_name}.tif"]
     
     # Copy the sample image
     file = copy_sample_image(core_group_name, dataset)
-    files = [str(file).replace(str(base_dir), "/divg")]
+    files = [str(file)]
     
     # Create the upload order
     create_upload_order(group, core_group_name, username, dataset, files)
