@@ -67,9 +67,6 @@ command -v git >/dev/null 2>&1 || { conda install git -y; }
 # Install the package in editable mode
 pip install -e .[test]
 
-# Create a logs directory (if it doesn't exist)
-mkdir -p logs
-
 # Make the main script executable TODO: Check if this is necessary and weather other files need to be made executable
 chmod +x src/main.py
 

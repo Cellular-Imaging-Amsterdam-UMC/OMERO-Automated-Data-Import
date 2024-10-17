@@ -1,0 +1,23 @@
+2024-10-17 11:09:25,379 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:09:25,380 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:09:25,380 - utils.upload_order_manager - ERROR - Core group name not found for OMERO group: Private
+2024-10-17 11:16:50,881 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:16:50,881 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:19:18,375 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:19:18,376 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:23:39,593 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:23:39,594 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:24:00,939 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:24:00,940 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:28:24,553 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:28:24,554 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:28:24,554 - utils.upload_order_manager - ERROR - Core group name not found for OMERO group: corresponding group name in omero
+2024-10-17 11:33:21,317 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:33:21,318 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:33:21,318 - utils.upload_order_manager - ERROR - Core group name not found for OMERO group: corresponding group name in omero
+2024-10-17 11:33:31,145 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:33:31,146 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:33:31,146 - utils.upload_order_manager - ERROR - Core group name not found for OMERO group: corresponding group name in omero
+2024-10-17 11:35:45,197 - utils.upload_order_manager - DEBUG - Created file_names list with 3 entries
+2024-10-17 11:35:45,197 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2024-10-17 11:35:45,198 - utils.upload_order_manager - ERROR - Core group name not found for OMERO group: corresponding group name in omero

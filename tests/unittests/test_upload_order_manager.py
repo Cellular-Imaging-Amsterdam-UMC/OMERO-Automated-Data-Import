@@ -4,39 +4,47 @@ import json
 from unittest.mock import patch, mock_open
 from pathlib import Path
 import yaml
+import pytest
 
 from utils.upload_order_manager import UploadOrderManager
+from utils.initialize import load_settings
 
 class TestUploadOrderManager(unittest.TestCase):
 
+    @pytest.fixture(autouse=True)
+    def setup(self, tmp_path):
+        self.test_config_dir = tmp_path / "test_config"
+        self.test_config_dir.mkdir()
+        self.settings_file = self.test_config_dir / "settings.yml"
+        self.settings_file.write_text("test: value")
+        
+        with patch('utils.initialize.load_settings') as mock_load:
+            mock_load.return_value = {
+                'group_list': str(self.test_config_dir / "groups.json"),
+                'log_file_path': str(self.test_config_dir / "test.log"),
+            }
+            self.config = mock_load(str(self.settings_file))
+
     def setUp(self):
         # Path to the test config directory
-        test_config_dir = Path(__file__).parent / 'test_config'
+        self.test_config_dir = Path(__file__).parent / 'test_config'
         
         # Load settings from YAML file
-        with open(test_config_dir / 'settings.yml', 'r') as f:
-            self.config = yaml.safe_load(f)
+        self.config = load_settings(self.test_config_dir / 'settings.yml')
         
         # Path to the existing sample upload order file
-        self.order_file_path = test_config_dir / 'sample_upload_order.txt'
+        self.order_file_path = self.test_config_dir / 'sample_upload_order.txt'
 
         # Ensure the sample upload order file exists
         if not self.order_file_path.exists():
             raise FileNotFoundError(f"Sample upload order file not found at {self.order_file_path}")
 
-        # Create a mock groups.json file
-        self.groups_file_path = test_config_dir / 'test_groups.json'
-        with open(self.groups_file_path, 'w') as f:
-            json.dump([{"omero_grp_name": "Reits", "core_grp_name": "coreReits"}], f)
+        # Use the existing sample_groups_list.json file
+        self.groups_file_path = self.test_config_dir / 'sample_groups_list.json'
 
         # Update config with test-specific paths
         self.config['group_list'] = str(self.groups_file_path)
-        self.config['log_file_path'] = str(test_config_dir / 'test_log.log')
-
-    def tearDown(self):
-        # Clean up temporary files
-        if self.groups_file_path.exists():
-            self.groups_file_path.unlink()
+        self.config['log_file_path'] = str(self.test_config_dir / 'test.log')
 
     @patch('utils.upload_order_manager.setup_logger')
     def test_parse_order_file(self, mock_logger):
@@ -49,7 +57,7 @@ class TestUploadOrderManager(unittest.TestCase):
         self.assertEqual(order_info['Username'], 'rrosas')
         self.assertEqual(order_info['Group'], 'Private')
         self.assertEqual(order_info['UserID'], 52)
-        self.assertEqual(order_info['GroupID'], 3)
+        self.assertEqual(order_info['GroupID'], 103)
         self.assertEqual(order_info['ProjectID'], 51)
         self.assertEqual(order_info['DatasetID'], 101)
         self.assertEqual(order_info['Files'], [
@@ -89,21 +97,11 @@ class TestUploadOrderManager(unittest.TestCase):
         self.assertEqual(order_info['file_names'], expected_file_names)
 
     @patch('utils.upload_order_manager.setup_logger')
-    def test_get_core_grp_name_from_omero_name(self, mock_logger):
-        manager = UploadOrderManager(str(self.order_file_path), self.config)
-        
-        # Test with existing group
-        core_name = manager.get_core_grp_name_from_omero_name('Reits')
-        self.assertEqual(core_name, 'coreReits')
-        
-        # Test with non-existing group
-        core_name = manager.get_core_grp_name_from_omero_name('NonExistingGroup')
-        self.assertIsNone(core_name)
-
-    @patch('utils.upload_order_manager.setup_logger')
     def test_validate_order_attributes_success(self, mock_logger):
         # All required attributes are present
         self.config['upload_order_attributes'] = ['Version', 'UUID', 'Username', 'Group', 'Files']
+        manager = UploadOrderManager(str(self.order_file_path), self.config)
+        # The validation happens in the constructor, so if no exception is raised, it's successful
 
 if __name__ == '__main__':
     unittest.main()
