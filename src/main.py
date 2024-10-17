@@ -21,18 +21,34 @@ from concurrent.futures import ProcessPoolExecutor
 import signal
 from threading import Event, Thread
 import datetime
+import yaml
+import json
 
 # Local module imports
-from utils.config_manager import load_settings, load_json
 from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import STAGE_DETECTED, STAGE_IMPORTED, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
+from utils.ingest_tracker import STAGE_DETECTED, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
+
+def load_settings(file_path):
+    """
+    Load settings from either a YAML or JSON file.
+    
+    :param file_path: Path to the settings file
+    :return: Loaded settings as a dictionary
+    """
+    with open(file_path, 'r') as file:
+        if file_path.endswith('.yml') or file_path.endswith('.yaml'):
+            return yaml.safe_load(file)
+        elif file_path.endswith('.json'):
+            return json.load(file)
+        else:
+            raise ValueError(f"Unsupported file format: {file_path}")
 
 # Setup Configuration
 config = load_settings("config/settings.yml")
-groups_info = load_json(config['group_list'])
+groups_info = load_settings(config['group_list'])
 executor = ProcessPoolExecutor(max_workers=config['max_workers'])
 logger = setup_logger(__name__, config['log_file_path'])
 
@@ -123,7 +139,7 @@ class DirectoryPoller:
         """
         self.config = config
         self.base_dir = Path(config['base_dir'])
-        self.core_grp_names = [group["core_grp_name"] for group in load_json(config['group_list']) if "core_grp_name" in group]
+        self.core_grp_names = [group["core_grp_name"] for group in load_settings(config['group_list']) if "core_grp_name" in group]
         self.upload_orders_dir_name = config['upload_orders_dir_name']
         self.executor = executor
         self.logger = logger

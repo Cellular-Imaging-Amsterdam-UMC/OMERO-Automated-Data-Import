@@ -17,8 +17,9 @@
 import os
 import shutil
 import sys
+import yaml
+import json
 from .logger import setup_logger
-from .config_manager import load_json
 from .ingest_tracker import initialize_ingest_tracker
 
 def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
@@ -51,6 +52,21 @@ def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
         log.error(f"Access check failed for {path}: {e}")
         return False
 
+def load_settings(file_path):
+    """
+    Load settings from either a YAML or JSON file.
+    
+    :param file_path: Path to the settings file
+    :return: Loaded settings as a dictionary
+    """
+    with open(file_path, 'r') as file:
+        if file_path.endswith('.yml') or file_path.endswith('.yaml'):
+            return yaml.safe_load(file)
+        elif file_path.endswith('.json'):
+            return json.load(file)
+        else:
+            raise ValueError(f"Unsupported file format: {file_path}")
+
 def initialize_system(config):
     """
     Performs initial system checks and setups, including directory access checks and database initialization.
@@ -60,11 +76,13 @@ def initialize_system(config):
 
     # Check access to directories for each group
     access_checks_passed = True
-    for group_info in load_json(config['group_list']):
+    groups = load_settings(config['group_list'])
+    for group_info in groups:
         group_base_path = os.path.join(config['base_dir'], group_info['core_grp_name'])
         
         for dir_name in [config['upload_orders_dir_name'], config['completed_orders_dir_name'], config['failed_uploads_directory_name']]:
             dir_path = os.path.join(group_base_path, dir_name)
+            os.makedirs(dir_path, exist_ok=True)
             if not check_directory_access(dir_path, logger):
                 access_checks_passed = False
 
