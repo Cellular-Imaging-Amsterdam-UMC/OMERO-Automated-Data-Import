@@ -50,7 +50,7 @@ def test_log_ingestion_step(setup_database):
         'Dataset': 'test_dataset',
         'UUID': '123e4567-e89b-12d3-a456-426614174000',
         'Files': ["/path/to/test_file.tif", "/path/to/second/file.qptiff"],
-        'file_names': ["test_file.tif", "file.qptiff"]  # Add this line to include file names
+        'file_names': ["test_file.tif", "file.qptiff"]
     }
     
     stage = STAGE_IMPORTED

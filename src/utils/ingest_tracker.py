@@ -94,7 +94,7 @@ class IngestTracker:
                     stage=stage,
                     uuid=str(order_info.get('UUID', 'Unknown')),
                     files=order_info.get('Files', ['Unknown']),
-                    file_names=order_info.get('file_names', [])  # Add this line
+                    file_names=order_info.get('file_names', [])
                 )
                 session.add(new_entry)
                 session.commit()
