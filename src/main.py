@@ -49,12 +49,6 @@ class DataPackage:
         """
         self.__dict__.update(order_data)
         self.base_dir = base_dir
-        
-        # Verify that ID fields are integers
-        for field in ['UserID', 'GroupID', 'ProjectID', 'DatasetID', 'ScreenID']:
-            if field in self.__dict__:
-                if not isinstance(self.__dict__[field], int):
-                    logger.warning(f"{field} is not an integer: {self.__dict__[field]}")
 
     def __str__(self):
         """
@@ -207,8 +201,7 @@ class DirectoryPoller:
         :param future: Future object representing the completed order
         """
         try:
-            result = future.result()
-            # Handle the result if needed
+            result = future.result() # TODO: Handle the result if needed
         except Exception as e:
             self.logger.error(f"Error in processing order: {e}")
         finally:
