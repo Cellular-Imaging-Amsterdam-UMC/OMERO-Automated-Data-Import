@@ -19,6 +19,7 @@ import shutil
 import sys
 import yaml
 import json
+from pathlib import Path
 from .logger import setup_logger
 from .ingest_tracker import initialize_ingest_tracker
 
@@ -56,13 +57,18 @@ def load_settings(file_path):
     """
     Load settings from either a YAML or JSON file.
     
-    :param file_path: Path to the settings file
+    :param file_path: Path to the settings file (str or Path object)
     :return: Loaded settings as a dictionary
     """
-    with open(file_path, 'r') as file:
-        if file_path.endswith('.yml') or file_path.endswith('.yaml'):
+    file_path = Path(file_path)  # Convert to Path object if it's not already
+    
+    if not file_path.exists():
+        raise FileNotFoundError(f"Settings file not found: {file_path}")
+    
+    with file_path.open('r') as file:
+        if file_path.suffix in ['.yml', '.yaml']:
             return yaml.safe_load(file)
-        elif file_path.endswith('.json'):
+        elif file_path.suffix == '.json':
             return json.load(file)
         else:
             raise ValueError(f"Unsupported file format: {file_path}")

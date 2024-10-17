@@ -46,11 +46,16 @@ def load_settings(file_path):
         else:
             raise ValueError(f"Unsupported file format: {file_path}")
 
-# Setup Configuration
-config = load_settings("config/settings.yml")
-groups_info = load_settings(config['group_list'])
-executor = ProcessPoolExecutor(max_workers=config['max_workers'])
-logger = setup_logger(__name__, config['log_file_path'])
+def load_config(settings_path="config/settings.yml"):
+    config = load_settings(settings_path)
+    groups_info = load_settings(config['group_list'])
+    return config, groups_info
+
+def create_executor(config):
+    return ProcessPoolExecutor(max_workers=config['max_workers'])
+
+def setup_logging(config):
+    return setup_logger(__name__, config['log_file_path'])
 
 class DataPackage:
     """
@@ -238,22 +243,14 @@ class DirectoryPoller:
         except Exception as e:
             self.logger.error(f"Error in background task: {e}")
 
-def main():
-    """
-    Main function to run the OMERO Automated Data Import system.
-    """
+def run_application(config, groups_info, executor, logger):
     # Initialize system configurations and logging
     initialize_system(config)
     
-    # Define a global shutdown event to manage the graceful shutdown of the application
-    global shutdown_event
+    # Define a shutdown event to manage the graceful shutdown of the application
     shutdown_event = Event()
 
     def graceful_exit(signum, frame):
-        """
-        Signal handler for graceful shutdown.
-        Sets the shutdown event to signal the polling loop to exit.
-        """
         logger.info("Graceful shutdown initiated.")
         shutdown_event.set()
 
@@ -278,6 +275,12 @@ def main():
         executor.shutdown(wait=True)  # Shutdown the ProcessPoolExecutor
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
+
+def main():
+    config, groups_info = load_config()
+    executor = create_executor(config)
+    logger = setup_logging(config)
+    run_application(config, groups_info, executor, logger)
 
 if __name__ == "__main__":
     main()
