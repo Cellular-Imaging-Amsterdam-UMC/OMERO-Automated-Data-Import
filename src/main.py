@@ -93,18 +93,20 @@ class IngestionProcess:
     """
     Handles the ingestion process for a data package.
     """
-    def __init__(self, data_package, config, order_manager):
+   def __init__(self, data_package, config, order_manager, logger):
         """
-        Initialize the IngestionProcess with a data package, config, and order manager.
+        Initialize the IngestionProcess with a data package, config, order manager, and logger.
         
         :param data_package: DataPackage object to be ingested
         :param config: Configuration dictionary
         :param order_manager: UploadOrderManager object
+        :param logger: Logger instance to log messages
         """
         self.data_package = data_package
         self.config = config
         self.order_manager = order_manager
-    
+        self.logger = logger
+        
     def import_data_package(self):
         """
         Import the data package and handle the outcome.
@@ -115,16 +117,16 @@ class IngestionProcess:
             parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID','Unknown'))
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
-                logger.error(f"Import process failed for data package in {parent_id} due to failed uploads or importer failure.")
+                self.logger.error(f"Import process failed for data package in {parent_id} due to failed uploads or importer failure.")
                 log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             else:
                 self.order_manager.move_upload_order('completed')
-                logger.info(f"Data package in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")
+                self.logger.info(f"Data package in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")
                 log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_COMPLETED)
             
             return successful_uploads, failed_uploads, import_failed
         except Exception as e:
-            logger.error(f"Error during import_data_package: {e}")
+            self.logger.error(f"Error during import_data_package: {e}")
             self.order_manager.move_upload_order('failed')
             log_ingestion_step(self.data_package.__dict__, STAGE_MOVED_FAILED)
             return [], [], True
@@ -207,7 +209,7 @@ class DirectoryPoller:
             # Update this part to use the new log_ingestion_step signature
             log_ingestion_step(data_package.__dict__, STAGE_DETECTED)
             
-            ingestion_process = IngestionProcess(data_package, self.config, order_manager)
+            ingestion_process = IngestionProcess(data_package, self.config, order_manager, self.logger)
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.order_completed)
             
