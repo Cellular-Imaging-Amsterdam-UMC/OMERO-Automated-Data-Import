@@ -20,11 +20,20 @@ import sys
 def setup_logger(name, log_file, level=logging.DEBUG):
     """Function to setup as many loggers as you want"""
     file_handler = logging.FileHandler(log_file, mode='a') 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    LOGFORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    formatter = logging.Formatter(LOGFORMAT)
     file_handler.setFormatter(formatter)
 
     stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(level)
     stream_handler.setFormatter(formatter)
+    
+    logging.basicConfig(level=level,
+                        format=LOGFORMAT,
+                        handlers=[
+                            stream_handler,
+                            file_handler
+                        ])
 
     logger = logging.getLogger(name)
     logger.setLevel(level)

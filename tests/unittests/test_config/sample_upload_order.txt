@@ -1,0 +1,9 @@
+Version: 2.0
+UUID: afe38fe0-ea2b-43e6-949d-364827c66230
+Username: "rrosas"
+Group: "Private"
+UserID: 52
+GroupID: 103
+ProjectID: 51
+DatasetID: 101
+Files: ["/divg/coreReits/.omerodata2/2024/09/09/14-04-57/sample_image1_coreReits.tif", "/divg/coreReits/.omerodata2/2024/09/09/14-04-57/sample_image2_coreReits.tif", "/divg/coreReits/.omerodata2/2024/09/09/14-04-57/sample_image3_coreReits.tif"]
