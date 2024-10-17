@@ -93,7 +93,7 @@ class IngestionProcess:
     """
     Handles the ingestion process for a data package.
     """
-   def __init__(self, data_package, config, order_manager, logger):
+    def __init__(self, data_package, config, order_manager, logger):
         """
         Initialize the IngestionProcess with a data package, config, order manager, and logger.
         
