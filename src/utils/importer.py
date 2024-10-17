@@ -68,7 +68,7 @@ class DataPackageImporter:
             try:
                 if screen_id:
                     self.logger.debug(f"Uploading to screen: {screen_id}")
-                    image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, "no-upgrade", transfer="ln_s", depth=10)
+                    image_ids = ezomero.ezimport(conn, str(file_path), None, None, screen_id, None, None, "no-upgrade", transfer="ln_s", depth=10)
                 else:  # Only dataset_id can be here
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
                     image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
