@@ -123,7 +123,7 @@ class DataPackageImporter:
             q = conn.getQueryService()
             self.logger.debug(q)
             params = Parameters()
-            path_query = str(file_path).strip('/')
+            path_query = f"{str(file_path).strip('/')}%"
             self.logger.debug(f"path query: {path_query}")
             params.map = {"cpath": rstring(path_query)}
             self.logger.debug(params)
@@ -134,7 +134,7 @@ class DataPackageImporter:
                 " JOIN ws.image i "
                 " JOIN i.fileset fs "
                 " JOIN fs.usedFiles u "
-                " WHERE u.clientPath = :cpath",
+                " WHERE u.clientPath LIKE :cpath",
                 params,
                 conn.SERVICE_OPTS
             )
