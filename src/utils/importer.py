@@ -181,15 +181,19 @@ class DataPackageImporter:
 
                 if image_ids:
                     # Ensure we're working with a single integer ID
-                    image_id = image_ids[0] if isinstance(image_ids, list) else image_ids
+                    image_or_plate_id = image_ids[0] if isinstance(image_ids, list) else image_ids
+                    
                     try:
-                        self.add_image_annotations(conn, image_id, uuid, file_path)
-                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with Image ID: {image_id}")
-                        successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_id))
+                        if screen_id:  # Check if it's a screen (plate)
+                            self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=True)
+                        else:  # Otherwise, it's a dataset
+                            self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=False)
+                        
+                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
                         # Still consider it a successful upload even if annotation fails
-                        successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_id))
+                        successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_or_plate_id))
                 else:
                     self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset/screen ID: {dataset_id or screen_id}. No ID returned.")
                     failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
@@ -294,28 +298,36 @@ class DataPackageImporter:
         # return all_successful_uploads, all_failed_uploads, False
         return [], [], True
     
-    def add_image_annotations(self, conn, image_id, uuid, file_path):
-        """Add UUID and filepath as annotations to the image."""
+    def add_image_annotations(self, conn, object_id, uuid, file_path, is_screen=False):
+        """Add UUID and filepath as annotations to the image or plate."""
         try:
             annotation_dict = {'UUID': str(uuid), 'Filepath': str(file_path)}
-            ns = "custom.namespace.for.image.annotations"  # Define your custom namespace here
-            
-            self.logger.debug(f"Attempting to add annotations to Image:{image_id}")
+            ns = "omeroadi.import"
+
+            if is_screen:
+                self.logger.debug(f"Attempting to add annotations to Plate ID: {object_id}")
+                object_type = "Plate"  # Set to Plate when it's a screen
+            else:
+                self.logger.debug(f"Attempting to add annotations to Image ID: {object_id}")
+                object_type = "Image"  # Set to Image when it's a dataset
+
             self.logger.debug(f"Annotation dict: {annotation_dict}")
-            
+
             map_ann_id = ezomero.post_map_annotation(
-                conn=conn, 
-                object_type="Image", 
-                object_id=image_id, 
-                kv_dict=annotation_dict, 
+                conn=conn,
+                object_type=object_type,
+                object_id=object_id,
+                kv_dict=annotation_dict,
                 ns=ns,
                 across_groups=False  # Set to False if you don't want cross-group behavior
             )
-            
+
             if map_ann_id:
-                self.logger.info(f"Successfully added annotations to Image:{image_id}. MapAnnotation ID: {map_ann_id}")
+                self.logger.info(f"Successfully added annotations to {object_type} ID: {object_id}. MapAnnotation ID: {map_ann_id}")
             else:
-                self.logger.warning(f"MapAnnotation created for Image:{image_id}, but no ID was returned.")
-            
+                self.logger.warning(f"MapAnnotation created for {object_type} ID: {object_id}, but no ID was returned.")
+
         except Exception as e:
-            self.logger.error(f"Failed to add annotations to Image:{image_id}. Error: {str(e)}")
+            self.logger.error(f"Failed to add annotations to {object_type} ID: {object_id}. Error: {str(e)}")
+
+
