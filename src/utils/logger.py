@@ -20,7 +20,7 @@ import sys
 def setup_logger(name, log_file, level=logging.DEBUG):
     """Function to setup as many loggers as you want"""
     file_handler = logging.FileHandler(log_file, mode='a') 
-    LOGFORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    LOGFORMAT = '%(asctime)s - %(name)s - %(process)d - %(levelname)s - %(message)s'
     formatter = logging.Formatter(LOGFORMAT)
     file_handler.setFormatter(formatter)
 

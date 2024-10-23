@@ -181,7 +181,21 @@ class DataPackageImporter:
                             uuid=uuid,
                             depth=10
                             )
-                    image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
+                    try:
+                        self.logger.debug("Upload done. Retrieving plate id.")
+                        image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
+                    except Ice.ConnectionLostException as e:
+                        # TODO: conn might be disconnected/ ice timeout by now
+                        with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
+                            self.logger.info("Connected (again) as root")
+                            with root_conn.suConn(intended_username, ttl=6000000) as user_conn:
+                                user_conn.keepAlive() 
+                                # Set the correct group for the session
+                                user_conn.setGroupForSession(group_id)
+                                self.logger.info(f"Connected (again) as user {intended_username} in group {group_name}")
+                                # try again
+                                self.logger.debug("Retry retrieving plate id.")
+                                image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
                     # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
                     # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
                 else:  # Only dataset_id can be here
@@ -199,6 +213,27 @@ class DataPackageImporter:
                             self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=False)
                         
                         self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
+                    except Ice.ConnectionLostException as e:
+                        # TODO: conn might be disconnected/ ice timeout by now
+                        try:
+                            with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
+                                self.logger.info("Connected (again) as root")
+                                with root_conn.suConn(intended_username, ttl=6000000) as user_conn:
+                                    user_conn.keepAlive() 
+                                    # Set the correct group for the session
+                                    user_conn.setGroupForSession(group_id)
+                                    self.logger.info(f"Connected (again) as user {intended_username} in group {group_name}")
+                                    # try again
+                                    if screen_id:  # Check if it's a screen (plate)
+                                        self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=True)
+                                    else:  # Otherwise, it's a dataset
+                                        self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=False)
+                                    
+                                    self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
+                        except Exception as annotation_error:
+                            self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
+                            # Still consider it a successful upload even if annotation fails
+                            successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_or_plate_id))       
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
                         # Still consider it a successful upload even if annotation fails
