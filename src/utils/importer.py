@@ -50,7 +50,7 @@ class DataPackageImporter:
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
         
-    def import_to_omero(self, conn, file_path, target_id, target_type, transfer_type="ln_s", depth=None):
+    def import_to_omero(self, conn, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
         """
         Import a file to OMERO using CLI, either to a dataset or screen.
 
@@ -58,9 +58,10 @@ class DataPackageImporter:
         :param file_path: Path to the file to import
         :param target_id: ID of the target dataset or screen
         :param target_type: Type of the target ('dataset' or 'screen')
+        :param uuid: Unique identifier (UUID) used for log and error files
         :param transfer_type: File transfer method, default is 'ln_s'
         :param depth: Optional depth argument for import
-        :return: None
+        :return: True if the import was successful, False otherwise
         """
         cli = CLI()
         cli.register('import', ImportControl, '_')
@@ -73,8 +74,8 @@ class DataPackageImporter:
                     '-p', str(conn.port),
                     f'--transfer={transfer_type}',
                     '--no-upgrade',
-                    '--file', 'logs/cli.logs',
-                    '--errs', 'logs/cli.errs']
+                    '--file', f"logs/cli.{uuid}.logs",
+                    '--errs', f"logs/cli.{uuid}.errs"]
         
         # Add depth argument if provided
         if depth:
@@ -177,7 +178,9 @@ class DataPackageImporter:
                             file_path=str(file_path),
                             target_id=screen_id, 
                             target_type='screen',
-                            depth=10)
+                            uuid=uuid,
+                            depth=10
+                            )
                     image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
                     # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
                     # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
