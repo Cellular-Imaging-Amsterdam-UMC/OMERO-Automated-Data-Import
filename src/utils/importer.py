@@ -23,7 +23,7 @@ from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
 import Ice
 import time
 from omero.cli import CLI
-from omero.rtypes import rstring
+from omero.rtypes import rstring, rlong
 from omero.plugins.sessions import SessionsControl
 from importlib import import_module
 ImportControl = import_module("omero.plugins.import").ImportControl
