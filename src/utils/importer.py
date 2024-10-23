@@ -104,7 +104,7 @@ class DataPackageImporter:
             return False
 
 
-    def get_plate_ids(self, conn, file_path):
+    def get_plate_ids(self, conn, file_path, screen_id):
         """Get the Ids of imported plates.
         Note that this will not find plates if they have not been imported.
         Also, while plate_ids are returned, this method also sets
@@ -124,17 +124,23 @@ class DataPackageImporter:
             self.logger.debug(q)
             params = Parameters()
             path_query = f"{str(file_path).strip('/')}%"
-            self.logger.debug(f"path query: {path_query}")
-            params.map = {"cpath": rstring(path_query)}
+            self.logger.debug(f"path query: {path_query}. Screen_id: {screen_id}")
+            params.map = {
+                "cpath": rstring(path_query),
+                "screen_id": rlong(screen_id),
+            }
             self.logger.debug(params)
+            # If this is costly, just select the highest ID, since that is the newest
             results = q.projection(
-                "SELECT DISTINCT p.id FROM Plate p "
-                " JOIN p.wells w "
-                " JOIN w.wellSamples ws "
-                " JOIN ws.image i "
-                " JOIN i.fileset fs "
-                " JOIN fs.usedFiles u "
-                " WHERE u.clientPath LIKE :cpath",
+                "SELECT DISTINCT p.id, p.details.creationEvent.time FROM Plate p "
+                "JOIN p.wells w "
+                "JOIN w.wellSamples ws "
+                "JOIN ws.image i "
+                "JOIN i.fileset fs "
+                "JOIN fs.usedFiles u "
+                "JOIN p.screenLinks spl "
+                "WHERE u.clientPath LIKE :cpath AND spl.parent.id = :screen_id "
+                "ORDER BY p.details.creationEvent.time DESC",
                 params,
                 conn.SERVICE_OPTS
             )
@@ -172,7 +178,7 @@ class DataPackageImporter:
                             target_id=screen_id, 
                             target_type='screen',
                             depth=10)
-                    image_ids = self.get_plate_ids(conn, str(file_path))
+                    image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
                     # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
                     # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
                 else:  # Only dataset_id can be here
