@@ -200,7 +200,7 @@ class DataPackageImporter:
                                 self.logger.info(f"Connected (again) as user {intended_username} in group {group_name}")
                                 # try again
                                 self.logger.debug("Retry retrieving plate id.")
-                                image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
+                                image_ids = self.get_plate_ids(user_conn, str(file_path), screen_id)
                     # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
                     # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
                 else:  # Only dataset_id can be here
@@ -230,9 +230,9 @@ class DataPackageImporter:
                                     self.logger.info(f"Connected (again) as user {intended_username} in group {group_name}")
                                     # try again
                                     if screen_id:  # Check if it's a screen (plate)
-                                        self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=True)
+                                        self.add_image_annotations(user_conn, image_or_plate_id, uuid, file_path, is_screen=True)
                                     else:  # Otherwise, it's a dataset
-                                        self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=False)
+                                        self.add_image_annotations(user_conn, image_or_plate_id, uuid, file_path, is_screen=False)
                                     
                                     self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
                         except Exception as annotation_error:
