@@ -239,7 +239,6 @@ class DataPackageImporter:
                     
                     try:
                         self.add_image_annotations(
-                            conn, 
                             image_or_plate_id, 
                             uuid, 
                             file_path, 
