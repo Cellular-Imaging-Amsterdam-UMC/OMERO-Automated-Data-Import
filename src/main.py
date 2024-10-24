@@ -112,8 +112,8 @@ class IngestionProcess:
         Import the data package and handle the outcome.
         """
         try:
-            importer = DataPackageImporter(self.config)
-            successful_uploads, failed_uploads, import_failed = importer.import_data_package(self.data_package)
+            importer = DataPackageImporter(self.config, self.data_package)
+            successful_uploads, failed_uploads, import_failed = importer.import_data_package()
             parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID','Unknown'))
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
