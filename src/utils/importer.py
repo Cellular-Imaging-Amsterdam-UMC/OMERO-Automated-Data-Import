@@ -150,7 +150,7 @@ class DataPackageImporter:
             return plate_ids
 
 
-    def upload_files(self, conn, file_paths, uuid, dataset_id=None, screen_id=None):
+    def upload_files(self, conn, file_paths, uuid, intended_username, dataset_id=None, screen_id=None):
         """
         Upload files to a specified dataset or screen in OMERO.
 
@@ -311,6 +311,7 @@ class DataPackageImporter:
                             user_conn,
                             file_paths,
                             data_package.get('UUID'),
+                            data_package.get('Username'),
                             dataset_id=dataset_id,
                             screen_id=screen_id
                         )
