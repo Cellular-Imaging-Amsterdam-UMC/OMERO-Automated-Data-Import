@@ -7,24 +7,31 @@ WORKDIR /auto-importer
 # Create a Conda environment
 RUN conda create -n auto-import-env python=3.10 -y
 
-# Install omero-py and bftools using Conda
+# Install omero-py, bftools, and psycopg2 using Conda
 RUN conda install -n auto-import-env -c conda-forge omero-py -y && \
-    conda install -n auto-import-env -c bioconda bftools -y
+    conda install -n auto-import-env -c bioconda bftools -y && \
+    conda install -n auto-import-env -c conda-forge psycopg2 libffi==3.3 -y
 
 # Activate the environment by setting the path to environment's bin directory
 ENV PATH /opt/conda/envs/auto-import-env/bin:$PATH
 
-# Copy the requirements.txt first to leverage Docker cache
-COPY requirements.txt /auto-importer/
-RUN pip install --no-cache-dir -r requirements.txt
+# Install git
+RUN apt-get update && apt-get install -y git
 
-# Copy the auto-importer application code
-COPY src /auto-importer/src
+# Install system prerequisites for building PostgreSQL drivers
+RUN apt-get update && apt-get install -y \
+    python3-dev \
+    libpq-dev \
+    build-essential
 
-# Copy the tests directory
-COPY tests /auto-importer/tests
+# Clone the specific branch of the repository
+ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
+RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
 
-# Copy the logs directory
+# Install the Python dependencies from the repository
+RUN pip install /auto-importer
+
+# Make the logs directory
 RUN mkdir /auto-importer/logs
 
 # Ensure your application's startup script is executable
@@ -42,5 +49,3 @@ USER autoimportuser
 
 # Set the default command or entrypoint to the main script
 ENTRYPOINT ["/opt/conda/bin/conda", "run", "-n", "auto-import-env", "python", "src/main.py"]
-
-

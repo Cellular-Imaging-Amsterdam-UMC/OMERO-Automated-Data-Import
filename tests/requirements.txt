@@ -1,0 +1,27 @@
+# Additional likely dependencies
+numpy
+pandas
+pillow
+matplotlib
+scipy
+scikit-image
+tifffile
+zarr
+dask
+xarray
+fsspec
+s3fs
+h5py
+opencv-python-headless
+pyyaml
+python-dotenv
+requests
+tqdm
+pytest 
+
+# Development dependencies
+pytest
+flake8
+black
+isort
+mypy

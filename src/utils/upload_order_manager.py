@@ -14,135 +14,171 @@
 
 # upload_order_manager.py
 
+import ast
 import shutil
 import json
 from pathlib import Path
 from .logger import setup_logger
-from .ingest_tracker import log_ingestion_step
+from .ingest_tracker import STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
 
 class UploadOrderManager:
     def __init__(self, order_file_path, settings):
+        """
+        Initialize the UploadOrderManager with the given order file and settings.
+        
+        :param order_file_path: Path to the upload order file
+        :param settings: Dictionary containing application settings
+        """
         self.settings = settings
         self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
         self.order_file_path = Path(order_file_path)
-        self.order_info = self._parse_order_file(order_file_path)
-        self.switch_path_prefix()
-        self.groups_info = self.load_groups_info()
-        self.validate_order_info()
+        self.order_info = self._parse_order_file()
+        self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))
+        self._create_file_names_list()
+        self.validate_order_attributes()
 
-    def load_groups_info(self):
-        with open('config/groups_list.json') as f:
+    def load_groups_info(self, group_list_path):
+        """Load group information from the JSON configuration file."""
+        with open(group_list_path) as f:
             return json.load(f)
 
     def get_core_grp_name_from_omero_name(self, omero_grp_name):
+        """
+        Get the core group name corresponding to the given OMERO group name.
+        
+        :param omero_grp_name: OMERO group name
+        :return: Corresponding core group name, or None if not found
+        """
         for group in self.groups_info:
             if group['omero_grp_name'] == omero_grp_name:
                 return group['core_grp_name']
         self.logger.error(f"Core group name not found for OMERO group: {omero_grp_name}")
         return None
 
-    def _parse_order_file(self, order_file_path):
-        order_info = {}
-        with open(order_file_path, 'r') as file:
-            for line in file:
-                key, value = line.strip().split(': ', 1)
-                if key == 'Files':
-                    files_list = value.strip('[]').split(',')
-                    order_info[key] = [file_name.strip() for file_name in files_list]
-                else:
-                    order_info[key] = value.strip()
-        return order_info
+    def _parse_order_file(self):
+        """
+        Parse the upload order file and return its content as a dictionary.
+        
+        :return: Dictionary representation of the upload order
+        """
+        try:
+            with open(self.order_file_path, 'r') as file_obj:
+                lines = file_obj.read().strip().split('\n')
+        except (FileNotFoundError, IOError) as e:
+            raise Exception(f"Unable to read the file at {self.order_file_path}: {e}")
+
+        order_data = {}
+        for line in lines:
+            # Skip empty lines or lines without the expected separator
+            if not line.strip() or ': ' not in line:
+                continue  # Or handle accordingly
+
+            key, value = line.split(': ', 1)
+            key = key.strip()
+            value = value.strip().strip('"')  # Remove surrounding whitespace and quotes
+
+            # Attempt to parse the value into an appropriate data type
+            parsed_value = value  # Default to the original string
+            for conversion_func in (int, float, ast.literal_eval):
+                try:
+                    parsed_value = conversion_func(value)
+                    break  # Exit loop if conversion is successful
+                except (ValueError, SyntaxError):
+                    continue  # Try the next conversion function
+
+            order_data[key] = parsed_value
+
+        return order_data  # Dictionary representation of the upload order
+
+
+    def validate_order_attributes(self):
+        """
+        Validate the attributes of the upload order against those specified in settings.yml.
+        Raises a ValueError if any required attribute is missing.
+        """
+        required_attributes = self.settings.get('upload_order_attributes', [])
+        missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
+        
+        if missing_attributes:
+            error_message = f"Missing required attributes in upload order: {', '.join(missing_attributes)}"
+            self.logger.error(error_message)
+            raise ValueError(error_message)
+        
+        self.logger.info("All required attributes are present in the upload order.")
+
 
     def switch_path_prefix(self):
         """
-        Switches the '/divg' prefix with '/data' for each file path in the 'Files' list.
+        Switch the '/divg' prefix with '/data' for each file path in the 'Files' list.
+        This method updates the file paths in the order_info dictionary.
         """
-        updated_files = []
-        for file_path in self.order_info['Files']:
-            parts = Path(file_path).parts
-            if parts[1].lower() == 'divg':
-                new_path = Path('/data', *parts[2:])  # Replace the first component with '/data'
-                updated_files.append(str(new_path))
-                self.logger.debug(f"Switched 'divg' to 'data' in path: {file_path} -> {new_path}")
-            else:
-                updated_files.append(file_path)
-        self.order_info['Files'] = updated_files
-        self.logger.debug("Updated file paths after switching 'divg' to 'data'.")
+        if 'Files' in self.order_info:
+            updated_files = []
+            for file_path in self.order_info['Files']:
+                parts = Path(file_path).parts
+                if parts[1].lower() == 'divg':
+                    new_path = Path('/data', *parts[2:])
+                    updated_files.append(str(new_path))
+                    self.logger.debug(f"Switched 'divg' to 'data' in path: {file_path} -> {new_path}")
+                else:
+                    updated_files.append(file_path)
+            self.order_info['Files'] = updated_files
+            self.logger.debug(f"Updated {len(updated_files)} file paths after switching 'divg' to 'data'.")
 
-    def validate_order_info(self):
-        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Files']
-        missing_keys = [key for key in required_keys if key not in self.order_info]
-        empty_keys = [key for key, value in self.order_info.items() if not value]
-
-        if missing_keys:
-            self.logger.error(f"Missing required keys in order info (UUID: {self.order_info['UUID']}): {', '.join(missing_keys)}")
-        if empty_keys:
-            self.logger.error(f"Empty values found for keys in order info (UUID: {self.order_info['UUID']}): {', '.join(empty_keys)}")
-
-        if not missing_keys and not empty_keys:
-            self.logger.info(f"Order info validation passed for UUID: {self.order_info['UUID']}")
-            # Log the validation step in the database
-            log_ingestion_step(
-                self.order_info['Group'],
-                self.order_info['Username'],
-                self.order_info['Dataset'],
-                "New Order Validated",
-                self.order_info['UUID']
-            )
-
-    def log_upload_order_info(self):
-        info_lines = [f"{key}: {value}" for key, value in self.order_info.items()]
-        log_message = "Upload Order Information:\n" + "\n".join(info_lines)
-        self.logger.info(log_message)
-
-    def get_order_info(self):
-        required_keys = ['UUID', 'Group', 'Username', 'Dataset', 'Files']
-        missing_keys = [key for key in required_keys if key not in self.order_info]
-        if missing_keys:
-            raise KeyError(f"Missing required keys in order info: {', '.join(missing_keys)}")
-        return (
-            self.order_info['UUID'],
-            self.order_info['Group'],
-            self.order_info['Username'],
-            self.order_info['Dataset'],
-            self.order_info['Files']
-        )
+    def _create_file_names_list(self):
+        """
+        Create a list of file names from the 'Files' attribute and add it as 'file_names' to order_info.
+        """
+        if 'Files' in self.order_info:
+            self.order_info['file_names'] = [Path(file_path).name for file_path in self.order_info['Files']]
+            self.logger.debug(f"Created file_names list with {len(self.order_info['file_names'])} entries")
+        else:
+            self.order_info['file_names'] = []
+            self.logger.warning("No 'Files' attribute found in order_info. Created empty file_names list.")
         
     def log_order_movement(self, outcome):
         """
-        Logs the movement of the upload order file to the database.
-        
-        Parameters:
-        - outcome: A string indicating the outcome, either 'failed' or 'completed'.
+        Log the movement of the upload order file to the database using the ingest tracker.
+    
+        This method uses the global log_ingestion_step function from the ingest_tracker module
+        to record the movement event in the database. It determines the appropriate stage
+        based on the outcome and passes the order information along with the stage to the
+        logging function.
+
+        :param outcome: A string indicating the outcome, either 'failed' or 'completed'.
         """
-        # Define the stage based on the outcome
-        stage = "Order Moved to Completed" if outcome == 'completed' else "Order Moved to Failed"
-        
-        # Log the step in the database
-        log_ingestion_step(
-            self.order_info['Group'],
-            self.order_info['Username'],
-            self.order_info['Dataset'],
-            stage,
-            self.order_info['UUID']
-        )
+        stage = STAGE_MOVED_COMPLETED if outcome == 'completed' else STAGE_MOVED_FAILED
+        log_ingestion_step(self.order_info, stage)
 
     def move_upload_order(self, outcome):
+        """
+        Move the upload order file to the appropriate directory based on the outcome
+        and log the movement using the ingest tracker.
+
+        This method performs the following actions:
+        1. Determines the destination directory based on the outcome ('failed' or 'completed').
+        2. Moves the upload order file to the appropriate directory.
+        3. Logs the movement event using the ingest tracker, which records the action in the database.
+
+        :param outcome: A string indicating the outcome, either 'failed' or 'completed'.
+        """
         source_file_path = self.order_file_path
-        omero_grp_name = self.order_info['Group']
+        omero_grp_name = self.order_info.get('Group', 'Unknown')
         core_grp_name = self.get_core_grp_name_from_omero_name(omero_grp_name)
 
         if core_grp_name is None:
             self.logger.error("Failed to retrieve core group name for moving upload order.")
             return
 
-        username = self.order_info['Username']
+        username = self.order_info.get('Username', 'Unknown')
 
-        if outcome == 'failed':
-            destination_dir_name = self.settings['failed_uploads_directory_name']
-        elif outcome == 'completed':
-            destination_dir_name = self.settings['completed_orders_dir_name']
-        else:
+        outcome_dirs = {
+            'failed': self.settings['failed_uploads_directory_name'],
+            'completed': self.settings['completed_orders_dir_name']
+        }
+
+        destination_dir_name = outcome_dirs.get(outcome)
+        if destination_dir_name is None:
             self.logger.error(f"Invalid outcome specified: {outcome}")
             return
 
@@ -156,3 +192,7 @@ class UploadOrderManager:
             self.log_order_movement(outcome)
         except Exception as e:
             self.logger.error(f"Error moving upload order file {source_file_path} to {destination_file}: {e}")
+
+    def get_order_info(self):
+        """Return the parsed order information."""
+        return self.order_info
