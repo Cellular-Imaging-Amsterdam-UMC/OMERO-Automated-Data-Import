@@ -16,6 +16,7 @@
 
 import os
 import ezomero
+import functools
 from omero.gateway import BlitzGateway
 from omero.sys import Parameters
 from .logger import setup_logger
@@ -31,25 +32,60 @@ ImportControl = import_module("omero.plugins.import").ImportControl
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries (in seconds)
 
+def connection(func):
+    @functools.wraps(func)
+    def wrapper_connection(self, *args, **kwargs):
+        # Step 1: Create a connection as the root user
+        with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
+            self.logger.debug("Connected (again) as root")
+            if root_conn.connect():
+                uuid = self.data_package.get('UUID')
+                intended_username = self.data_package.get('Username')
+                group_id = self.data_package.get('GroupID')
+                group_name = self.data_package.get('Group')
+                
+                # Step 2: Switch to the intended user's session
+                with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
+                    user_conn.keepAlive()  # Keep the session alive
+                    self.logger.debug(f"Connected (again) as user {intended_username}")
+                    # Set the correct group for the session
+                    user_conn.setGroupForSession(group_id)
+                    self.logger.debug(f"Session group set to {group_name}")
+
+                    # Step 3: Execute the original function with the user_conn
+                    result = func(self, user_conn, *args, **kwargs)
+                    return result
+            else:
+                raise ConnectionError("Could not connect to the OMERO server")
+                
+    return wrapper_connection
+
 class DataPackageImporter:
     """
     Handles the import of data packages into OMERO.
     """
-    def __init__(self, config):
+    def __init__(self, config, data_package, ttl_for_user_conn = 6000000):
         """
         Initialize the DataPackageImporter with configuration settings.
 
         :param config: Configuration dictionary containing settings
+        :param data_package: DataPackage object containing import information
+        :param ttl_for_user_conn: Connection timeout in ms (60000 per minute, default is 1 min)
         """
         self.config = config
         self.logger = setup_logger(__name__, self.config['log_file_path'])
+        
+        self.data_package = data_package
+        
+        self.ttl_for_user_conn = ttl_for_user_conn
         
         # Set OMERO server details as instance attributes
         self.host = os.getenv('OMERO_HOST')
         self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
-        
+       
+    @connection 
     def import_to_omero(self, conn, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
         """
         Import a file to OMERO using CLI, either to a dataset or screen.
@@ -104,7 +140,7 @@ class DataPackageImporter:
             self.logger.error(f'Import of {str(file_path)} has failed!')
             return False
 
-
+    @connection
     def get_plate_ids(self, conn, file_path, screen_id):
         """Get the Ids of imported plates.
         Note that this will not find plates if they have not been imported.
@@ -149,8 +185,11 @@ class DataPackageImporter:
             plate_ids = [r[0].val for r in results]
             return plate_ids
 
+    @connection
+    def import_dataset(self, conn, target, dataset, transfer="ln_s"):
+        return ezomero.ezimport(conn, target, dataset, transfer)
 
-    def upload_files(self, conn, file_paths, data_package, dataset_id=None, screen_id=None):
+    def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None):
         """
         Upload files to a specified dataset or screen in OMERO.
 
@@ -161,10 +200,10 @@ class DataPackageImporter:
         :param screen_id: (Optional) ID of the screen to upload files to
         :return: Tuple of successful and failed uploads
         """
-        uuid = data_package.get('UUID')
-        intended_username = data_package.get('Username')
-        group_id = data_package.get('GroupID')
-        group_name = data_package.get('Group')
+        uuid = self.data_package.get('UUID')
+        intended_username = self.data_package.get('Username')
+        group_id = self.data_package.get('GroupID')
+        group_name = self.data_package.get('Group')
         
         if dataset_id and screen_id:
             raise ValueError("Cannot specify both dataset_id and screen_id. Please provide only one.")
@@ -186,59 +225,28 @@ class DataPackageImporter:
                             uuid=uuid,
                             depth=10
                             )
-                    try:
-                        self.logger.debug("Upload done. Retrieving plate id.")
-                        image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
-                    except Ice.ConnectionLostException as e:
-                        # TODO: conn might be disconnected/ ice timeout by now
-                        with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
-                            self.logger.info("Connected (again) as root")
-                            with root_conn.suConn(intended_username, ttl=6000000) as user_conn:
-                                user_conn.keepAlive() 
-                                # Set the correct group for the session
-                                user_conn.setGroupForSession(group_id)
-                                self.logger.info(f"Connected (again) as user {intended_username} in group {group_name}")
-                                # try again
-                                self.logger.debug("Retry retrieving plate id.")
-                                image_ids = self.get_plate_ids(user_conn, str(file_path), screen_id)
+                    self.logger.debug("Upload done. Retrieving plate id.")
+                    image_ids = self.get_plate_ids(conn, str(file_path), screen_id)
                     # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
                     # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
                 else:  # Only dataset_id can be here
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
-                    image_ids = ezomero.ezimport(conn=conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
+                    image_ids = self.import_dataset(conn, target=str(file_path), dataset=dataset_id, transfer="ln_s")
 
                 if image_ids:
                     # Ensure we're working with a single integer ID
                     image_or_plate_id = image_ids[0] if isinstance(image_ids, list) else image_ids
                     
                     try:
-                        if screen_id:  # Check if it's a screen (plate)
-                            self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=True)
-                        else:  # Otherwise, it's a dataset
-                            self.add_image_annotations(conn, image_or_plate_id, uuid, file_path, is_screen=False)
+                        self.add_image_annotations(
+                            conn, 
+                            image_or_plate_id, 
+                            uuid, 
+                            file_path, 
+                            is_screen=bool(screen_id)  # True if screen_id is provided, False otherwise
+                        )  
                         
-                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
-                    except Ice.ConnectionLostException as e:
-                        # TODO: conn might be disconnected/ ice timeout by now
-                        try:
-                            with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
-                                self.logger.info("Connected (again) as root")
-                                with root_conn.suConn(intended_username, ttl=6000000) as user_conn:
-                                    user_conn.keepAlive() 
-                                    # Set the correct group for the session
-                                    user_conn.setGroupForSession(group_id)
-                                    self.logger.info(f"Connected (again) as user {intended_username} in group {group_name}")
-                                    # try again
-                                    if screen_id:  # Check if it's a screen (plate)
-                                        self.add_image_annotations(user_conn, image_or_plate_id, uuid, file_path, is_screen=True)
-                                    else:  # Otherwise, it's a dataset
-                                        self.add_image_annotations(user_conn, image_or_plate_id, uuid, file_path, is_screen=False)
-                                    
-                                    self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
-                        except Exception as annotation_error:
-                            self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
-                            # Still consider it a successful upload even if annotation fails
-                            successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_or_plate_id))       
+                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")       
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
                         # Still consider it a successful upload even if annotation fails
@@ -251,19 +259,19 @@ class DataPackageImporter:
                 failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
         return successful_uploads, failed_uploads
 
-    def import_data_package(self, data_package):
+    def import_data_package(self):
         """
         Import a data package into OMERO as the intended user.
 
         :param data_package: DataPackage object containing import information
         :return: Tuple of (successful_uploads, failed_uploads, import_status)
         """
-        self.logger.info(f"Starting import for data package: {data_package.get('UUID', 'Unknown')}")
-        self.logger.debug(f"Data package contents: {data_package}")
+        self.logger.info(f"Starting import for data package: {self.data_package.get('UUID', 'Unknown')}")
+        self.logger.debug(f"Data package contents: {self.data_package}")
 
-        intended_username = data_package.get('Username')
-        group_id = data_package.get('GroupID')
-        group_name = data_package.get('Group')
+        intended_username = self.data_package.get('Username')
+        group_id = self.data_package.get('GroupID')
+        group_name = self.data_package.get('Group')
 
         if not intended_username or not group_id or not group_name:
             self.logger.error("Required user or group information not provided in data package.")
@@ -284,8 +292,7 @@ class DataPackageImporter:
                     root_conn.keepAlive() 
                             
                     # Create a new connection as the intended user
-                    # timeout in ms (60000 per minute, default is 1 min)
-                    with root_conn.suConn(intended_username, ttl=60000000) as user_conn:
+                    with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
                         if not user_conn:
                             self.logger.error(f"Failed to create connection as user {intended_username}")
                             return [], [], True
@@ -299,8 +306,8 @@ class DataPackageImporter:
                         all_successful_uploads = []
                         all_failed_uploads = []
 
-                        dataset_id = data_package.get('DatasetID')
-                        screen_id = data_package.get('ScreenID')
+                        dataset_id = self.data_package.get('DatasetID')
+                        screen_id = self.data_package.get('ScreenID')
 
                         # Validation for dataset_id and screen_id
                         if dataset_id and screen_id:
@@ -308,14 +315,13 @@ class DataPackageImporter:
                         if not dataset_id and not screen_id:
                             raise ValueError("Either DatasetID or ScreenID must be provided in the data package.")
 
-                        file_paths = data_package.get('Files', [])
+                        file_paths = self.data_package.get('Files', [])
                         self.logger.debug(f"File paths to be uploaded: {file_paths}")
 
                         # Call upload_files with the appropriate ID
                         successful_uploads, failed_uploads = self.upload_files(
                             user_conn,
                             file_paths,
-                            data_package,
                             dataset_id=dataset_id,
                             screen_id=screen_id
                         )
@@ -324,7 +330,7 @@ class DataPackageImporter:
                         all_failed_uploads.extend(failed_uploads)
 
                         if successful_uploads: 
-                            log_ingestion_step(data_package, STAGE_IMPORTED)
+                            log_ingestion_step(self.data_package, STAGE_IMPORTED)
                             
                     return all_successful_uploads, all_failed_uploads, False    
             except Exception as e:
@@ -340,13 +346,11 @@ class DataPackageImporter:
                 else:
                     self.logger.error(f"Exception during import: {e}, {type(e)}")
                     return [], [], True
-            # finally:
-            #     if 'user_conn' in locals() and user_conn:
-            #         user_conn.close()
 
         # return all_successful_uploads, all_failed_uploads, False
         return [], [], True
     
+    @connection
     def add_image_annotations(self, conn, object_id, uuid, file_path, is_screen=False):
         """Add UUID and filepath as annotations to the image or plate."""
         try:
