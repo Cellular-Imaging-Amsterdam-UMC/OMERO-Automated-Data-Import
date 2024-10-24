@@ -150,17 +150,22 @@ class DataPackageImporter:
             return plate_ids
 
 
-    def upload_files(self, conn, file_paths, uuid, intended_username, dataset_id=None, screen_id=None):
+    def upload_files(self, conn, file_paths, data_package, dataset_id=None, screen_id=None):
         """
         Upload files to a specified dataset or screen in OMERO.
 
         :param conn: OMERO connection object
         :param file_paths: List of file paths to upload
-        :param uuid: UUID of the data package
+        :param data_packge: the data package
         :param dataset_id: (Optional) ID of the dataset to upload files to
         :param screen_id: (Optional) ID of the screen to upload files to
         :return: Tuple of successful and failed uploads
         """
+        uuid = data_package.get('UUID')
+        intended_username = data_package.get('Username')
+        group_id = data_package.get('GroupID')
+        group_name = data_package.get('Group')
+        
         if dataset_id and screen_id:
             raise ValueError("Cannot specify both dataset_id and screen_id. Please provide only one.")
         if not dataset_id and not screen_id:
@@ -310,8 +315,7 @@ class DataPackageImporter:
                         successful_uploads, failed_uploads = self.upload_files(
                             user_conn,
                             file_paths,
-                            data_package.get('UUID'),
-                            data_package.get('Username'),
+                            data_package,
                             dataset_id=dataset_id,
                             screen_id=screen_id
                         )
