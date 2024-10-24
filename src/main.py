@@ -117,10 +117,10 @@ class IngestionProcess:
             parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID','Unknown'))
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
-                self.logger.error(f"Import process failed for data package in {parent_id} due to failed uploads or importer failure.")
+                self.logger.error(f"Import process failed for data package {self.data_package.get('UUID')} in {parent_id} due to failed uploads or importer failure.")
             else:
                 self.order_manager.move_upload_order('completed')
-                self.logger.info(f"Data package in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")            
+                self.logger.info(f"Data package {self.data_package.get('UUID')} in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")            
             return successful_uploads, failed_uploads, import_failed
         except Exception as e:
             self.logger.error(f"Error during import_data_package: {e}")

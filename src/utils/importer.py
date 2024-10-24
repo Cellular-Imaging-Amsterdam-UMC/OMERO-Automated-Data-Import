@@ -248,8 +248,8 @@ class DataPackageImporter:
                         self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")       
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
-                        # Still consider it a successful upload even if annotation fails
-                        successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_or_plate_id))
+                    # Still consider it a successful upload even if annotation fails
+                    successful_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), image_or_plate_id))
                 else:
                     self.logger.error(f"Upload rejected by OMERO for file {file_path} to dataset/screen ID: {dataset_id or screen_id}. No ID returned.")
                     failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
@@ -324,6 +324,8 @@ class DataPackageImporter:
                             dataset_id=dataset_id,
                             screen_id=screen_id
                         )
+                        self.logger.debug(f"Successful uploads: {successful_uploads}")
+                        self.logger.debug(f"Failed uploads: {failed_uploads}")
                         
                         all_successful_uploads.extend(successful_uploads)
                         all_failed_uploads.extend(failed_uploads)
