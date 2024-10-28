@@ -55,7 +55,8 @@ def create_executor(config):
     return ProcessPoolExecutor(max_workers=config['max_workers'])
 
 def setup_logging(config):
-    return setup_logger(__name__, config['log_file_path'])
+    logger, listener = setup_logger(__name__, config['log_file_path'])
+    return logger, listener
 
 class DataPackage:
     """
@@ -241,7 +242,7 @@ class DirectoryPoller:
         except Exception as e:
             self.logger.error(f"Error in background task: {e}")
 
-def run_application(config, groups_info, executor, logger):
+def run_application(config, groups_info, executor, logger, listener):
     # Initialize system configurations and logging
     initialize_system(config)
     
@@ -269,16 +270,17 @@ def run_application(config, groups_info, executor, logger):
     finally:
         # Cleanup operations
         log_flag(logger, 'end') 
-        poller.stop()  # Stop the DirectoryPoller
-        executor.shutdown(wait=True)  # Shutdown the ProcessPoolExecutor
+        poller.stop()
+        executor.shutdown(wait=True)
+        listener.stop()  # Stop the QueueListener before exiting
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 
 def main():
     config, groups_info = load_config()
     executor = create_executor(config)
-    logger = setup_logging(config)
-    run_application(config, groups_info, executor, logger)
+    logger, listener = setup_logging(config)  # Get both logger and listener
+    run_application(config, groups_info, executor, logger, listener)  # Pass both to run_application
 
 if __name__ == "__main__":
     main()

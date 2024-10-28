@@ -17,8 +17,8 @@
 import ast
 import shutil
 import json
+import logging
 from pathlib import Path
-from .logger import setup_logger
 from .ingest_tracker import STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
 
 class UploadOrderManager:
@@ -30,7 +30,7 @@ class UploadOrderManager:
         :param settings: Dictionary containing application settings
         """
         self.settings = settings
-        self.logger = setup_logger(__name__, self.settings.get('log_file_path', 'upload_order_manager.log'))
+        self.logger = logging.getLogger(__name__)  # Use the existing logger
         self.order_file_path = Path(order_file_path)
         self.order_info = self._parse_order_file()
         self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))

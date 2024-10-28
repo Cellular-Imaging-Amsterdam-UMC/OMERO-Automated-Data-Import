@@ -16,32 +16,40 @@
 
 import logging
 import sys
+from logging.handlers import QueueHandler, QueueListener
+from queue import Queue
 
 def setup_logger(name, log_file, level=logging.DEBUG):
     """Function to setup as many loggers as you want"""
-    file_handler = logging.FileHandler(log_file, mode='a') 
     LOGFORMAT = '%(asctime)s - %(name)s - %(process)d - %(levelname)s - %(message)s'
     formatter = logging.Formatter(LOGFORMAT)
+
+    # Create handlers
+    file_handler = logging.FileHandler(log_file, mode='a')
     file_handler.setFormatter(formatter)
 
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(level)
     stream_handler.setFormatter(formatter)
-    
-    logging.basicConfig(level=level,
-                        format=LOGFORMAT,
-                        handlers=[
-                            stream_handler,
-                            file_handler
-                        ])
 
+    # Create a queue and a QueueHandler
+    log_queue = Queue()
+    queue_handler = QueueHandler(log_queue)
+
+    # Setup the root logger
+    logging.basicConfig(level=level, handlers=[queue_handler])
+
+    # Create a logger
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    logger.addHandler(file_handler)
-    logger.addHandler(stream_handler)
+    logger.addHandler(queue_handler)
     logger.propagate = False
 
-    return logger
+    # Create and start a QueueListener
+    listener = QueueListener(log_queue, file_handler, stream_handler)
+    listener.start()
+
+    return logger, listener
 
 def log_flag(logger, flag_type):
     line_pattern = "    /\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
