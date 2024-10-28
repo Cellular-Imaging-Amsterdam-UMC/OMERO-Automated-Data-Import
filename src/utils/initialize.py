@@ -20,10 +20,10 @@ import sys
 import yaml
 import json
 from pathlib import Path
-from .logger import setup_logger
+from .logger import setup_logger, LoggerManager
 from .ingest_tracker import initialize_ingest_tracker
 
-def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
+def check_directory_access(path, logger, test_file_name='access_test_file.tmp'):
     """
     Checks if the application has read, write, and delete access to the specified path.
     It tries to create, read, and delete a temporary file in the directory.
@@ -47,10 +47,10 @@ def check_directory_access(path, log, test_file_name='access_test_file.tmp'):
         os.makedirs(test_dir_path, exist_ok=True)
         shutil.rmtree(test_dir_path)
 
-        log.info(f"Access check successful for {path}")
+        logger.info(f"Access check successful for {path}")
         return True
     except Exception as e:
-        log.error(f"Access check failed for {path}: {e}")
+        logger.error(f"Access check failed for {path}: {e}")
         return False
 
 def load_settings(file_path):
@@ -75,10 +75,13 @@ def load_settings(file_path):
 
 def initialize_system(config):
     """
-    Performs initial system checks and setups, including directory access checks and database initialization.
+    Performs initial system checks and setups.
     """
-    # Setup logger
-    logger = setup_logger('initialize_system', config['log_file_path'])
+    # Get logger instance
+    logger = LoggerManager.get_logger()
+    if logger is None:
+        print("Critical error: Logger not initialized")
+        sys.exit(1)
 
     # Check access to directories for each group
     access_checks_passed = True
