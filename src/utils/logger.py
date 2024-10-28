@@ -175,10 +175,10 @@ class LoggerManager:
         return cls._initialized
 
     @classmethod
-    def setup_logger(cls, name: str, log_file: str, level=logging.DEBUG) -> Tuple[logging.Logger, QueueListener]:
+    def setup_logger(cls, name: str, log_file: str, level=logging.DEBUG) -> logging.Logger:
         """Setup the main logger and queue listener."""
         if cls._initialized:
-            return cls._main_logger, cls._listener
+            return cls._main_logger
 
         LOGFORMAT = '%(asctime)s - %(name)s - %(process)d - %(levelname)s - %(message)s'
         formatter = logging.Formatter(LOGFORMAT)
@@ -208,14 +208,13 @@ class LoggerManager:
         logger.propagate = False
 
         # Create and start listener
-        listener = QueueListener(cls._log_queue, file_handler, stream_handler)
-        listener.start()
+        cls._listener = QueueListener(cls._log_queue, file_handler, stream_handler)
+        cls._listener.start()
 
         cls._main_logger = logger
-        cls._listener = listener
         cls._loggers[name] = logger
         cls._initialized = True
-        return logger, listener
+        return logger  # Return only the logger
 
     @classmethod
     def get_module_logger(cls, module_name: str) -> logging.Logger:
