@@ -19,7 +19,7 @@ import ezomero
 import functools
 from omero.gateway import BlitzGateway
 from omero.sys import Parameters
-from .logger import setup_logger
+from .logger import LoggerManager
 from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
 import Ice
 import time
@@ -73,7 +73,10 @@ class DataPackageImporter:
         :param ttl_for_user_conn: Connection timeout in ms (60000 per minute, default is 1 min)
         """
         self.config = config
-        self.logger = setup_logger(__name__, self.config['log_file_path'])
+        # Update logger initialization
+        if not LoggerManager.is_initialized():
+            raise RuntimeError("LoggerManager must be initialized before creating DataPackageImporter")
+        self.logger = LoggerManager.get_module_logger(__name__)
         
         self.data_package = data_package
         
@@ -383,5 +386,4 @@ class DataPackageImporter:
 
         except Exception as e:
             self.logger.error(f"Failed to add annotations to {object_type} ID: {object_id}. Error: {str(e)}")
-
 

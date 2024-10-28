@@ -17,9 +17,9 @@
 import ast
 import shutil
 import json
-import logging
 from pathlib import Path
 from .ingest_tracker import STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
+from .logger import LoggerManager
 
 class UploadOrderManager:
     def __init__(self, order_file_path, settings):
@@ -30,7 +30,9 @@ class UploadOrderManager:
         :param settings: Dictionary containing application settings
         """
         self.settings = settings
-        self.logger = logging.getLogger(__name__)  # Use the existing logger
+        if not LoggerManager.is_initialized():
+            raise RuntimeError("LoggerManager must be initialized before creating UploadOrderManager")
+        self.logger = LoggerManager.get_module_logger(__name__)
         self.order_file_path = Path(order_file_path)
         self.order_info = self._parse_order_file()
         self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))
@@ -65,28 +67,35 @@ class UploadOrderManager:
             with open(self.order_file_path, 'r') as file_obj:
                 lines = file_obj.read().strip().split('\n')
         except (FileNotFoundError, IOError) as e:
+            self.logger.error(f"Failed to read upload order file: {e}")
             raise Exception(f"Unable to read the file at {self.order_file_path}: {e}")
 
         order_data = {}
         for line in lines:
             # Skip empty lines or lines without the expected separator
             if not line.strip() or ': ' not in line:
-                continue  # Or handle accordingly
+                self.logger.debug(f"Skipping invalid line: {line}")  # Added debug logging
+                continue
 
-            key, value = line.split(': ', 1)
-            key = key.strip()
-            value = value.strip().strip('"')  # Remove surrounding whitespace and quotes
+            try:
+                key, value = line.split(': ', 1)
+                key = key.strip()
+                value = value.strip().strip('"')  # Remove surrounding whitespace and quotes
+                
+                # Attempt to parse the value into an appropriate data type
+                parsed_value = value
+                for conversion_func in (int, float, ast.literal_eval):
+                    try:
+                        parsed_value = conversion_func(value)
+                        break # Exit loop if conversion is successful
+                    except (ValueError, SyntaxError):
+                        continue # Try the next conversion function
 
-            # Attempt to parse the value into an appropriate data type
-            parsed_value = value  # Default to the original string
-            for conversion_func in (int, float, ast.literal_eval):
-                try:
-                    parsed_value = conversion_func(value)
-                    break  # Exit loop if conversion is successful
-                except (ValueError, SyntaxError):
-                    continue  # Try the next conversion function
-
-            order_data[key] = parsed_value
+                order_data[key] = parsed_value
+                self.logger.debug(f"Parsed order data: {key} = {parsed_value}")
+            except Exception as e:
+                self.logger.warning(f"Failed to parse line '{line}': {e}")
+                continue
 
         return order_data  # Dictionary representation of the upload order
 
@@ -167,10 +176,11 @@ class UploadOrderManager:
         core_grp_name = self.get_core_grp_name_from_omero_name(omero_grp_name)
 
         if core_grp_name is None:
-            self.logger.error("Failed to retrieve core group name for moving upload order.")
+            self.logger.error(f"Failed to retrieve core group name for OMERO group: {omero_grp_name}")
             return
 
         username = self.order_info.get('Username', 'Unknown')
+        self.logger.debug(f"Processing move for user: {username}, group: {omero_grp_name}")
 
         outcome_dirs = {
             'failed': self.settings['failed_uploads_directory_name'],

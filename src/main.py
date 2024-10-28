@@ -19,10 +19,11 @@ from pathlib import Path
 import time
 from concurrent.futures import ProcessPoolExecutor
 import signal
-from threading import Event, Thread
+from threading import Event, Thread, Lock
 import datetime
 import yaml
 import json
+import sys
 
 # Local module imports
 from utils.logger import setup_logger, log_flag
@@ -30,6 +31,7 @@ from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
 from utils.ingest_tracker import STAGE_DETECTED, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
+from utils.logger import LoggerManager
 
 def load_settings(file_path):
     """
@@ -55,8 +57,14 @@ def create_executor(config):
     return ProcessPoolExecutor(max_workers=config['max_workers'])
 
 def setup_logging(config):
-    logger, listener = setup_logger(__name__, config['log_file_path'])
-    return logger, listener
+    """
+    Setup logging with error handling and resource management.
+    """
+    try:
+        return LoggerManager.setup_logger(__name__, config['log_file_path'])
+    except Exception as e:
+        print(f"Critical error setting up logger: {e}")
+        sys.exit(1)
 
 class DataPackage:
     """
@@ -94,7 +102,7 @@ class IngestionProcess:
     """
     Handles the ingestion process for a data package.
     """
-    def __init__(self, data_package, config, order_manager, logger):
+    def __init__(self, data_package, config, order_manager):
         """
         Initialize the IngestionProcess with a data package, config, order manager, and logger.
         
@@ -106,7 +114,7 @@ class IngestionProcess:
         self.data_package = data_package
         self.config = config
         self.order_manager = order_manager
-        self.logger = logger
+        self.logger = LoggerManager.get_module_logger(__name__)
         
     def import_data_package(self):
         """
@@ -132,7 +140,7 @@ class DirectoryPoller:
     """
     Polls directories for new upload order files and processes them.
     """
-    def __init__(self, config, executor, logger, interval=3):
+    def __init__(self, config, executor, interval=3):
         """
         Initialize the DirectoryPoller.
         
@@ -146,10 +154,11 @@ class DirectoryPoller:
         self.core_grp_names = [group["core_grp_name"] for group in load_settings(config['group_list']) if "core_grp_name" in group]
         self.upload_orders_dir_name = config['upload_orders_dir_name']
         self.executor = executor
-        self.logger = logger
+        self.logger = LoggerManager.get_module_logger(__name__)
         self.interval = interval
         self.shutdown_event = Event()
         self.processing_orders = set()
+        self.processing_lock = Lock()
 
     def start(self):
         """Start the directory polling thread."""
@@ -192,8 +201,9 @@ class DirectoryPoller:
         
         :param order_file: Path to the new or modified file
         """
-        if str(order_file) in self.processing_orders:
-            return  # Order is already being processed
+        with self.processing_lock:
+            if str(order_file) in self.processing_orders:
+                return  # Order is already being processed
 
         self.logger.info(f"Processing new upload order: {order_file}")
         try:
@@ -206,7 +216,7 @@ class DirectoryPoller:
             # Update this part to use the new log_ingestion_step signature
             log_ingestion_step(data_package.__dict__, STAGE_DETECTED)
             
-            ingestion_process = IngestionProcess(data_package, self.config, order_manager, self.logger)
+            ingestion_process = IngestionProcess(data_package, self.config, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
             future.add_done_callback(self.order_completed)
             
@@ -221,15 +231,18 @@ class DirectoryPoller:
         :param future: Future object representing the completed order
         """
         try:
-            result = future.result() # TODO: Handle the result if needed
+            with self.processing_lock:
+                result = future.result() # TODO: Handle the result if needed
         except Exception as e:
-            self.logger.error(f"Error in processing order: {e}")
+            self.logger.error(f"Error in processing order", exc_info=True)
         finally:
-            # Remove the completed order from processing_orders
-            completed_orders = [order for order in self.processing_orders if order not in self.executor._pending_work_items]
-            for order in completed_orders:
-                self.processing_orders.remove(order)
-                self.logger.info(f"Order completed and removed from processing list: {order}")
+            with self.processing_lock:
+                # Remove the completed order from processing_orders
+                completed_orders = [order for order in self.processing_orders if order not in self.executor._pending_work_items]
+                for order in completed_orders:
+                    self.processing_orders.remove(order)
+                    self.logger.info(f"Order completed and removed from processing list: {order}")
+                self.processing_orders.clear()
 
     def log_future_exception(self, future):
         """
@@ -242,12 +255,16 @@ class DirectoryPoller:
         except Exception as e:
             self.logger.error(f"Error in background task: {e}")
 
-def run_application(config, groups_info, executor, logger, listener):
+def run_application(config, groups_info, executor):
     # Initialize system configurations and logging
+    if not LoggerManager.is_initialized():
+        raise RuntimeError("Logger must be initialized before running application")
+    
+    logger = LoggerManager.get_module_logger(__name__)
     initialize_system(config)
     
-    # Define a shutdown event to manage the graceful shutdown of the application
     shutdown_event = Event()
+    shutdown_timeout = config.get('shutdown_timeout', 30)
 
     def graceful_exit(signum, frame):
         logger.info("Graceful shutdown initiated.")
@@ -258,7 +275,7 @@ def run_application(config, groups_info, executor, logger, listener):
     signal.signal(signal.SIGTERM, graceful_exit)
     
     # Start the DirectoryPoller to begin monitoring for changes
-    poller = DirectoryPoller(config, executor, logger)
+    poller = DirectoryPoller(config, executor)
     poller.start()
     log_flag(logger, 'start')
     start_time = datetime.datetime.now()
@@ -269,18 +286,31 @@ def run_application(config, groups_info, executor, logger, listener):
             time.sleep(1)
     finally:
         # Cleanup operations
+        logger.info("Initiating shutdown sequence...")
         log_flag(logger, 'end') 
         poller.stop()
-        executor.shutdown(wait=True)
-        listener.stop()  # Stop the QueueListener before exiting
+        executor.shutdown(timeout=shutdown_timeout)
+        LoggerManager.cleanup(timeout=shutdown_timeout)
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 
 def main():
-    config, groups_info = load_config()
-    executor = create_executor(config)
-    logger, listener = setup_logging(config)  # Get both logger and listener
-    run_application(config, groups_info, executor, logger, listener)  # Pass both to run_application
+    try:
+        config, groups_info = load_config()
+        # Setup logging first
+        LoggerManager.setup_logger(__name__, config['log_file_path'])
+        logger = LoggerManager.get_module_logger(__name__)
+        
+        # Then create executor with logging
+        logger.info("Creating process executor...")
+        executor = create_executor(config)
+        
+        run_application(config, groups_info, executor)
+    except Exception as e:
+        print(f"Fatal error in main: {e}")
+        sys.exit(1)
+    finally:
+        LoggerManager.cleanup()
 
 if __name__ == "__main__":
     main()
