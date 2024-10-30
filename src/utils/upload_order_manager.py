@@ -18,7 +18,8 @@ import ast
 import shutil
 import json
 from pathlib import Path
-from .ingest_tracker import STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED, log_ingestion_step
+from .ingest_tracker import IngestionTracking, log_ingestion_step
+from IngestionTracking.StageEnum import MOVED_COMPLETED as STAGE_MOVED_COMPLETED, MOVED_FAILED as STAGE_MOVED_FAILED
 from .logger import LoggerManager
 
 class UploadOrderManager:
@@ -139,11 +140,18 @@ class UploadOrderManager:
         Create a list of file names from the 'Files' attribute and add it as 'file_names' to order_info.
         """
         if 'Files' in self.order_info:
-            self.order_info['file_names'] = [Path(file_path).name for file_path in self.order_info['Files']]
+            file_names = [Path(file_path).name for file_path in self.order_info['Files']]
+            self.order_info['file_names'] = self.format_file_names(file_names)
             self.logger.debug(f"Created file_names list with {len(self.order_info['file_names'])} entries")
         else:
             self.order_info['file_names'] = []
             self.logger.warning("No 'Files' attribute found in order_info. Created empty file_names list.")
+            
+    def _format_file_names(self, file_names):
+        """Format the list of file names to show the first and last items with ellipsis."""
+        if len(file_names) > 2:
+            return [file_names[0], '...', file_names[-1]]  # List with first, ellipsis, last
+        return file_names  # Return the original list for 1 or 2 items
         
     def log_order_movement(self, outcome):
         """

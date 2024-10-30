@@ -15,20 +15,15 @@
 # ingest_tracker.py
 
 from .logger import LoggerManager
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text
+import enum
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Enum, Index
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func
 from datetime import datetime
 import json
 
-STAGE_IMPORTED = "Data Imported"
-STAGE_MOVED_COMPLETED = "Order Moved to Completed"
-STAGE_MOVED_FAILED = "Order Moved to Failed"
-STAGE_DETECTED = "Data Package Detected"
-
 Base = declarative_base()
-
 
 class IngestionTracking(Base):
     """Database model for tracking ingestion steps."""
@@ -36,14 +31,21 @@ class IngestionTracking(Base):
 
     id = Column(Integer, primary_key=True)
     group_name = Column(String, nullable=False)
-    user_name = Column(String, nullable=False)
+    user_name = Column(String, nullable=False, index=True)  # Add index for faster filtering
     data_package = Column(String, nullable=False)
-    stage = Column(String, nullable=False)
-    uuid = Column(String, nullable=False)
+    
+    class StageEnum(str, enum.Enum):
+        IMPORTED = "Data Imported"
+        MOVED_COMPLETED = "Order Moved to Completed"
+        MOVED_FAILED = "Order Moved to Failed"
+        DETECTED = "Data Package Detected"
+
+    stage = Column(Enum(StageEnum), nullable=False)  # Use Enum for stage
+    uuid = Column(String(36), nullable=False, index=True)  # Add index for faster joining/grouping
     timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)  # Underlying storage
     _file_names = Column("file_names", Text, nullable=True)  # New column for file names
-    
+
     @property
     def files(self):
         return json.loads(self._files)
@@ -59,6 +61,9 @@ class IngestionTracking(Base):
     @file_names.setter
     def file_names(self, file_names):
         self._file_names = json.dumps(file_names)
+        
+# Define the index outside of the class
+Index('ix_uuid_timestamp', IngestionTracking.uuid, IngestionTracking.timestamp)
 
 
 class IngestTracker:

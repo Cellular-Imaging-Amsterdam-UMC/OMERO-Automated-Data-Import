@@ -20,7 +20,8 @@ import functools
 from omero.gateway import BlitzGateway
 from omero.sys import Parameters
 from .logger import LoggerManager
-from utils.ingest_tracker import STAGE_IMPORTED, log_ingestion_step
+from utils.ingest_tracker import IngestionTracking, log_ingestion_step
+from IngestionTracking.StageEnum import IMPORTED as STAGE_IMPORTED
 import Ice
 import time
 from omero.cli import CLI
