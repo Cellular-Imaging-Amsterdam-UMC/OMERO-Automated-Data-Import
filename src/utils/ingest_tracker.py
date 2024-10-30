@@ -40,7 +40,7 @@ class IngestionTracking(Base):
     data_package = Column(String, nullable=False)
     stage = Column(String, nullable=False)
     uuid = Column(String, nullable=False)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)  # Underlying storage
     _file_names = Column("file_names", Text, nullable=True)  # New column for file names
     
