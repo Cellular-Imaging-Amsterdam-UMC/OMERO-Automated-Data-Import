@@ -18,8 +18,7 @@ import ast
 import shutil
 import json
 from pathlib import Path
-from .ingest_tracker import IngestionTracking, log_ingestion_step
-from IngestionTracking.StageEnum import MOVED_COMPLETED as STAGE_MOVED_COMPLETED, MOVED_FAILED as STAGE_MOVED_FAILED
+from .ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
 from .logger import LoggerManager
 
 class UploadOrderManager:
@@ -141,7 +140,7 @@ class UploadOrderManager:
         """
         if 'Files' in self.order_info:
             file_names = [Path(file_path).name for file_path in self.order_info['Files']]
-            self.order_info['file_names'] = self.format_file_names(file_names)
+            self.order_info['file_names'] = self._format_file_names(file_names)
             self.logger.debug(f"Created file_names list with {len(self.order_info['file_names'])} entries")
         else:
             self.order_info['file_names'] = []

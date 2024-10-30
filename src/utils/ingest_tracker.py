@@ -23,6 +23,11 @@ from sqlalchemy.sql import func
 from datetime import datetime
 import json
 
+STAGE_IMPORTED = "Data Imported"
+STAGE_MOVED_COMPLETED = "Order Moved to Completed"
+STAGE_MOVED_FAILED = "Order Moved to Failed"
+STAGE_DETECTED = "Data Package Detected"
+
 Base = declarative_base()
 
 class IngestionTracking(Base):
@@ -33,14 +38,7 @@ class IngestionTracking(Base):
     group_name = Column(String, nullable=False)
     user_name = Column(String, nullable=False, index=True)  # Add index for faster filtering
     data_package = Column(String, nullable=False)
-    
-    class StageEnum(str, enum.Enum):
-        IMPORTED = "Data Imported"
-        MOVED_COMPLETED = "Order Moved to Completed"
-        MOVED_FAILED = "Order Moved to Failed"
-        DETECTED = "Data Package Detected"
-
-    stage = Column(Enum(StageEnum), nullable=False)  # Use Enum for stage
+    stage = Column(String, nullable=False)  
     uuid = Column(String(36), nullable=False, index=True)  # Add index for faster joining/grouping
     timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)  # Underlying storage

@@ -30,8 +30,7 @@ from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import IngestionTracking, log_ingestion_step
-from IngestionTracking.StageEnum import DETECTED as STAGE_DETECTED, MOVED_COMPLETED as STAGE_MOVED_COMPLETED, MOVED_FAILED as STAGE_MOVED_FAILED
+from utils.ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_DETECTED, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
 from utils.logger import LoggerManager
 
 def load_settings(file_path):
