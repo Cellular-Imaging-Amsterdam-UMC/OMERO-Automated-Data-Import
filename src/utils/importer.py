@@ -114,11 +114,39 @@ class DataPackageImporter:
                     f'--transfer={transfer_type}',
                     '--no-upgrade',
                     '--file', f"logs/cli.{uuid}.logs",
-                    '--errs', f"logs/cli.{uuid}.errs"]
-        
+                    '--errs', f"logs/cli.{uuid}.errs",
+                    ]
+        # Add optional arguments based on config values
+        if 'parallel_upload_per_worker' in self.config:
+            arguments.append('--parallel-upload')
+            arguments.append(str(self.config['parallel_upload_per_worker']))
+
+        if 'parallel_filesets_per_worker' in self.config:
+            arguments.append('--parallel-fileset')
+            arguments.append(str(self.config['parallel_filesets_per_worker']))
+
+        # Add skip options based on config values
+        if self.config.get('skip_all', False):
+            arguments.append('--skip')
+            arguments.append('all')
+        else:
+            if self.config.get('skip_checksum', False):
+                arguments.append('--skip')
+                arguments.append('checksum')
+            if self.config.get('skip_minmax', False):
+                arguments.append('--skip')
+                arguments.append('minmax')
+            if self.config.get('skip_thumbnails', False):
+                arguments.append('--skip')
+                arguments.append('thumbnails')
+            if self.config.get('skip_upgrade', False):
+                arguments.append('--skip')
+                arguments.append('upgrade')
+
         # Add depth argument if provided
         if depth:
-            arguments.append(f'--depth={depth}')
+            arguments.append('--depth')
+            arguments.append(str(depth))
         
         # Add target-specific argument
         if target_type == 'screen':
@@ -189,8 +217,21 @@ class DataPackageImporter:
             return plate_ids
 
     @connection
-    def import_dataset(self, conn, target, dataset, transfer="ln_s"):
-        return ezomero.ezimport(conn, target, dataset, transfer)
+    def import_dataset(self, conn, target, dataset, transfer="ln_s", depth=None):
+        # Initialize a dict for named kwargs
+        kwargs = {"transfer": transfer}
+
+        # Add parallel options to kwargs if configured
+        if 'parallel_upload_per_worker' in self.config:
+            kwargs['--parallel-upload'] = str(self.config['parallel_upload_per_worker'])
+        if 'parallel_filesets_per_worker' in self.config:
+            kwargs['--parallel-fileset'] = str(self.config['parallel_filesets_per_worker'])
+
+        # Add depth argument to kwargs if provided
+        if depth:
+            kwargs['depth'] = str(depth)
+
+        return ezomero.ezimport(conn, target, dataset, **kwargs)
 
     def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None):
         """

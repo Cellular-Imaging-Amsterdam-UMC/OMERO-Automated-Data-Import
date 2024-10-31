@@ -70,7 +70,7 @@ class DataPackage:
     """
     Represents a data package containing information from the upload order.
     """
-    def __init__(self, order_data, base_dir):
+    def __init__(self, order_data, base_dir, order_file):
         """
         Initialize the DataPackage with order data and base directory.
         
@@ -79,6 +79,7 @@ class DataPackage:
         """
         self.__dict__.update(order_data)
         self.base_dir = base_dir
+        self.order_file = str(order_file)
 
     def __str__(self):
         """
@@ -130,11 +131,11 @@ class IngestionProcess:
             else:
                 self.order_manager.move_upload_order('completed')
                 self.logger.info(f"Data package {self.data_package.get('UUID')} in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")            
-            return successful_uploads, failed_uploads, import_failed
+            return self.data_package.order_file
         except Exception as e:
             self.logger.error(f"Error during import_data_package: {e}")
             self.order_manager.move_upload_order('failed')
-            return [], [], True
+            return self.data_package.order_file
 
 class DirectoryPoller:
     """
@@ -189,6 +190,7 @@ class DirectoryPoller:
         :param order_file: Path to the file
         :return: True if the file name is valid, False otherwise
         """
+        #TODO: Check that it is version 3(or current version of the order file format)
         try:
             datetime.datetime.strptime(order_file.stem, "%Y_%m_%d_%H-%M-%S")
             return True
@@ -203,46 +205,44 @@ class DirectoryPoller:
         """
         with self.processing_lock:
             if str(order_file) in self.processing_orders:
+                self.logger.debug(f"Not processing {order_file}, it's already being processed.")
                 return  # Order is already being processed
+            else:
+                self.processing_orders.add(str(order_file))
 
         self.logger.info(f"Processing new upload order: {order_file}")
         try:
+            #TODO: Revise necessity of the upload_order_manager util.
             order_manager = UploadOrderManager(str(order_file), self.config)
             order_info = order_manager.get_order_info()
             
-            data_package = DataPackage(order_info, self.base_dir)
+            data_package = DataPackage(order_info, self.base_dir, order_file)
             self.logger.info(f"DataPackage detected: {data_package}")
             
             # Update this part to use the new log_ingestion_step signature
             log_ingestion_step(data_package.__dict__, STAGE_DETECTED)
             
+            # Subprocessor function called
             ingestion_process = IngestionProcess(data_package, self.config, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
-            future.add_done_callback(self.order_completed)
+
+            # When subprocessor function finishes, order_completed is called
+            future.add_done_callback(self.order_completed)           
             
-            self.processing_orders.add(str(order_file))
         except Exception as e:
             self.logger.error(f"Error processing upload order {order_file}: {e}")
 
     def order_completed(self, future):
         """
-        Handle the completion of an upload order.
+        Handle the completion of an upload order by removing the completed order from processing_orders
         
         :param future: Future object representing the completed order
         """
-        try:
-            with self.processing_lock:
-                result = future.result() # TODO: Handle the result if needed
-        except Exception as e:
-            self.logger.error(f"Error in processing order", exc_info=True)
-        finally:
-            with self.processing_lock:
-                # Remove the completed order from processing_orders
-                completed_orders = [order for order in self.processing_orders if order not in self.executor._pending_work_items]
-                for order in completed_orders:
-                    self.processing_orders.remove(order)
-                    self.logger.info(f"Order completed and removed from processing list: {order}")
-                self.processing_orders.clear()
+        with self.processing_lock:
+            completed_order = future.result()
+            self.logger.debug(f"Completed Order: {completed_order}")
+            self.processing_orders.remove(completed_order)
+            self.logger.info(f"Order completed and removed from processing list: {completed_order}.")
 
     def log_future_exception(self, future):
         """
