@@ -205,12 +205,16 @@ class DirectoryPoller:
         """
         with self.processing_lock:
             if str(order_file) in self.processing_orders:
-                self.logger.debug(f"Not processing {order_file}, it's already being processed.")
+                # Too much logging if you turn this on, but it might be useful info if you run into duplicate jobs
+                # self.logger.debug(f"Orders: {self.processing_orders}")
+                # self.logger.debug(f"Not processing {order_file}, it's already being processed.")
                 return  # Order is already being processed
             else:
+                self.logger.debug(f"Orders: {self.processing_orders}")
                 self.processing_orders.add(str(order_file))
 
         self.logger.info(f"Processing new upload order: {order_file}")
+        self.logger.debug(f"Orders: {self.processing_orders}")
         try:
             #TODO: Revise necessity of the upload_order_manager util.
             order_manager = UploadOrderManager(str(order_file), self.config)
