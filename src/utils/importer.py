@@ -20,12 +20,14 @@ import functools
 from omero.gateway import BlitzGateway
 from omero.sys import Parameters
 from .logger import LoggerManager
-from utils.ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_IMPORTED
+from utils.ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
 import Ice
 import time
 from omero.cli import CLI
 from omero.rtypes import rstring, rlong
 from omero.plugins.sessions import SessionsControl
+import subprocess
+import re
 from importlib import import_module
 ImportControl = import_module("omero.plugins.import").ImportControl
 
@@ -59,6 +61,122 @@ def connection(func):
                 raise ConnectionError("Could not connect to the OMERO server")
                 
     return wrapper_connection
+
+
+class DataProcessor:
+    def __init__(self, data_package, logger):
+        self.data_package = data_package
+        self.logger = logger
+
+    def has_preprocessing(self):
+        """Check if any 'preprocessing_' keys are present in the data package."""
+        return any(key.startswith("preprocessing_") for key in self.data_package)
+
+    def get_preprocessing_args(self):
+        """Generate podman command arguments from 'preprocessing_' keys in the data package."""
+        if not self.has_preprocessing():
+            self.logger.info("No preprocessing options found.")
+            return None, None, None
+
+        # Retrieve preprocessing container, which should be unique
+        container = self.data_package.get("preprocessing_container")
+        if not container:
+            self.logger.warning("No 'preprocessing_container' defined in data package.")
+            return None, None, None
+        # Add 'docker.io/' prefix if not already present
+        if not container.startswith("docker.io/"):
+            container = "docker.io/" + container
+
+        # Build kwargs from remaining 'preprocessing_' keys (exclude 'preprocessing_container')
+        kwargs = []
+        mount_path = None
+        for key, value in self.data_package.items():
+            if key.startswith("preprocessing_") and key != "preprocessing_container":
+                # Check if the value contains a placeholder like {Files}
+                if isinstance(value, str) and "{Files}" in value:
+                    # Replace {Files} with the actual file paths
+                    files = self.data_package.get("Files", [])
+                    if files:
+                        # Replace {Files} with the actual file paths, change the parent path to /data/
+                        new_files = [os.path.join("/data", os.path.basename(f)) for f in files]
+                        value = value.replace("{Files}", " ".join(new_files))
+
+                        # Gather the mount path (replace parent dir with /data)
+                        file_dirs = [os.path.dirname(f) for f in files]
+                        mount_path = os.path.commonpath(file_dirs)
+
+                # Convert key to "--key=value" format
+                arg_key = key.replace("preprocessing_", "")
+                kwargs.append(f"--{arg_key}={value}")
+
+        return container, kwargs, mount_path
+
+    
+    def replace_placeholders(self, value):
+        """Replace placeholders like {key} with corresponding data package values."""
+        # Find all placeholders in the format {key}
+        placeholders = re.findall(r'\{(\w+)\}', value)
+
+        # Replace each placeholder with its corresponding value from data_package
+        for placeholder in placeholders:
+            replacement_value = self.data_package.get(placeholder)
+            if replacement_value is not None:
+                value = value.replace(f"{{{placeholder}}}", str(replacement_value))
+            else:
+                self.logger.warning(f"Placeholder '{placeholder}' not found in data package.")
+
+        return value
+
+    def build_podman_command(self):
+        """Constructs the full Podman command."""
+        container, kwargs, mount_path = self.get_preprocessing_args()
+        if not container:
+            return None
+
+        # Predefined Podman settings
+        podman_settings = ["podman", "run", "--rm", "--userns=keep-id"]  # Updated settings
+        # Add the volume mount if mount_path is available
+        if mount_path:
+            podman_settings = podman_settings + ["-v", f"{mount_path}:/data"]
+            
+        podman_command = podman_settings + [container] + kwargs        
+
+        self.logger.info(f"Podman command: {' '.join(podman_command)}")
+        return podman_command
+    
+    def run(self, dry_run=False):
+        """Run the constructed podman command and check its exit status."""
+        podman_command = self.build_podman_command()
+        if not podman_command:
+            self.logger.error("Failed to build podman command.")
+            return False
+        
+        if dry_run:
+            # If dry_run is enabled, just log the command and return True (as if successful)
+            self.logger.info(f"Dry run enabled. Podman command would have been: {' '.join(podman_command)}")
+            return True 
+        
+        try:
+            # Run the command and wait for it to complete
+            result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+            # Interpret the exit code and handle the output
+            if result.returncode == 0:
+                # Success
+                self.logger.info("Podman command executed successfully.")
+                self.logger.info(f"Output: {result.stdout.decode()}")
+                return True
+            else:
+                # Unexpected exit code (non-zero)
+                self.logger.info(f"Podman command failed with exit code {result.returncode}.")
+                self.logger.info(f"Error Output: {result.stderr.decode()}")
+                return False
+
+        except subprocess.CalledProcessError as e:
+            # Handle case where the command fails and raise an exception
+            self.logger.info(f"Podman command failed with error: {e.stderr.decode()}")
+            return False
+
 
 class DataPackageImporter:
     """
@@ -260,7 +378,7 @@ class DataPackageImporter:
         for file_path in file_paths:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
-                if screen_id:
+                if screen_id:                    
                     self.logger.debug(f"Uploading to screen: {screen_id}")
                     imported = self.import_to_omero( 
                             file_path=str(file_path),
@@ -360,6 +478,20 @@ class DataPackageImporter:
 
                         file_paths = self.data_package.get('Files', [])
                         self.logger.debug(f"File paths to be uploaded: {file_paths}")
+                        
+                        # Run preprocessing if needed
+                        processor = DataProcessor(data_package, logger)
+                        if processor.has_preprocessing:
+                            log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
+                            success = processor.run(dry_run=True)
+                            if success:
+                                self.logger.info("Preprocessing ran successfully.")
+                            else:
+                                self.logger.error("There was an issue with running the preprocessing container.")
+                                all_failed_uploads.extend([(file_path, dataset_id or screen_id, os.path.basename(file_path), None) for file_path in file_paths])
+                                return all_successful_uploads, all_failed_uploads, False   
+                        else:
+                            self.logger.info("No preprocessing required.") 
 
                         # Call upload_files with the appropriate ID
                         successful_uploads, failed_uploads = self.upload_files(

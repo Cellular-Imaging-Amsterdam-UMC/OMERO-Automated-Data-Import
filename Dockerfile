@@ -16,6 +16,7 @@ RUN conda install -n auto-import-env -c conda-forge omero-py -y && \
 ENV PATH /opt/conda/envs/auto-import-env/bin:$PATH
 
 # Install git and system prerequisites for building PostgreSQL drivers
+# And for podman in podman
 RUN apt-get update && apt-get install -y \
     git \
     python3-dev \
@@ -41,6 +42,21 @@ RUN chmod +x /auto-importer/src/main.py
 RUN groupadd -g 1000 autoimportgroup && \
     useradd -m -r -u 1000 -g autoimportgroup autoimportuser
 
+# ----------------- Setting up Podman in Podman ---------------- #
+# Taking inspiration from RHEL/Podman's own blogs:
+#   - https://www.redhat.com/en/blog/podman-inside-container
+#   - https://github.com/containers/image_build/blob/main/podman/Containerfile
+#
+# Below setup still requires specifically that the user (autoimportuser here)
+# is id 1000:1000 and that we use these tags when running:
+#
+# --privileged 
+# --device /dev/fuse 
+# --security-opt label=disable 
+#
+# It is also quite specific to Podman in Podman, so that's locked in.
+# -------------------------------------------------------------- # 
+
 # Pre-create necessary directories in the user's home directory
 RUN mkdir -p /home/autoimportuser/.local/share/containers/storage /home/autoimportuser/.config/containers
 
@@ -63,6 +79,14 @@ RUN sed -e 's|^#mount_program|mount_program|g' \
            /etc/containers/storage.conf \
            > /etc/containers/storage.conf
 
+# Set up internal Podman to pass subscriptions down from host to internal container
+RUN printf '/run/secrets/etc-pki-entitlement:/run/secrets/etc-pki-entitlement\n/run/secrets/rhsm:/run/secrets/rhsm\n' > /etc/containers/mounts.conf
+
+# Note VOLUME options must always happen after the chown call above
+# RUN commands can not modify existing volumes
+VOLUME /var/lib/containers
+VOLUME /home/autoimportuser/.local/share/containers
+
 # Create necessary directories for shared storage and lock files
 RUN mkdir -p /var/lib/shared/overlay-images \
              /var/lib/shared/overlay-layers \
@@ -73,8 +97,6 @@ RUN mkdir -p /var/lib/shared/overlay-images \
     touch /var/lib/shared/vfs-images/images.lock && \
     touch /var/lib/shared/vfs-layers/layers.lock
 
-# Set up internal Podman to pass subscriptions down from host to internal container
-RUN printf '/run/secrets/etc-pki-entitlement:/run/secrets/etc-pki-entitlement\n/run/secrets/rhsm:/run/secrets/rhsm\n' > /etc/containers/mounts.conf
 
 # Set permissions for Podman tools
 RUN chmod 4755 /usr/bin/newgidmap && \

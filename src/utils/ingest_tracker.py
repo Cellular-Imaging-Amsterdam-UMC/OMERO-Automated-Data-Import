@@ -27,6 +27,7 @@ STAGE_IMPORTED = "Data Imported"
 STAGE_MOVED_COMPLETED = "Order Moved to Completed"
 STAGE_MOVED_FAILED = "Order Moved to Failed"
 STAGE_DETECTED = "Data Package Detected"
+STAGE_PREPROCESSING = "Preprocessing Data"
 
 Base = declarative_base()
 
