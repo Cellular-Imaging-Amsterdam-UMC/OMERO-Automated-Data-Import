@@ -102,7 +102,7 @@ class DataProcessor:
 
                 # Convert key to "--key=value" format
                 arg_key = key.replace("preprocessing_", "")
-                kwargs.append(f"--{arg_key}={value}")
+                kwargs.append(f"--{arg_key} {value}")
 
         return container, kwargs, mount_path
 
