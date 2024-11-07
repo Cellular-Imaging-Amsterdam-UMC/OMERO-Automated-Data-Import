@@ -72,7 +72,7 @@ class DataProcessor:
         """Check if any 'preprocessing_' keys are present in the data package."""
         return any(key.startswith("preprocessing_") for key in self.data_package)
 
-    def get_preprocessing_args(self):
+    def get_preprocessing_args(self, file_path):
         """Generate podman command arguments from 'preprocessing_' keys in the data package."""
         if not self.has_preprocessing():
             self.logger.info("No preprocessing options found.")
@@ -84,7 +84,7 @@ class DataProcessor:
             self.logger.warning("No 'preprocessing_container' defined in data package.")
             return None, None, None
         # Add 'docker.io/' prefix if not already present
-        if not container.startswith("docker.io/"):
+        if not container.startswith("docker.io/"): #TODO: Remove hard code
             container = "docker.io/" + container
 
         # Build kwargs from remaining 'preprocessing_' keys (exclude 'preprocessing_container')
@@ -94,16 +94,13 @@ class DataProcessor:
             if key.startswith("preprocessing_") and key != "preprocessing_container":
                 # Check if the value contains a placeholder like {Files}
                 if isinstance(value, str) and "{Files}" in value:
-                    # Replace {Files} with the actual file paths
-                    files = self.data_package.get("Files", [])
-                    if files:
-                        # Replace {Files} with the actual file paths, change the parent path to /data/
-                        new_files = [os.path.join("/data", os.path.basename(f)) for f in files]
-                        value = value.replace("{Files}", " ".join(new_files))
+                    if file_path:
+                        # Replace {Files} with the file paths in the secondary mount
+                        data_file_path = os.path.join("/data", os.path.basename(file_path))
+                        value = value.replace("{Files}", data_file_path)
 
                         # Gather the mount path (replace parent dir with /data)
-                        file_dirs = [os.path.dirname(f) for f in files]
-                        mount_path = os.path.commonpath(file_dirs)
+                        mount_path = os.path.dirname(file_path)
 
                 # Convert key to "--key=value" format
                 arg_key = key.replace("preprocessing_", "")
@@ -127,9 +124,9 @@ class DataProcessor:
 
         return value
 
-    def build_podman_command(self):
+    def build_podman_command(self, file_path):
         """Constructs the full Podman command."""
-        container, kwargs, mount_path = self.get_preprocessing_args()
+        container, kwargs, mount_path = self.get_preprocessing_args(file_path)
         if not container:
             return None
 
@@ -146,36 +143,42 @@ class DataProcessor:
     
     def run(self, dry_run=False):
         """Run the constructed podman command and check its exit status."""
-        podman_command = self.build_podman_command()
-        if not podman_command:
-            self.logger.error("Failed to build podman command.")
-            return False
-        
-        if dry_run:
-            # If dry_run is enabled, just log the command and return True (as if successful)
-            self.logger.info(f"Dry run enabled. Podman command would have been: {' '.join(podman_command)}")
-            return True 
-        
-        try:
-            # Run the command and wait for it to complete
-            result = subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-            # Interpret the exit code and handle the output
-            if result.returncode == 0:
-                # Success
-                self.logger.info("Podman command executed successfully.")
-                self.logger.info(f"Output: {result.stdout.decode()}")
-                return True
-            else:
-                # Unexpected exit code (non-zero)
-                self.logger.info(f"Podman command failed with exit code {result.returncode}.")
-                self.logger.info(f"Error Output: {result.stderr.decode()}")
+        file_paths = self.data_package.get("Files", [])
+        for file_path in file_paths:
+            self.logger.info(f"Processing file path: {file_path}")
+            
+            podman_command = self.build_podman_command(file_path)
+            if not podman_command:
+                self.logger.error("Failed to build podman command.")
                 return False
 
-        except subprocess.CalledProcessError as e:
-            # Handle case where the command fails and raise an exception
-            self.logger.info(f"Podman command failed with error: {e.stderr.decode()}")
-            return False
+            if dry_run:
+                # If dry_run is enabled, just log the command and return True (as if successful)
+                self.logger.info(f"Dry run enabled. Podman command would have been: {' '.join(podman_command)}")
+                return True 
+
+            try:
+                # Run the command and wait for it to complete
+                result = subprocess.run(podman_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+                # Interpret the exit code and handle the output
+                if result.returncode == 0:
+                    # Success
+                    self.logger.info("Podman command executed successfully.")
+                    self.logger.info(f"Output: {result.stdout.decode()}")
+                    pass
+                else:
+                    # Unexpected exit code (non-zero)
+                    self.logger.info(f"Podman command failed with exit code {result.returncode}.")
+                    self.logger.info(f"Error Output: {result.stderr.decode()}")
+                    return False
+
+            except subprocess.CalledProcessError as e:
+                # Handle case where the command fails and raise an exception
+                self.logger.info(f"Podman command failed with error: {e.stderr.decode()}")
+                return False
+
+        return True
 
 
 class DataPackageImporter:

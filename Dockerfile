@@ -25,19 +25,6 @@ RUN apt-get update && apt-get install -y \
     fuse-overlayfs \
     podman
 
-# Clone the specific branch of the repository
-ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
-RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
-
-# Install the Python dependencies from the repository
-RUN pip install /auto-importer
-
-# Make the logs directory
-RUN mkdir /auto-importer/logs
-
-# Ensure your application's startup script is executable
-RUN chmod +x /auto-importer/src/main.py
-
 # Create a group and user with specified GID and UID
 RUN groupadd -g 1000 autoimportgroup && \
     useradd -m -r -u 1000 -g autoimportgroup autoimportuser
@@ -105,6 +92,19 @@ RUN chmod 4755 /usr/bin/newgidmap && \
 # Set environment variable to allow custom Podman configurations
 ENV _CONTAINERS_USERNS_CONFIGURED="" \
     BUILDAH_ISOLATION=chroot
+
+# Clone the specific branch of the repository
+ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
+RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
+
+# Install the Python dependencies from the repository
+RUN pip install /auto-importer
+
+# Make the logs directory
+RUN mkdir /auto-importer/logs
+
+# Ensure your application's startup script is executable
+RUN chmod +x /auto-importer/src/main.py
 
 # Switch to the new user for all subsequent commands
 USER autoimportuser
