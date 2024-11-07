@@ -84,7 +84,6 @@ RUN mkdir -p /var/lib/shared/overlay-images \
     touch /var/lib/shared/vfs-images/images.lock && \
     touch /var/lib/shared/vfs-layers/layers.lock
 
-
 # Set permissions for Podman tools
 RUN chmod 4755 /usr/bin/newgidmap && \
     chmod 4755 /usr/bin/newuidmap
@@ -92,6 +91,8 @@ RUN chmod 4755 /usr/bin/newgidmap && \
 # Set environment variable to allow custom Podman configurations
 ENV _CONTAINERS_USERNS_CONFIGURED="" \
     BUILDAH_ISOLATION=chroot
+
+
 
 # Clone the specific branch of the repository
 ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
@@ -102,6 +103,9 @@ RUN pip install /auto-importer
 
 # Make the logs directory
 RUN mkdir /auto-importer/logs
+
+# Ensure proper permissions for all relevant directories in the user's auto-importer directory
+RUN chown -R autoimportuser:autoimportgroup /auto-importer/logs
 
 # Ensure your application's startup script is executable
 RUN chmod +x /auto-importer/src/main.py

@@ -146,7 +146,7 @@ class DataProcessor:
         file_paths = self.data_package.get("Files", [])
         for file_path in file_paths:
             self.logger.info(f"Processing file path: {file_path}")
-            
+
             podman_command = self.build_podman_command(file_path)
             if not podman_command:
                 self.logger.error("Failed to build podman command.")
@@ -483,7 +483,7 @@ class DataPackageImporter:
                         self.logger.debug(f"File paths to be uploaded: {file_paths}")
                         
                         # Run preprocessing if needed
-                        processor = DataProcessor(data_package, logger)
+                        processor = DataProcessor(self.data_package, self.logger)
                         if processor.has_preprocessing:
                             log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
                             success = processor.run(dry_run=True)
@@ -512,7 +512,8 @@ class DataPackageImporter:
                         if successful_uploads: 
                             log_ingestion_step(self.data_package, STAGE_IMPORTED)
                             
-                    return all_successful_uploads, all_failed_uploads, False    
+                    return all_successful_uploads, all_failed_uploads, False 
+   
             except Exception as e:
                 if isinstance(e, Ice.ConnectionRefusedException) or "connect" in f"{e}".lower():
                     retry_count += 1
