@@ -37,29 +37,27 @@ RETRY_DELAY = 5  # Delay between retries (in seconds)
 def connection(func):
     @functools.wraps(func)
     def wrapper_connection(self, *args, **kwargs):
-        # Step 1: Create a connection as the root user
-        with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
-            self.logger.debug("Connected (again) as root")
-            if root_conn.connect():
-                uuid = self.data_package.get('UUID')
-                intended_username = self.data_package.get('Username')
-                group_id = self.data_package.get('GroupID')
-                group_name = self.data_package.get('Group')
-                
-                # Step 2: Switch to the intended user's session
-                with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
-                    user_conn.keepAlive()  # Keep the session alive
-                    self.logger.debug(f"Connected (again) as user {intended_username}")
-                    # Set the correct group for the session
-                    user_conn.setGroupForSession(group_id)
-                    self.logger.debug(f"Session group set to {group_name}")
-
-                    # Step 3: Execute the original function with the user_conn
-                    result = func(self, user_conn, *args, **kwargs)
-                    return result
-            else:
-                raise ConnectionError("Could not connect to the OMERO server")
-                
+        try:
+            with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
+                self.logger.debug("Connected (again) as root")
+                if root_conn.connect():
+                    uuid = self.data_package.get('UUID')
+                    intended_username = self.data_package.get('Username')
+                    group_id = self.data_package.get('GroupID')
+                    group_name = self.data_package.get('Group')
+                    
+                    with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
+                        user_conn.keepAlive()
+                        self.logger.debug(f"Connected (again) as user {intended_username}")
+                        user_conn.setGroupForSession(group_id)
+                        self.logger.debug(f"Session group set to {group_name}")
+                        result = func(self, user_conn, *args, **kwargs)
+                        return result
+                else:
+                    raise ConnectionError("Could not connect to the OMERO server")
+        except Exception as e:
+            self.logger.error(f"Exception in connection wrapper: {e}", exc_info=True)
+            raise
     return wrapper_connection
 
 
@@ -143,6 +141,10 @@ class DataProcessor:
     
     def run(self, dry_run=False):
         """Run the constructed podman command and check its exit status."""
+        if not self.has_preprocessing():
+            self.logger.info("No preprocessing options found.")
+            return True  # Indicate success since there's nothing to do
+
         file_paths = self.data_package.get("Files", [])
         for file_path in file_paths:
             self.logger.info(f"Processing file path: {file_path}")
@@ -153,29 +155,22 @@ class DataProcessor:
                 return False
 
             if dry_run:
-                # If dry_run is enabled, just log the command and return True (as if successful)
                 self.logger.info(f"Dry run enabled. Podman command would have been: {' '.join(podman_command)}")
-                return True 
+                continue  # Continue to next file_path
 
             try:
                 # Run the command and wait for it to complete
                 result = subprocess.run(podman_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-                # Interpret the exit code and handle the output
                 if result.returncode == 0:
-                    # Success
                     self.logger.info("Podman command executed successfully.")
                     self.logger.info(f"Output: {result.stdout.decode()}")
-                    pass
                 else:
-                    # Unexpected exit code (non-zero)
                     self.logger.info(f"Podman command failed with exit code {result.returncode}.")
                     self.logger.info(f"Error Output: {result.stderr.decode()}")
                     return False
 
             except subprocess.CalledProcessError as e:
-                # Handle case where the command fails and raise an exception
-                self.logger.info(f"Podman command failed with error: {e.stderr.decode()}")
+                self.logger.error(f"Podman command failed with error: {e.stderr.decode()}")
                 return False
 
         return True
@@ -484,7 +479,7 @@ class DataPackageImporter:
                         
                         # Run preprocessing if needed
                         processor = DataProcessor(self.data_package, self.logger)
-                        if processor.has_preprocessing:
+                        if processor.has_preprocessing():
                             log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
                             success = processor.run(dry_run=True)
                             if success:
