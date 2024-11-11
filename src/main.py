@@ -24,6 +24,7 @@ import datetime
 import yaml
 import json
 import sys
+import logging
 
 # Local module imports
 from utils.logger import setup_logger, log_flag
@@ -54,7 +55,20 @@ def load_config(settings_path="config/settings.yml"):
     return config, groups_info
 
 def create_executor(config):
-    return ProcessPoolExecutor(max_workers=config['max_workers'])
+    """Create a ProcessPoolExecutor with proper logging initialization."""
+    def init_worker():
+        # Initialize logging for each worker process
+        if not LoggerManager.is_initialized():
+            LoggerManager.setup_logger(
+                __name__,
+                config['log_file_path'],
+                level=config.get('log_level', logging.DEBUG)
+            )
+    
+    return ProcessPoolExecutor(
+        max_workers=config['max_workers'],
+        initializer=init_worker
+    )
 
 def setup_logging(config):
     """
@@ -155,7 +169,9 @@ class DirectoryPoller:
         self.core_grp_names = [group["core_grp_name"] for group in load_settings(config['group_list']) if "core_grp_name" in group]
         self.upload_orders_dir_name = config['upload_orders_dir_name']
         self.executor = executor
-        self.logger = LoggerManager.get_module_logger(__name__)
+        if not LoggerManager.is_initialized():
+            raise RuntimeError("LoggerManager must be initialized before creating DirectoryPoller")
+        self.logger = LoggerManager.get_module_logger(f"{__name__}.poller")
         self.interval = interval
         self.shutdown_event = Event()
         self.processing_orders = set()
@@ -234,7 +250,7 @@ class DirectoryPoller:
             future.add_done_callback(self.order_completed)           
             
         except Exception as e:
-            self.logger.error(f"Error processing upload order {order_file}: {e}")
+            self.logger.error(f"Error processing upload order {order_file}: {e}", exc_info=True)
 
     def order_completed(self, future):
         """
@@ -293,19 +309,25 @@ def run_application(config, groups_info, executor):
         logger.info("Initiating shutdown sequence...")
         log_flag(logger, 'end') 
         poller.stop()
-        executor.shutdown(timeout=shutdown_timeout)
+        executor.shutdown(wait=True, timeout=shutdown_timeout)
         LoggerManager.cleanup(timeout=shutdown_timeout)
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 
 def main():
     try:
+        # Load configuration first
         config, groups_info = load_config()
-        # Setup logging first
-        LoggerManager.setup_logger(__name__, config['log_file_path'])
-        logger = LoggerManager.get_module_logger(__name__)
         
-        # Then create executor with logging
+        # Setup logging with multiprocessing support
+        logger = LoggerManager.setup_logger(
+            __name__,
+            config['log_file_path'],
+            multiprocess=True  # New flag to indicate multiprocessing support
+        )
+        logger.info("Starting application...")
+        
+        # Create executor with logging
         logger.info("Creating process executor...")
         executor = create_executor(config)
         

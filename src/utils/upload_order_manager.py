@@ -29,10 +29,11 @@ class UploadOrderManager:
         :param order_file_path: Path to the upload order file
         :param settings: Dictionary containing application settings
         """
-        self.settings = settings
         if not LoggerManager.is_initialized():
             raise RuntimeError("LoggerManager must be initialized before creating UploadOrderManager")
         self.logger = LoggerManager.get_module_logger(__name__)
+        self.logger.debug(f"Initializing UploadOrderManager with file: {order_file_path}")
+        self.settings = settings
         self.order_file_path = Path(order_file_path)
         self.order_info = self._parse_order_file()
         self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))

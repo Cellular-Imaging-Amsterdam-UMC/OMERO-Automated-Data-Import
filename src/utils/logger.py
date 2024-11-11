@@ -87,7 +87,7 @@ Key Components:
 
 Configuration:
 -------------
-- Log Format: '%(asctime)s - %(name)s - %(process)d - %(levelname)s - %(message)s'
+- Log Format: '%(asctime)s - PID:%(process)d - %(name)s - %(levelname)s - %(message)s'
 - File Rotation: 10MB per file, 5 backup files
 - Queue Size: 10,000 messages
 - Cleanup Timeout: 5.0 seconds default
@@ -160,6 +160,7 @@ from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from queue import Queue
 from typing import Optional, Tuple
 import time
+import os
 
 class LoggerManager:
     """Singleton manager for logging configuration and resources."""
@@ -169,6 +170,7 @@ class LoggerManager:
     _listener = None
     _log_queue = None
     _initialized = False  # New flag
+    _mp_initialized = False  # Track multiprocessing initialization
 
     @classmethod
     def is_initialized(cls) -> bool:
@@ -177,12 +179,26 @@ class LoggerManager:
     @classmethod
     def setup_logger(cls, name: str, log_file: str, level=logging.DEBUG) -> logging.Logger:
         """Setup the main logger and queue listener."""
+        if cls._initialized and not cls._mp_initialized:
+            # If we're in a subprocess, reinitialize the queue
+            cls._setup_mp_logging()
+            return cls._main_logger
+
         if cls._initialized:
             return cls._main_logger
 
-        LOGFORMAT = '%(asctime)s - %(name)s - %(process)d - %(levelname)s - %(message)s'
+        # Create log directory if it doesn't exist
+        log_dir = os.path.dirname(log_file)
+        os.makedirs(log_dir, exist_ok=True)
+
+        LOGFORMAT = '%(asctime)s - PID:%(process)d - %(name)s - %(levelname)s - %(message)s'
         formatter = logging.Formatter(LOGFORMAT)
 
+        # Setup root logger first
+        root_logger = logging.getLogger()
+        root_logger.setLevel(level)
+
+        # Create handlers
         file_handler = RotatingFileHandler(
             log_file,
             maxBytes=10*1024*1024,  # 10MB
@@ -195,26 +211,53 @@ class LoggerManager:
         stream_handler.setLevel(level)
         stream_handler.setFormatter(formatter)
 
-        cls._log_queue = Queue(maxsize=10000)  # Set maximum queue size
+        # Setup queue with increased size
+        cls._log_queue = Queue(maxsize=100000)  # Increased queue size
         queue_handler = QueueHandler(cls._log_queue)
 
-        # Setup root logger
-        logging.basicConfig(level=level, handlers=[queue_handler])
+        # Add queue handler to root logger
+        root_logger.addHandler(queue_handler)
 
         # Create main logger
         logger = logging.getLogger(name)
         logger.setLevel(level)
-        logger.addHandler(queue_handler)
-        logger.propagate = False
+        logger.propagate = False  # Prevent double logging
 
         # Create and start listener
-        cls._listener = QueueListener(cls._log_queue, file_handler, stream_handler)
+        cls._listener = QueueListener(
+            cls._log_queue, 
+            file_handler, 
+            stream_handler,
+            respect_handler_level=True
+        )
         cls._listener.start()
 
         cls._main_logger = logger
         cls._loggers[name] = logger
         cls._initialized = True
-        return logger  # Return only the logger
+        
+        # Log initialization success
+        logger.info(f"Logging system initialized. Log file: {log_file}")
+        return logger
+
+    @classmethod
+    def _setup_mp_logging(cls):
+        """Setup multiprocessing-safe logging."""
+        from multiprocessing import current_process
+        
+        # Only modify logging for child processes
+        if current_process().name != 'MainProcess':
+            # Create a new queue for this process
+            cls._log_queue = Queue(maxsize=100000)
+            
+            # Add queue handler to existing loggers
+            queue_handler = QueueHandler(cls._log_queue)
+            for logger in cls._loggers.values():
+                for handler in logger.handlers[:]:
+                    logger.removeHandler(handler)
+                logger.addHandler(queue_handler)
+            
+            cls._mp_initialized = True
 
     @classmethod
     def get_module_logger(cls, module_name: str) -> logging.Logger:

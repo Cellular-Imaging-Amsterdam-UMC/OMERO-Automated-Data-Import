@@ -62,9 +62,16 @@ def connection(func):
 
 
 class DataProcessor:
-    def __init__(self, data_package, logger):
+    def __init__(self, data_package, logger=None):
+        """Initialize DataProcessor with proper logging."""
         self.data_package = data_package
-        self.logger = logger
+        if logger is None:
+            if not LoggerManager.is_initialized():
+                raise RuntimeError("LoggerManager must be initialized before creating DataProcessor")
+            self.logger = LoggerManager.get_module_logger(__name__)
+        else:
+            self.logger = logger
+        self.logger.debug(f"Initializing DataProcessor for package: {data_package.get('UUID', 'Unknown')}")
 
     def has_preprocessing(self):
         """Check if any 'preprocessing_' keys are present in the data package."""
@@ -72,6 +79,7 @@ class DataProcessor:
 
     def get_preprocessing_args(self, file_path):
         """Generate podman command arguments from 'preprocessing_' keys in the data package."""
+        self.logger.debug(f"Getting preprocessing args for file: {file_path}")
         if not self.has_preprocessing():
             self.logger.info("No preprocessing options found.")
             return None, None, None
@@ -189,22 +197,24 @@ class DataPackageImporter:
         :param data_package: DataPackage object containing import information
         :param ttl_for_user_conn: Connection timeout in ms (60000 per minute, default is 1 min)
         """
-        self.config = config
-        # Update logger initialization
         if not LoggerManager.is_initialized():
             raise RuntimeError("LoggerManager must be initialized before creating DataPackageImporter")
         self.logger = LoggerManager.get_module_logger(__name__)
+        self.logger.debug(f"Initializing DataPackageImporter for UUID: {data_package.get('UUID', 'Unknown')}")
         
+        # Add debug logging for configuration
+        self.logger.debug(f"Configuration: {config}")
+        self.config = config
         self.data_package = data_package
-        
         self.ttl_for_user_conn = ttl_for_user_conn
         
-        # Set OMERO server details as instance attributes
+        # Log OMERO connection details (excluding password)
         self.host = os.getenv('OMERO_HOST')
-        self.password = os.getenv('OMERO_PASSWORD')
+        self.password = '***'  # Don't log the actual password
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
-       
+        self.logger.debug(f"OMERO connection details - Host: {self.host}, User: {self.user}, Port: {self.port}")
+
     @connection 
     def import_to_omero(self, conn, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
         """
@@ -219,6 +229,7 @@ class DataPackageImporter:
         :param depth: Optional depth argument for import
         :return: True if the import was successful, False otherwise
         """
+        self.logger.debug(f"Starting import to OMERO - File: {file_path}, Target: {target_id} ({target_type})")
         cli = CLI()
         cli.register('import', ImportControl, '_')
         cli.register('sessions', SessionsControl, '_')
@@ -427,8 +438,7 @@ class DataPackageImporter:
         :return: Tuple of (successful_uploads, failed_uploads, import_status)
         """
         self.logger.info(f"Starting import for data package: {self.data_package.get('UUID', 'Unknown')}")
-        self.logger.debug(f"Data package contents: {self.data_package}")
-        print("1111")
+        self.logger.debug("Establishing connection")
         intended_username = self.data_package.get('Username')
         group_id = self.data_package.get('GroupID')
         group_name = self.data_package.get('Group')
