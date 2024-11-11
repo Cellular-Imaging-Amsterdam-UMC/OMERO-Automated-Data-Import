@@ -26,7 +26,7 @@ import time
 from omero.cli import CLI
 from omero.rtypes import rstring, rlong
 from omero.plugins.sessions import SessionsControl
-import subprocess
+from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 import re
 from importlib import import_module
 ImportControl = import_module("omero.plugins.import").ImportControl
@@ -149,6 +149,10 @@ class DataProcessor:
         self.logger.info(f"Podman command: {' '.join(podman_command)}")
         return podman_command
     
+    def log_subprocess_output(self, pipe):
+        for line in iter(pipe.readline, b''): # b'\n'-separated lines
+            self.logger.debug('sub: %r', line)
+    
     def run(self, dry_run=False):
         """Run the constructed podman command and check its exit status."""
         if not self.has_preprocessing():
@@ -168,22 +172,16 @@ class DataProcessor:
                 self.logger.info(f"Dry run enabled. Podman command would have been: {' '.join(podman_command)}")
                 continue  # Continue to next file_path
 
-            try:
-                # Run the command and wait for it to complete
-                result = subprocess.run(podman_command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                if result.returncode == 0:
-                    self.logger.info("Podman command executed successfully.")
-                    self.logger.info(f"Output: {result.stdout.decode()}")
-                else: # never triggered if we use 'check=True'. That raises Exception instead.
-                    self.logger.info(f"Podman command failed with exit code {result.returncode}.")
-                    self.logger.info(f"Error Output: {result.stderr.decode()}")
-                    return False
-
-            except subprocess.CalledProcessError as e: 
-                # exit code != 0
-                self.logger.error(f"Podman command {e.cmd} failed with error: {e.stderr.decode()} {e.output.decode()}")
+            # Run the command and wait for it to complete
+            process = Popen(podman_command, stdout=PIPE, stderr=STDOUT)
+            with process.stdout: # log output during subprocess run
+                self.log_subprocess_output(process.stdout)
+            returncode = process.wait() # 0 means success
+            if returncode == 0:
+                self.logger.info("Podman command executed successfully.")
+            else: 
+                self.logger.info(f"Podman command failed with exit code {returncode}.")
                 return False
-
         return True
 
 
