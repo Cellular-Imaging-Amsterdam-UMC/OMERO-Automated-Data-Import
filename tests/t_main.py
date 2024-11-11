@@ -55,7 +55,7 @@ def create_upload_order(group, core_group_name, username, dataset, files):
         "GroupID": 134,
         "ProjectID": 1001,
         "Files": files,
-        "preprocessing_container": "cellularimagingcf/cimagexpresstoometiff:v0.3",
+        "preprocessing_container": "cellularimagingcf/cimagexpresstoometiff:v0.4",
         "preprocessing_inputfile": "{Files}",
         "preprocessing_saveoption": "single"
     }

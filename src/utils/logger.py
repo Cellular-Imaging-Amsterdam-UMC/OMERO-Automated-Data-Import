@@ -247,10 +247,33 @@ class LoggerManager:
         
         # Only modify logging for child processes
         if current_process().name != 'MainProcess':
-            # Create a new queue for this process
+            # Create new queue and handlers
             cls._log_queue = Queue(maxsize=100000)
             
-            # Add queue handler to existing loggers
+            # Create handlers with the same format as main process
+            formatter = logging.Formatter('%(asctime)s - PID:%(process)d - %(name)s - %(levelname)s - %(message)s')
+            
+            file_handler = RotatingFileHandler(
+                cls._main_logger.handlers[0].baseFilename,  # Use same file as main process
+                maxBytes=10*1024*1024,
+                backupCount=5,
+                mode='a'
+            )
+            file_handler.setFormatter(formatter)
+            
+            stream_handler = logging.StreamHandler(sys.stdout)
+            stream_handler.setFormatter(formatter)
+            
+            # Create and start listener for this process
+            cls._listener = QueueListener(
+                cls._log_queue,
+                file_handler,
+                stream_handler,
+                respect_handler_level=True
+            )
+            cls._listener.start()
+            
+            # Update existing loggers
             queue_handler = QueueHandler(cls._log_queue)
             for logger in cls._loggers.values():
                 for handler in logger.handlers[:]:

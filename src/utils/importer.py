@@ -108,9 +108,11 @@ class DataProcessor:
                         # Gather the mount path (replace parent dir with /data)
                         mount_path = os.path.dirname(file_path)
 
-                # Convert key to "--key=value" format
+                # Convert key to '--key', 'value' format
                 arg_key = key.replace("preprocessing_", "")
-                kwargs.append(f"--{arg_key} {value}")
+                kwargs.append(f"--{arg_key}")
+                kwargs.append(value)
+
 
         return container, kwargs, mount_path
 
@@ -450,9 +452,7 @@ class DataPackageImporter:
         # Retry mechanism for the connection
         retry_count = 0
         while retry_count < MAX_RETRIES:
-            print("2222")
             try:
-                print("3333")
                 # Connect as root
                 with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:           
                     if not root_conn.connect():
@@ -493,7 +493,6 @@ class DataPackageImporter:
                         # Run preprocessing if needed
                         processor = DataProcessor(self.data_package, self.logger)
                         if processor.has_preprocessing():
-                            print("4444")
                             log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
                             success = processor.run(dry_run=True)
                             if success:
@@ -538,7 +537,6 @@ class DataPackageImporter:
                     return [], [], True
 
         # return all_successful_uploads, all_failed_uploads, False
-        print("6666666")
         return [], [], True
     
     @connection
