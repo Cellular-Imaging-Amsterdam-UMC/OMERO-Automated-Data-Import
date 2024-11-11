@@ -10,7 +10,8 @@ RUN conda create -n auto-import-env python=3.10 -y
 # Install omero-py, bftools, and psycopg2 using Conda
 RUN conda install -n auto-import-env -c conda-forge omero-py -y && \
     conda install -n auto-import-env -c bioconda bftools -y && \
-    conda install -n auto-import-env -c conda-forge psycopg2 libffi==3.3 -y
+    conda install -n auto-import-env -c conda-forge psycopg2 libffi==3.3 -y && \
+    conda install -n auto-import-env -c conda-forge intel-openmp=2019.4 -y
 
 # Activate the environment by setting the path to environment's bin directory
 ENV PATH /opt/conda/envs/auto-import-env/bin:$PATH

@@ -164,13 +164,14 @@ class DataProcessor:
                 if result.returncode == 0:
                     self.logger.info("Podman command executed successfully.")
                     self.logger.info(f"Output: {result.stdout.decode()}")
-                else:
+                else: # never triggered if we use 'check=True'. That raises Exception instead.
                     self.logger.info(f"Podman command failed with exit code {result.returncode}.")
                     self.logger.info(f"Error Output: {result.stderr.decode()}")
                     return False
 
-            except subprocess.CalledProcessError as e:
-                self.logger.error(f"Podman command failed with error: {e.stderr.decode()}")
+            except subprocess.CalledProcessError as e: 
+                # exit code != 0
+                self.logger.error(f"Podman command {e.cmd} failed with error: {e.stderr.decode()} {e.output.decode()}")
                 return False
 
         return True
