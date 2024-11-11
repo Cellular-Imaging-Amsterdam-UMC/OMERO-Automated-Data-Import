@@ -90,7 +90,7 @@ class DataProcessor:
             self.logger.warning("No 'preprocessing_container' defined in data package.")
             return None, None, None
         # Add 'docker.io/' prefix if not already present
-        if not container.startswith("docker.io/"): #TODO: Remove hard code
+        if not container.startswith("docker.io/"):
             container = "docker.io/" + container
 
         # Build kwargs from remaining 'preprocessing_' keys (exclude 'preprocessing_container')
@@ -351,9 +351,11 @@ class DataPackageImporter:
 
         # Add parallel options to kwargs if configured
         if 'parallel_upload_per_worker' in self.config:
-            kwargs['--parallel-upload'] = str(self.config['parallel_upload_per_worker'])
+            kwargs['parallel-upload'] = str(self.config['parallel_upload_per_worker'])
         if 'parallel_filesets_per_worker' in self.config:
-            kwargs['--parallel-fileset'] = str(self.config['parallel_filesets_per_worker'])
+            kwargs['parallel-fileset'] = str(self.config['parallel_filesets_per_worker'])
+        if self.config.get('skip_all', False):
+             kwargs['skip'] = 'all'
 
         # Add depth argument to kwargs if provided
         if depth:
@@ -492,23 +494,42 @@ class DataPackageImporter:
                         processor = DataProcessor(self.data_package, self.logger)
                         if processor.has_preprocessing():
                             log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
-                            success = processor.run(dry_run=True)
+                            success = processor.run(dry_run=False)
                             if success:
-                                self.logger.info("Preprocessing ran successfully.")
+                                self.logger.info("Preprocessing ran successfully. Continueing import.")
+                                if screen_id: # import as dataset first
+                                    temp_dataset_id = 1701 # TODO: make a temp OMERO dataset first
+                                    # Call upload_files with the appropriate ID
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=temp_dataset_id,
+                                        screen_id=None
+                                    )
+                                    # TODO: run conversion script on temp_dataset_id -> screen_id 
+                                else:
+                                    # Call upload_files with the appropriate ID
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=dataset_id,
+                                        screen_id=screen_id
+                                    )
+                                
                             else:
                                 self.logger.error("There was an issue with running the preprocessing container.")
                                 all_failed_uploads.extend([(file_path, dataset_id or screen_id, os.path.basename(file_path), None) for file_path in file_paths])
                                 return all_successful_uploads, all_failed_uploads, False   
                         else:
-                            self.logger.info("No preprocessing required.") 
+                            self.logger.info("No preprocessing required. Continueing import.") 
 
-                        # Call upload_files with the appropriate ID
-                        successful_uploads, failed_uploads = self.upload_files(
-                            user_conn,
-                            file_paths,
-                            dataset_id=dataset_id,
-                            screen_id=screen_id
-                        )
+                            # Call upload_files with the appropriate ID
+                            successful_uploads, failed_uploads = self.upload_files(
+                                user_conn,
+                                file_paths,
+                                dataset_id=dataset_id,
+                                screen_id=screen_id
+                            )
                         self.logger.debug(f"Successful uploads: {successful_uploads}")
                         self.logger.debug(f"Failed uploads: {failed_uploads}")
                         

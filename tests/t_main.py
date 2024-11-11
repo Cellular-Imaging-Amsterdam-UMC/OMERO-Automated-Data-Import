@@ -55,11 +55,14 @@ def create_upload_order(group, core_group_name, username, dataset, files):
         "GroupID": 134,
         "ProjectID": 1001,
         "Files": files,
-        "preprocessing_container": "cellularimagingcf/cimagexpresstoometiff:v0.4",
-        "preprocessing_inputfile": "{Files}",
-        "preprocessing_saveoption": "single"
     }
-
+    
+    preprocessing = config.get('preprocessing')
+    if preprocessing: #exists
+        order_content["preprocessing_container"] = "cellularimagingcf/cimagexpresstoometiff:v0.4",
+        order_content["preprocessing_inputfile"] = "{Files}",
+        order_content["preprocessing_saveoption"] = "single"
+    
     # Use sample_dataset_id if available, else default to 1701
     sample_dataset_id = config.get('sample_dataset_id', 1701)
     sample_screen_id = config.get('sample_screen_id')
