@@ -15,6 +15,7 @@
 # importer.py
 
 import os
+import logging
 import ezomero
 import functools
 from omero.gateway import BlitzGateway
@@ -64,10 +65,15 @@ def connection(func):
 class DataProcessor:
     def __init__(self, data_package, logger=None):
         """Initialize DataProcessor with proper logging."""
+        import logging
         self.data_package = data_package
         if logger is None:
             if not LoggerManager.is_initialized():
-                raise RuntimeError("LoggerManager must be initialized before creating DataProcessor")
+                LoggerManager.setup_logger(
+                    __name__,
+                    self.data_package.get('log_file_path', 'default.log'),
+                    level=logging.DEBUG
+                )
             self.logger = LoggerManager.get_module_logger(__name__)
         else:
             self.logger = logger
@@ -197,16 +203,20 @@ class DataPackageImporter:
         :param data_package: DataPackage object containing import information
         :param ttl_for_user_conn: Connection timeout in ms (60000 per minute, default is 1 min)
         """
-        if not LoggerManager.is_initialized():
-            raise RuntimeError("LoggerManager must be initialized before creating DataPackageImporter")
-        self.logger = LoggerManager.get_module_logger(__name__)
-        self.logger.debug(f"Initializing DataPackageImporter for UUID: {data_package.get('UUID', 'Unknown')}")
-        
-        # Add debug logging for configuration
-        self.logger.debug(f"Configuration: {config}")
+        import logging # Ensure logging is imported in the scope
         self.config = config
         self.data_package = data_package
         self.ttl_for_user_conn = ttl_for_user_conn
+        
+        if not LoggerManager.is_initialized():
+            LoggerManager.setup_logger(
+                __name__,
+                self.config['log_file_path'],
+                level=self.config.get('log_level', logging.DEBUG)
+            )
+
+        self.logger = LoggerManager.get_module_logger(__name__)
+        self.logger.debug(f"Initializing DataPackageImporter for UUID: {data_package.get('UUID', 'Unknown')}")
         
         # Log OMERO connection details (excluding password)
         self.host = os.getenv('OMERO_HOST')

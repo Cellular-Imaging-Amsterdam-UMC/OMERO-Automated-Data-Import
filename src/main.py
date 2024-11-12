@@ -57,14 +57,17 @@ def load_config(settings_path="config/settings.yml"):
 def create_executor(config):
     """Create a ProcessPoolExecutor with proper logging initialization."""
     def init_worker():
+        # Import logging module
+        import logging
+        # Load configuration
+        worker_config, _ = load_config()
         # Initialize logging for each worker process
         if not LoggerManager.is_initialized():
             LoggerManager.setup_logger(
                 __name__,
-                config['log_file_path'],
-                level=config.get('log_level', logging.DEBUG)
+                worker_config['log_file_path'],
+                level=worker_config.get('log_level', logging.DEBUG)
             )
-    
     return ProcessPoolExecutor(
         max_workers=config['max_workers'],
         initializer=init_worker
