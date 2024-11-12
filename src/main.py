@@ -25,6 +25,7 @@ import yaml
 import json
 import sys
 import logging
+from collections import UserDict
 
 # Local module imports
 from utils.initialize import initialize_system
@@ -80,7 +81,7 @@ def log_flag(logger, flag_type):
     elif flag_type == 'end':
         logger.info("\n" + line_pattern + "\n           STOPPING AUTOMATIC UPLOAD SERVICE\n" + line_pattern)
 
-class DataPackage:
+class DataPackage(UserDict):
     """
     Represents a data package containing information from the upload order.
     """
@@ -91,27 +92,9 @@ class DataPackage:
         :param order_data: Dictionary containing order information
         :param base_dir: Base directory for the data package
         """
-        self.__dict__.update(order_data)
+        self.data = order_data
         self.base_dir = base_dir
         self.order_file = str(order_file)
-
-    def __str__(self):
-        """
-        Return a string representation of the DataPackage.
-        """
-        attributes = [f"{key}: {value}" for key, value in self.__dict__.items() if key != 'Files']
-        file_count = len(self.Files) if hasattr(self, 'Files') else 0
-        return f"DataPackage({', '.join(attributes)}, Files: {file_count} files)"
-
-    def get(self, key, default=None):
-        """
-        Safely get an attribute value with a default if not found.
-        
-        :param key: Attribute name to retrieve
-        :param default: Default value if attribute is not found
-        :return: Attribute value or default
-        """
-        return self.__dict__.get(key, default)
 
 class IngestionProcess:
     """
@@ -231,7 +214,7 @@ class DirectoryPoller:
             data_package = DataPackage(order_info, self.base_dir, order_file)
             self.logger.info(f"DataPackage detected: {data_package}")
 
-            log_ingestion_step(data_package.__dict__, STAGE_DETECTED)
+            log_ingestion_step(data_package, STAGE_DETECTED)
 
             # Subprocessor function called
             ingestion_process = IngestionProcess(data_package, self.config, order_manager)
@@ -292,7 +275,7 @@ def main():
         config, groups_info = load_config()
 
         # Setup logging
-        log_level = config.get('log_level', 'INFO').upper()
+        log_level = config.get('log_level', 'DEBUG').upper()
         log_file = config['log_file_path']
 
         logging.basicConfig(

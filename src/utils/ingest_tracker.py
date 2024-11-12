@@ -91,10 +91,6 @@ class IngestTracker:
         self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID', 'Unknown')}")
 
         try:
-            # Convert DataPackage to dict if necessary
-            if not isinstance(order_info, dict):
-                order_info = order_info.__dict__
-
             new_entry = IngestionTracking(
                 group_name=order_info.get('Group', 'Unknown'),
                 user_name=order_info.get('Username', 'Unknown'),

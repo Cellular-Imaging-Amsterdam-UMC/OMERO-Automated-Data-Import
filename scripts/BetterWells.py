@@ -239,8 +239,12 @@ def run_script():
             "IDs", optional=False, grouping="2",
             description="List of Dataset IDs to process.").ofType(rlong(0)),
         scripts.String(
-            "File_Annotation", grouping="3",
-            description="File ID containing XML layout."),
+            "Header_File", grouping="3.1",
+            description="File ID containing header_file."),
+        scripts.String(
+            "Header_File_Path", optional=True, grouping="3.2",
+            description="The path to your header file on the server. Optional.",
+            namespaces=[omero.constants.namespaces.NSDYNAMIC]),
         scripts.String(
             "Plate_Name", grouping="4", optional=True,
             description="Template for plate names. Available variables: "
@@ -269,11 +273,13 @@ def run_script():
 
         conn = BlitzGateway(client_obj=client)
         dataset_ids = script_params["IDs"]
-        file_ann_id = script_params.get("File_Annotation")
+        header_file_id = script_params.get("Header_File")
+        header_file_path = script_params.get("Header_File_Path")
         
         print("\nScript parameters:")
         print(f"Dataset IDs: {dataset_ids}")
-        print(f"File Annotation ID: {file_ann_id}")
+        print(f"Header File ID: {header_file_id}")
+        print(f"Header File Path: {header_file_path}")
         
         errors = []
         plates_created = []
@@ -285,11 +291,11 @@ def run_script():
                 if not dataset:
                     raise Exception(f"Dataset {dataset_id} not found")
                 
-                if file_ann_id:
-                    link_file_ann(conn, "Dataset", dataset_id, file_ann_id)
+                if header_file_id:
+                    link_file_ann(conn, "Dataset", dataset_id, header_file_id)
                 
                 plate = create_plate_from_dataset(
-                    conn, dataset_id, file_ann_id, config['plate_name_template'])
+                    conn, dataset_id, header_file_id, config['plate_name_template'])
                 plates_created.append(plate.getId().getValue())
                 
                 if config['delete_source']:
