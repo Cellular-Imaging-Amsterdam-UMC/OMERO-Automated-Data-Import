@@ -55,7 +55,7 @@ class DataProcessor:
 
     def has_preprocessing(self):
         """Check if any 'preprocessing_' keys are present in the data package."""
-        return any(key.startswith("preprocessing_") for key in self.data_package)
+        return any(key.startswith("preprocessing_") for key in self.data_package.__dict__)
 
     def get_preprocessing_args(self, file_path):
         """Generate podman command arguments from 'preprocessing_' keys in the data package."""
@@ -64,8 +64,8 @@ class DataProcessor:
             self.logger.info("No preprocessing options found.")
             return None, None, None
 
-        # Retrieve preprocessing container, which should be unique
-        container = self.data_package.get("preprocessing_container")
+        # Retrieve preprocessing container from __dict__
+        container = self.data_package.__dict__.get("preprocessing_container")
         if not container:
             self.logger.warning("No 'preprocessing_container' defined in data package.")
             return None, None, None
@@ -76,7 +76,7 @@ class DataProcessor:
         # Build kwargs from remaining 'preprocessing_' keys (exclude 'preprocessing_container')
         kwargs = []
         mount_path = None
-        for key, value in self.data_package.items():
+        for key, value in self.data_package.__dict__.items():
             if key.startswith("preprocessing_") and key != "preprocessing_container":
                 # Check if the value contains a placeholder like {Files}
                 if isinstance(value, str) and "{Files}" in value:
