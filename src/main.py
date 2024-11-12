@@ -317,23 +317,24 @@ def run_application(config, groups_info, executor):
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 
+
 def main():
     try:
         # Load configuration first
         config, groups_info = load_config()
-        
-        # Setup logging with multiprocessing support
+
+        # Setup logging
         logger = LoggerManager.setup_logger(
             __name__,
             config['log_file_path'],
-            multiprocess=True  # New flag to indicate multiprocessing support
+            level=config.get('log_level', logging.DEBUG)
         )
         logger.info("Starting application...")
-        
+
         # Create executor with logging
         logger.info("Creating process executor...")
         executor = create_executor(config)
-        
+
         run_application(config, groups_info, executor)
     except Exception as e:
         print(f"Fatal error in main: {e}")
