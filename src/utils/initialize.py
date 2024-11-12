@@ -20,7 +20,6 @@ import sys
 import yaml
 import json
 from pathlib import Path
-from .logger import LoggerManager
 from .ingest_tracker import initialize_ingest_tracker
 
 def check_directory_access(path, test_file_name='access_test_file.tmp'):
