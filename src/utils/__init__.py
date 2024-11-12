@@ -1,6 +1,5 @@
 # __init__.py
 
-from .logger import setup_logger, log_flag
 from .initialize import initialize_system, load_settings
 from .upload_order_manager import UploadOrderManager
 from .importer import DataPackageImporter
