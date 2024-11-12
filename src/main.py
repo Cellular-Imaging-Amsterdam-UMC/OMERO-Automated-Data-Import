@@ -30,7 +30,7 @@ import logging
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import log_ingestion_step, STAGE_DETECTED# , STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
+from utils.ingest_tracker import log_ingestion_step, STAGE_DETECTED #, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
 
 def load_settings(file_path):
     """
@@ -306,6 +306,9 @@ def main():
 
         logger = logging.getLogger(__name__)
         logger.info("Starting application...")
+
+        # Initialize System (which includes IngestTracker)
+        initialize_system(config)
 
         # Create executor with logging
         logger.info("Creating process executor...")
