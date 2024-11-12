@@ -1,17 +1,3 @@
-# Copyright 2023 Rodrigo Rosas-Bertolini
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # importer.py
 
 import os
@@ -20,8 +6,7 @@ import ezomero
 import functools
 from omero.gateway import BlitzGateway
 from omero.sys import Parameters
-from .logger import LoggerManager
-from utils.ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
+from utils.ingest_tracker import log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
 import Ice
 import time
 from omero.cli import CLI
@@ -46,7 +31,7 @@ def connection(func):
                     intended_username = self.data_package.get('Username')
                     group_id = self.data_package.get('GroupID')
                     group_name = self.data_package.get('Group')
-                    
+
                     with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
                         user_conn.keepAlive()
                         self.logger.debug(f"Connected (again) as user {intended_username}")
@@ -61,22 +46,11 @@ def connection(func):
             raise
     return wrapper_connection
 
-
 class DataProcessor:
     def __init__(self, data_package, logger=None):
         """Initialize DataProcessor with proper logging."""
-        import logging
         self.data_package = data_package
-        if logger is None:
-            if not LoggerManager.is_initialized():
-                LoggerManager.setup_logger(
-                    __name__,
-                    self.data_package.get('log_file_path', 'default.log'),
-                    level=logging.DEBUG
-                )
-            self.logger = LoggerManager.get_module_logger(__name__)
-        else:
-            self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
         self.logger.debug(f"Initializing DataProcessor for package: {data_package.get('UUID', 'Unknown')}")
 
     def has_preprocessing(self):
@@ -119,10 +93,8 @@ class DataProcessor:
                 kwargs.append(f"--{arg_key}")
                 kwargs.append(value)
 
-
         return container, kwargs, mount_path
 
-    
     def replace_placeholders(self, value):
         """Replace placeholders like {key} with corresponding data package values."""
         # Find all placeholders in the format {key}
@@ -145,20 +117,20 @@ class DataProcessor:
             return None
 
         # Predefined Podman settings
-        podman_settings = ["podman", "run", "--rm", "--userns=keep-id"]  # Updated settings
+        podman_settings = ["podman", "run", "--rm", "--userns=keep-id"]
         # Add the volume mount if mount_path is available
         if mount_path:
             podman_settings = podman_settings + ["-v", f"{mount_path}:/data"]
-            
-        podman_command = podman_settings + [container] + kwargs        
+
+        podman_command = podman_settings + [container] + kwargs
 
         self.logger.info(f"Podman command: {' '.join(podman_command)}")
         return podman_command
-    
+
     def log_subprocess_output(self, pipe):
-        for line in iter(pipe.readline, b''): # b'\n'-separated lines
+        for line in iter(pipe.readline, b''):  # b'\n'-separated lines
             self.logger.debug('sub: %r', line)
-    
+
     def run(self, dry_run=False):
         """Run the constructed podman command and check its exit status."""
         if not self.has_preprocessing():
@@ -180,80 +152,58 @@ class DataProcessor:
 
             # Run the command and wait for it to complete
             process = Popen(podman_command, stdout=PIPE, stderr=STDOUT)
-            with process.stdout: # log output during subprocess run
+            with process.stdout:  # log output during subprocess run
                 self.log_subprocess_output(process.stdout)
-            returncode = process.wait() # 0 means success
+            returncode = process.wait()  # 0 means success
             if returncode == 0:
                 self.logger.info("Podman command executed successfully.")
-            else: 
+            else:
                 self.logger.info(f"Podman command failed with exit code {returncode}.")
                 return False
         return True
-
 
 class DataPackageImporter:
     """
     Handles the import of data packages into OMERO.
     """
-    def __init__(self, config, data_package, ttl_for_user_conn = 6000000):
+    def __init__(self, config, data_package, ttl_for_user_conn=6000000):
         """
         Initialize the DataPackageImporter with configuration settings.
-
-        :param config: Configuration dictionary containing settings
-        :param data_package: DataPackage object containing import information
-        :param ttl_for_user_conn: Connection timeout in ms (60000 per minute, default is 1 min)
         """
-        import logging # Ensure logging is imported in the scope
         self.config = config
         self.data_package = data_package
         self.ttl_for_user_conn = ttl_for_user_conn
-        
-        if not LoggerManager.is_initialized():
-            LoggerManager.setup_logger(
-                __name__,
-                self.config['log_file_path'],
-                level=self.config.get('log_level', logging.DEBUG)
-            )
-
-        self.logger = LoggerManager.get_module_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing DataPackageImporter for UUID: {data_package.get('UUID', 'Unknown')}")
-        
+
         # Log OMERO connection details (excluding password)
         self.host = os.getenv('OMERO_HOST')
-        self.password = '***'  # Don't log the actual password
+        self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
         self.logger.debug(f"OMERO connection details - Host: {self.host}, User: {self.user}, Port: {self.port}")
 
-    @connection 
+    @connection
     def import_to_omero(self, conn, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
         """
         Import a file to OMERO using CLI, either to a dataset or screen.
-
-        :param conn: OMERO connection object
-        :param file_path: Path to the file to import
-        :param target_id: ID of the target dataset or screen
-        :param target_type: Type of the target ('dataset' or 'screen')
-        :param uuid: Unique identifier (UUID) used for log and error files
-        :param transfer_type: File transfer method, default is 'ln_s'
-        :param depth: Optional depth argument for import
-        :return: True if the import was successful, False otherwise
         """
         self.logger.debug(f"Starting import to OMERO - File: {file_path}, Target: {target_id} ({target_type})")
         cli = CLI()
         cli.register('import', ImportControl, '_')
         cli.register('sessions', SessionsControl, '_')
-        
+
         # Common CLI arguments for importing
-        arguments = ['import',
-                    '-k', conn.getSession().getUuid().val,
-                    '-s', conn.host,
-                    '-p', str(conn.port),
-                    f'--transfer={transfer_type}',
-                    '--no-upgrade',
-                    '--file', f"logs/cli.{uuid}.logs",
-                    '--errs', f"logs/cli.{uuid}.errs",
-                    ]
+        arguments = [
+            'import',
+            '-k', conn.getSession().getUuid().val,
+            '-s', conn.host,
+            '-p', str(conn.port),
+            f'--transfer={transfer_type}',
+            '--no-upgrade',
+            '--file', f"logs/cli.{uuid}.logs",
+            '--errs', f"logs/cli.{uuid}.errs",
+        ]
         # Add optional arguments based on config values
         if 'parallel_upload_per_worker' in self.config:
             arguments.append('--parallel-upload')
@@ -285,7 +235,7 @@ class DataPackageImporter:
         if depth:
             arguments.append('--depth')
             arguments.append(str(depth))
-        
+
         # Add target-specific argument
         if target_type == 'screen':
             arguments.extend(['-r', str(target_id)])
@@ -293,13 +243,13 @@ class DataPackageImporter:
             arguments.extend(['-d', str(target_id)])
         else:
             raise ValueError("Invalid target_type. Must be 'dataset' or 'screen'.")
-        
+
         # Add the file path to the arguments
         arguments.append(str(file_path))
-        
+
         # Invoke the CLI with the constructed arguments
         cli.invoke(arguments)
-        
+
         if cli.rv == 0:
             self.imported = True
             self.logger.info(f'Imported {str(file_path)}')
@@ -311,23 +261,13 @@ class DataPackageImporter:
 
     @connection
     def get_plate_ids(self, conn, file_path, screen_id):
-        """Get the Ids of imported plates.
-        Note that this will not find plates if they have not been imported.
-        Also, while plate_ids are returned, this method also sets
-        ``self.plate_ids``.
-        Returns
-        -------
-        plate_ids : list of ints
-            Ids of plates imported from the specified client path, which
-            itself is derived from ``self.file_path`` and ``self.filename``.
-        """
+        """Get the Ids of imported plates."""
         if self.imported is not True:
             self.logger.error(f'File {file_path} has not been imported')
             return None
         else:
-            self.logger.debug("time to get some IDs")
+            self.logger.debug("Retrieving Plate IDs")
             q = conn.getQueryService()
-            self.logger.debug(q)
             params = Parameters()
             path_query = f"{str(file_path).strip('/')}%"
             self.logger.debug(f"path query: {path_query}. Screen_id: {screen_id}")
@@ -335,8 +275,6 @@ class DataPackageImporter:
                 "cpath": rstring(path_query),
                 "screen_id": rlong(screen_id),
             }
-            self.logger.debug(params)
-            # If this is costly, just select the highest ID, since that is the newest
             results = q.projection(
                 "SELECT DISTINCT p.id, p.details.creationEvent.time FROM Plate p "
                 "JOIN p.wells w "
@@ -350,7 +288,7 @@ class DataPackageImporter:
                 params,
                 conn.SERVICE_OPTS
             )
-            self.logger.debug(results)
+            self.logger.debug(f"Query results: {results}")
             plate_ids = [r[0].val for r in results]
             return plate_ids
 
@@ -365,7 +303,7 @@ class DataPackageImporter:
         if 'parallel_filesets_per_worker' in self.config:
             kwargs['parallel-fileset'] = str(self.config['parallel_filesets_per_worker'])
         if self.config.get('skip_all', False):
-             kwargs['skip'] = 'all'
+            kwargs['skip'] = 'all'
 
         # Add depth argument to kwargs if provided
         if depth:
@@ -376,19 +314,9 @@ class DataPackageImporter:
     def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None):
         """
         Upload files to a specified dataset or screen in OMERO.
-
-        :param conn: OMERO connection object
-        :param file_paths: List of file paths to upload
-        :param data_packge: the data package
-        :param dataset_id: (Optional) ID of the dataset to upload files to
-        :param screen_id: (Optional) ID of the screen to upload files to
-        :return: Tuple of successful and failed uploads
         """
         uuid = self.data_package.get('UUID')
-        intended_username = self.data_package.get('Username')
-        group_id = self.data_package.get('GroupID')
-        group_name = self.data_package.get('Group')
-        
+
         if dataset_id and screen_id:
             raise ValueError("Cannot specify both dataset_id and screen_id. Please provide only one.")
         if not dataset_id and not screen_id:
@@ -400,36 +328,38 @@ class DataPackageImporter:
         for file_path in file_paths:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
-                if screen_id:                    
+                if screen_id:
                     self.logger.debug(f"Uploading to screen: {screen_id}")
-                    imported = self.import_to_omero( 
-                            file_path=str(file_path),
-                            target_id=screen_id, 
-                            target_type='screen',
-                            uuid=uuid,
-                            depth=10
-                            )
+                    imported = self.import_to_omero(
+                        file_path=str(file_path),
+                        target_id=screen_id,
+                        target_type='screen',
+                        uuid=uuid,
+                        depth=10
+                    )
                     self.logger.debug("Upload done. Retrieving plate id.")
                     image_ids = self.get_plate_ids(str(file_path), screen_id)
-                    # # import_screen(conn=conn, file_path=str(file_path), screen_id=screen_id)
-                    # image_ids = ezomero.ezimport(conn=conn, target=str(file_path), screen=screen_id, transfer="ln_s", errs='logs/cli.errs')
-                else:  # Only dataset_id can be here
+                else:
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
-                    image_ids = self.import_dataset(target=str(file_path), dataset=dataset_id, transfer="ln_s")
+                    image_ids = self.import_dataset(
+                        target=str(file_path),
+                        dataset=dataset_id,
+                        transfer="ln_s"
+                    )
 
                 if image_ids:
                     # Ensure we're working with a single integer ID
                     image_or_plate_id = image_ids[0] if isinstance(image_ids, list) else image_ids
-                    
+
                     try:
                         self.add_image_annotations(
-                            image_or_plate_id, 
-                            uuid, 
-                            file_path, 
-                            is_screen=bool(screen_id)  # True if screen_id is provided, False otherwise
-                        )  
-                        
-                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")       
+                            image_or_plate_id,
+                            uuid,
+                            file_path,
+                            is_screen=bool(screen_id)
+                        )
+
+                        self.logger.info(f"Uploaded file: {file_path} to dataset/screen ID: {dataset_id or screen_id} with ID: {image_or_plate_id}")
                     except Exception as annotation_error:
                         self.logger.error(f"File uploaded but annotation failed for {file_path}: {annotation_error}")
                     # Still consider it a successful upload even if annotation fails
@@ -445,9 +375,6 @@ class DataPackageImporter:
     def import_data_package(self):
         """
         Import a data package into OMERO as the intended user.
-
-        :param data_package: DataPackage object containing import information
-        :return: Tuple of (successful_uploads, failed_uploads, import_status)
         """
         self.logger.info(f"Starting import for data package: {self.data_package.get('UUID', 'Unknown')}")
         self.logger.debug("Establishing connection")
@@ -464,22 +391,22 @@ class DataPackageImporter:
         while retry_count < MAX_RETRIES:
             try:
                 # Connect as root
-                with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:           
+                with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
                     if not root_conn.connect():
                         self.logger.error("Failed to connect to OMERO as root.")
                         return [], [], True
                     else:
                         self.logger.info("Connected to OMERO as root.")
-                        
-                    root_conn.keepAlive() 
-                            
+
+                    root_conn.keepAlive()
+
                     # Create a new connection as the intended user
                     with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
                         if not user_conn:
                             self.logger.error(f"Failed to create connection as user {intended_username}")
                             return [], [], True
 
-                        user_conn.keepAlive() 
+                        user_conn.keepAlive()
                         # Set the correct group for the session
                         user_conn.setGroupForSession(group_id)
 
@@ -499,16 +426,16 @@ class DataPackageImporter:
 
                         file_paths = self.data_package.get('Files', [])
                         self.logger.debug(f"File paths to be uploaded: {file_paths}")
-                        
+
                         # Run preprocessing if needed
                         processor = DataProcessor(self.data_package, self.logger)
                         if processor.has_preprocessing():
                             log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
                             success = processor.run(dry_run=False)
                             if success:
-                                self.logger.info("Preprocessing ran successfully. Continueing import.")
-                                if screen_id: # import as dataset first
-                                    temp_dataset_id = 1701 # TODO: make a temp OMERO dataset first
+                                self.logger.info("Preprocessing ran successfully. Continuing import.")
+                                if screen_id:  # import as dataset first
+                                    temp_dataset_id = 1701  # TODO: make a temp OMERO dataset first
                                     # Call upload_files with the appropriate ID
                                     successful_uploads, failed_uploads = self.upload_files(
                                         user_conn,
@@ -516,7 +443,7 @@ class DataPackageImporter:
                                         dataset_id=temp_dataset_id,
                                         screen_id=None
                                     )
-                                    # TODO: run conversion script on temp_dataset_id -> screen_id 
+                                    # TODO: run conversion script on temp_dataset_id -> screen_id
                                 else:
                                     # Call upload_files with the appropriate ID
                                     successful_uploads, failed_uploads = self.upload_files(
@@ -525,13 +452,12 @@ class DataPackageImporter:
                                         dataset_id=dataset_id,
                                         screen_id=screen_id
                                     )
-                                
                             else:
                                 self.logger.error("There was an issue with running the preprocessing container.")
                                 all_failed_uploads.extend([(file_path, dataset_id or screen_id, os.path.basename(file_path), None) for file_path in file_paths])
-                                return all_successful_uploads, all_failed_uploads, False   
+                                return all_successful_uploads, all_failed_uploads, False
                         else:
-                            self.logger.info("No preprocessing required. Continueing import.") 
+                            self.logger.info("No preprocessing required. Continuing import.")
 
                             # Call upload_files with the appropriate ID
                             successful_uploads, failed_uploads = self.upload_files(
@@ -542,15 +468,15 @@ class DataPackageImporter:
                             )
                         self.logger.debug(f"Successful uploads: {successful_uploads}")
                         self.logger.debug(f"Failed uploads: {failed_uploads}")
-                        
+
                         all_successful_uploads.extend(successful_uploads)
                         all_failed_uploads.extend(failed_uploads)
 
-                        if successful_uploads: 
+                        if successful_uploads:
                             log_ingestion_step(self.data_package, STAGE_IMPORTED)
-                            
-                    return all_successful_uploads, all_failed_uploads, False 
-   
+
+                    return all_successful_uploads, all_failed_uploads, False
+
             except Exception as e:
                 if isinstance(e, Ice.ConnectionRefusedException) or "connect" in f"{e}".lower():
                     retry_count += 1
@@ -562,12 +488,11 @@ class DataPackageImporter:
                         self.logger.error("Max retries reached. Aborting import.")
                         return [], [], True  # Fail after max retries
                 else:
-                    self.logger.error(f"Exception during import: {e}, {type(e)}")
+                    self.logger.error(f"Exception during import: {e}", exc_info=True)
                     return [], [], True
 
-        # return all_successful_uploads, all_failed_uploads, False
         return [], [], True
-    
+
     @connection
     def add_image_annotations(self, conn, object_id, uuid, file_path, is_screen=False):
         """Add UUID and filepath as annotations to the image or plate."""
@@ -600,4 +525,3 @@ class DataPackageImporter:
 
         except Exception as e:
             self.logger.error(f"Failed to add annotations to {object_type} ID: {object_id}. Error: {str(e)}")
-

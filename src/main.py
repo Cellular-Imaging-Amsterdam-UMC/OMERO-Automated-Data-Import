@@ -27,19 +27,14 @@ import sys
 import logging
 
 # Local module imports
-from utils.logger import setup_logger, log_flag
 from utils.initialize import initialize_system
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_DETECTED, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
-from utils.logger import LoggerManager
+from utils.ingest_tracker import log_ingestion_step, STAGE_DETECTED# , STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
 
 def load_settings(file_path):
     """
     Load settings from either a YAML or JSON file.
-    
-    :param file_path: Path to the settings file
-    :return: Loaded settings as a dictionary
     """
     with open(file_path, 'r') as file:
         if file_path.endswith('.yml') or file_path.endswith('.yaml'):
@@ -57,31 +52,33 @@ def load_config(settings_path="config/settings.yml"):
 def create_executor(config):
     """Create a ProcessPoolExecutor with proper logging initialization."""
     def init_worker():
-        # Import logging module
+        # Initialize logging in worker processes
         import logging
-        # Load configuration
-        worker_config, _ = load_config()
-        # Initialize logging for each worker process
-        if not LoggerManager.is_initialized():
-            LoggerManager.setup_logger(
-                __name__,
-                worker_config['log_file_path'],
-                level=worker_config.get('log_level', logging.DEBUG)
-            )
+        import sys
+
+        log_level = config.get('log_level', 'INFO').upper()
+        log_file = config['log_file_path']
+
+        logging.basicConfig(
+            level=getattr(logging, log_level, logging.INFO),
+            format='%(asctime)s - PID:%(process)d - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+
     return ProcessPoolExecutor(
         max_workers=config['max_workers'],
         initializer=init_worker
     )
 
-def setup_logging(config):
-    """
-    Setup logging with error handling and resource management.
-    """
-    try:
-        return LoggerManager.setup_logger(__name__, config['log_file_path'])
-    except Exception as e:
-        print(f"Critical error setting up logger: {e}")
-        sys.exit(1)
+def log_flag(logger, flag_type):
+    line_pattern = "    /\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/\\/"
+    if flag_type == 'start':
+        logger.info("\n" + line_pattern + "\n           READY TO UPLOAD DATA TO OMERO\n" + line_pattern)
+    elif flag_type == 'end':
+        logger.info("\n" + line_pattern + "\n           STOPPING AUTOMATIC UPLOAD SERVICE\n" + line_pattern)
 
 class DataPackage:
     """
@@ -132,7 +129,7 @@ class IngestionProcess:
         self.data_package = data_package
         self.config = config
         self.order_manager = order_manager
-        self.logger = LoggerManager.get_module_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         
     def import_data_package(self):
         """
@@ -141,16 +138,16 @@ class IngestionProcess:
         try:
             importer = DataPackageImporter(self.config, self.data_package)
             successful_uploads, failed_uploads, import_failed = importer.import_data_package()
-            parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID','Unknown'))
+            parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID', 'Unknown'))
             if import_failed or failed_uploads:
                 self.order_manager.move_upload_order('failed')
                 self.logger.error(f"Import process failed for data package {self.data_package.get('UUID')} in {parent_id} due to failed uploads or importer failure.")
             else:
                 self.order_manager.move_upload_order('completed')
-                self.logger.info(f"Data package {self.data_package.get('UUID')} in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")            
+                self.logger.info(f"Data package {self.data_package.get('UUID')} in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")
             return self.data_package.order_file
         except Exception as e:
-            self.logger.error(f"Error during import_data_package: {e}")
+            self.logger.error(f"Error during import_data_package: {e}", exc_info=True)
             self.order_manager.move_upload_order('failed')
             return self.data_package.order_file
 
@@ -172,9 +169,7 @@ class DirectoryPoller:
         self.core_grp_names = [group["core_grp_name"] for group in load_settings(config['group_list']) if "core_grp_name" in group]
         self.upload_orders_dir_name = config['upload_orders_dir_name']
         self.executor = executor
-        if not LoggerManager.is_initialized():
-            raise RuntimeError("LoggerManager must be initialized before creating DirectoryPoller")
-        self.logger = LoggerManager.get_module_logger(f"{__name__}.poller")
+        self.logger = logging.getLogger(f"{__name__}.poller")
         self.interval = interval
         self.shutdown_event = Event()
         self.processing_orders = set()
@@ -224,68 +219,43 @@ class DirectoryPoller:
         """
         with self.processing_lock:
             if str(order_file) in self.processing_orders:
-                # Too much logging if you turn this on, but it might be useful info if you run into duplicate jobs
-                # self.logger.debug(f"Orders: {self.processing_orders}")
-                # self.logger.debug(f"Not processing {order_file}, it's already being processed.")
                 return  # Order is already being processed
             else:
-                self.logger.debug(f"Orders: {self.processing_orders}")
                 self.processing_orders.add(str(order_file))
-
         self.logger.info(f"Processing new upload order: {order_file}")
-        self.logger.debug(f"Orders: {self.processing_orders}")
+
         try:
-            #TODO: Revise necessity of the upload_order_manager util.
             order_manager = UploadOrderManager(str(order_file), self.config)
             order_info = order_manager.get_order_info()
-            
+
             data_package = DataPackage(order_info, self.base_dir, order_file)
             self.logger.info(f"DataPackage detected: {data_package}")
-            
-            # Update this part to use the new log_ingestion_step signature
+
             log_ingestion_step(data_package.__dict__, STAGE_DETECTED)
-            
+
             # Subprocessor function called
             ingestion_process = IngestionProcess(data_package, self.config, order_manager)
             future = self.executor.submit(ingestion_process.import_data_package)
 
             # When subprocessor function finishes, order_completed is called
-            future.add_done_callback(self.order_completed)           
-            
+            future.add_done_callback(self.order_completed)
+
         except Exception as e:
             self.logger.error(f"Error processing upload order {order_file}: {e}", exc_info=True)
 
     def order_completed(self, future):
         """
         Handle the completion of an upload order by removing the completed order from processing_orders
-        
-        :param future: Future object representing the completed order
         """
         with self.processing_lock:
             completed_order = future.result()
-            self.logger.debug(f"Completed Order: {completed_order}")
             self.processing_orders.remove(completed_order)
             self.logger.info(f"Order completed and removed from processing list: {completed_order}.")
 
-    def log_future_exception(self, future):
-        """
-        Log any exceptions that occur in the future tasks.
-        
-        :param future: Future object to check for exceptions
-        """
-        try:
-            future.result()
-        except Exception as e:
-            self.logger.error(f"Error in background task: {e}")
-
 def run_application(config, groups_info, executor):
-    # Initialize system configurations and logging
-    if not LoggerManager.is_initialized():
-        raise RuntimeError("Logger must be initialized before running application")
-    
-    logger = LoggerManager.get_module_logger(__name__)
+    logger = logging.getLogger(__name__)
     initialize_system(config)
-    
+
     shutdown_event = Event()
     shutdown_timeout = config.get('shutdown_timeout', 30)
 
@@ -296,7 +266,7 @@ def run_application(config, groups_info, executor):
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, graceful_exit)
     signal.signal(signal.SIGTERM, graceful_exit)
-    
+
     # Start the DirectoryPoller to begin monitoring for changes
     poller = DirectoryPoller(config, executor)
     poller.start()
@@ -310,13 +280,11 @@ def run_application(config, groups_info, executor):
     finally:
         # Cleanup operations
         logger.info("Initiating shutdown sequence...")
-        log_flag(logger, 'end') 
+        log_flag(logger, 'end')
         poller.stop()
         executor.shutdown(wait=True, timeout=shutdown_timeout)
-        LoggerManager.cleanup(timeout=shutdown_timeout)
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
-
 
 def main():
     try:
@@ -324,11 +292,19 @@ def main():
         config, groups_info = load_config()
 
         # Setup logging
-        logger = LoggerManager.setup_logger(
-            __name__,
-            config['log_file_path'],
-            level=config.get('log_level', logging.DEBUG)
+        log_level = config.get('log_level', 'INFO').upper()
+        log_file = config['log_file_path']
+
+        logging.basicConfig(
+            level=getattr(logging, log_level, logging.INFO),
+            format='%(asctime)s - PID:%(process)d - %(name)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file),
+                logging.StreamHandler(sys.stdout)
+            ]
         )
+
+        logger = logging.getLogger(__name__)
         logger.info("Starting application...")
 
         # Create executor with logging
@@ -339,8 +315,6 @@ def main():
     except Exception as e:
         print(f"Fatal error in main: {e}")
         sys.exit(1)
-    finally:
-        LoggerManager.cleanup()
 
 if __name__ == "__main__":
     main()

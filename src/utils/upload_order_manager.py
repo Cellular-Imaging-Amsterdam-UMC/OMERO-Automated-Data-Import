@@ -1,37 +1,21 @@
-# Copyright 2023 Rodrigo Rosas-Bertolini
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 # upload_order_manager.py
 
 import ast
 import shutil
 import json
+import logging
 from pathlib import Path
 from .ingest_tracker import IngestionTracking, log_ingestion_step, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
-from .logger import LoggerManager
 
 class UploadOrderManager:
     def __init__(self, order_file_path, settings):
         """
         Initialize the UploadOrderManager with the given order file and settings.
-        
+
         :param order_file_path: Path to the upload order file
         :param settings: Dictionary containing application settings
         """
-        if not LoggerManager.is_initialized():
-            raise RuntimeError("LoggerManager must be initialized before creating UploadOrderManager")
-        self.logger = LoggerManager.get_module_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing UploadOrderManager with file: {order_file_path}")
         self.settings = settings
         self.order_file_path = Path(order_file_path)
@@ -48,7 +32,7 @@ class UploadOrderManager:
     def get_core_grp_name_from_omero_name(self, omero_grp_name):
         """
         Get the core group name corresponding to the given OMERO group name.
-        
+
         :param omero_grp_name: OMERO group name
         :return: Corresponding core group name, or None if not found
         """
@@ -61,7 +45,7 @@ class UploadOrderManager:
     def _parse_order_file(self):
         """
         Parse the upload order file and return its content as a dictionary.
-        
+
         :return: Dictionary representation of the upload order
         """
         try:
@@ -75,22 +59,22 @@ class UploadOrderManager:
         for line in lines:
             # Skip empty lines or lines without the expected separator
             if not line.strip() or ': ' not in line:
-                self.logger.debug(f"Skipping invalid line: {line}")  # Added debug logging
+                self.logger.debug(f"Skipping invalid line: {line}")
                 continue
 
             try:
                 key, value = line.split(': ', 1)
                 key = key.strip()
                 value = value.strip().strip('"')  # Remove surrounding whitespace and quotes
-                
+
                 # Attempt to parse the value into an appropriate data type
                 parsed_value = value
                 for conversion_func in (int, float, ast.literal_eval):
                     try:
                         parsed_value = conversion_func(value)
-                        break # Exit loop if conversion is successful
+                        break  # Exit loop if conversion is successful
                     except (ValueError, SyntaxError):
-                        continue # Try the next conversion function
+                        continue  # Try the next conversion function
 
                 order_data[key] = parsed_value
                 self.logger.debug(f"Parsed order data: {key} = {parsed_value}")
@@ -100,7 +84,6 @@ class UploadOrderManager:
 
         return order_data  # Dictionary representation of the upload order
 
-
     def validate_order_attributes(self):
         """
         Validate the attributes of the upload order against those specified in settings.yml.
@@ -108,14 +91,13 @@ class UploadOrderManager:
         """
         required_attributes = self.settings.get('upload_order_attributes', [])
         missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
-        
+
         if missing_attributes:
             error_message = f"Missing required attributes in upload order: {', '.join(missing_attributes)}"
             self.logger.error(error_message)
             raise ValueError(error_message)
-        
-        self.logger.info("All required attributes are present in the upload order.")
 
+        self.logger.info("All required attributes are present in the upload order.")
 
     def switch_path_prefix(self):
         """
@@ -146,17 +128,17 @@ class UploadOrderManager:
         else:
             self.order_info['file_names'] = []
             self.logger.warning("No 'Files' attribute found in order_info. Created empty file_names list.")
-            
+
     def _format_file_names(self, file_names):
         """Format the list of file names to show the first and last items with ellipsis."""
         if len(file_names) > 2:
             return [file_names[0], '...', file_names[-1]]  # List with first, ellipsis, last
         return file_names  # Return the original list for 1 or 2 items
-        
+
     def log_order_movement(self, outcome):
         """
         Log the movement of the upload order file to the database using the ingest tracker.
-    
+
         This method uses the global log_ingestion_step function from the ingest_tracker module
         to record the movement event in the database. It determines the appropriate stage
         based on the outcome and passes the order information along with the stage to the
