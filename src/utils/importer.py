@@ -130,8 +130,8 @@ class DataProcessor:
         folder = os.path.dirname(file_path)
         relative_output_path = os.path.join("/data", TMP_OUTPUT_FOLDER.lstrip('./'))
         # Create the directory if it doesn't exist
-        os.makedirs(relative_output_path, exist_ok=True)
-        self.logger.info(f"Created intermediate output folder {relative_output_path}")
+        # os.makedirs(relative_output_path, exist_ok=True)
+        self.logger.info(f"output folder {relative_output_path}")
         kwargs.append(relative_output_path)
 
         podman_command = podman_settings + [container] + kwargs
