@@ -20,6 +20,7 @@ ImportControl = import_module("omero.plugins.import").ImportControl
 
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries (in seconds)
+TMP_OUTPUT_FOLDER = f"./converted-data"
 
 def connection(func):
     @functools.wraps(func)
@@ -123,6 +124,15 @@ class DataProcessor:
         # Add the volume mount if mount_path is available
         if mount_path:
             podman_settings = podman_settings + ["-v", f"{mount_path}:/data"]
+        
+        # TODO don't hardcode   
+        kwargs.append(f"--outputfolder")
+        folder = os.path.dirname(file_path)
+        relative_output_path = os.path.join(folder, TMP_OUTPUT_FOLDER.lstrip('./'))
+        # Create the directory if it doesn't exist
+        os.makedirs(relative_output_path, exist_ok=True)
+        self.logger.info(f"Created intermediate output folder {relative_output_path}")
+        kwargs.append(relative_output_path)
 
         podman_command = podman_settings + [container] + kwargs
 
@@ -310,6 +320,10 @@ class DataPackageImporter:
         # Add depth argument to kwargs if provided
         if depth:
             kwargs['depth'] = str(depth)
+            
+        uuid = self.data_package.get('UUID')
+        kwargs['file'] = f"logs/cli.{uuid}.logs"
+        kwargs['errs'] = f"logs/cli.{uuid}.errs"
 
         return ezomero.ezimport(conn=conn, target=target, dataset=dataset, **kwargs)
 
@@ -326,6 +340,8 @@ class DataPackageImporter:
 
         successful_uploads = []
         failed_uploads = []
+        
+        self.logger.debug(f"{file_paths}")
 
         for file_path in file_paths:
             self.logger.debug(f"Uploading file: {file_path}")
@@ -377,6 +393,8 @@ class DataPackageImporter:
     def upload_screen_as_parallel_dataset(self, user_conn, file_paths, temp_dataset_id, screen_id):
         for file_path in file_paths:
             folder = os.path.dirname(file_path)
+            relative_output_path = os.path.join(folder, TMP_OUTPUT_FOLDER.lstrip('./'))
+            self.logger.info(f"Uploading dataset from {relative_output_path}")
             base_name = os.path.splitext(os.path.basename(file_path))[0]
 
             # Step 1: Find the companion file
@@ -410,7 +428,7 @@ class DataPackageImporter:
                 # Call upload_files with the appropriate ID
                 successful_uploads, failed_uploads = self.upload_files(
                     user_conn,
-                    ome_tiff_file,
+                    [relative_output_path],
                     dataset_id=temp_dataset_id,
                     screen_id=None
                 )
