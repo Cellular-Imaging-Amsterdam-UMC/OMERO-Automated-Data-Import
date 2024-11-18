@@ -5,7 +5,7 @@ import glob
 import logging
 import ezomero
 import functools
-from omero.gateway import BlitzGateway
+from omero.gateway import BlitzGateway, FileAnnotationWrapper
 from omero.sys import Parameters
 from utils.ingest_tracker import log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
 import Ice
@@ -270,50 +270,7 @@ class DataPackageImporter:
         else:
             self.imported = False
             self.logger.error(f'Import of {str(file_path)} has failed!')
-            return False
-
-    @connection
-    def get_my_image_ids(self, conn, file_path):
-        """Get the Ids of imported images.
-
-        Note that this will not find images if they have not been imported.
-        Also, while image_ids are returned, this method also sets
-        ``self.image_ids``.
-        Returns
-        -------
-        image_ids : list of ints
-            Ids of images imported from the specified client path, which
-            itself is derived from ``self.file_path`` and ``self.filename``.
-            
-        Adapted from https://github.com/TheJacksonLaboratory/ezomero/blob/main/ezomero/_importer.py#L296
-        """
-        if self.imported is not True:
-            logging.error(f'File {file_path} has not been imported')
-            return None
-        else:
-            self.logger.debug("Retrieving Image IDs")
-            q = conn.getQueryService()
-            params = Parameters()
-            path_query = self.make_substitutions(file_path)
-            path_query = path_query.strip('/')
-            if path_query.endswith(".zarr"):
-                path_query = f"{path_query}/.zattrs"
-            params.map = {"cpath": rstring(path_query)}
-            results = q.projection(
-                "SELECT i.id FROM Image i"
-                " JOIN i.fileset fs"
-                " JOIN fs.usedFiles u"
-                " WHERE u.clientPath=:cpath",
-                params,
-                conn.SERVICE_OPTS
-                )
-            image_ids = [r[0].val for r in results]
-            return image_ids
-
-    def make_substitutions(self, fpath):
-        mytable = fpath.maketrans("\"*:<>?\\|", "\'x;[]%/!")
-        final_path = fpath.translate(mytable)
-        return final_path    
+            return False  
     
     @connection
     def get_plate_ids(self, conn, file_path, screen_id):
@@ -403,20 +360,27 @@ class DataPackageImporter:
                     image_ids = self.get_plate_ids(str(file_path), screen_id)
                 else:
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
-                    # image_ids = self.import_dataset(
-                    #     target=str(file_path),
-                    #     dataset=dataset_id,
-                    #     transfer="ln_s"
-                    # )
-                    imported = self.import_to_omero(
-                        file_path=str(file_path),
-                        target_id=dataset_id,
-                        target_type='dataset',
-                        uuid=uuid,
-                        depth=10
-                    )
-                    self.logger.debug("Upload done. Retrieving image ids.")
-                    image_ids = self.get_my_image_ids(str(file_path))
+                    if os.path.isfile(file_path):
+                        # Use ezomero for single image imports
+                        image_ids = self.import_dataset(
+                            target=str(file_path),
+                            dataset=dataset_id,
+                            transfer="ln_s"
+                        )
+                        self.logger.debug(f"Upload done. Continue with image_ids {image_ids}.")
+                    elif os.path.isdir(file_path):
+                        # Upload the whole directory as dataset
+                        imported = self.import_to_omero(
+                            file_path=str(file_path),
+                            target_id=dataset_id,
+                            target_type='dataset',
+                            uuid=uuid,
+                            depth=10
+                        )
+                        self.logger.debug(f"Upload done. Continue with dataset_id {dataset_id}.")
+                        image_ids = dataset_id
+                    else:
+                        raise ValueError(f"{file_path} is not recognized as file OR dir ??")
 
                 if image_ids:
                     # Ensure we're working with a single integer ID
@@ -442,6 +406,41 @@ class DataPackageImporter:
                 self.logger.error(f"Error uploading file {file_path} to dataset/screen ID: {dataset_id or screen_id}: {e}")
                 failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
         return successful_uploads, failed_uploads
+    
+    def attach_companion_to_dataset(self, conn, dataset_id, companion_file):
+        try:
+            self.logger.info(f"Attaching companion file: {companion_file} to dataset ID: {dataset_id}")
+
+            # Step 1: Upload the companion file to OMERO as an OriginalFile
+            # Get the file size
+            file_size = os.path.getsize(companion_file)
+            with open(companion_file, 'rb') as file_handle:
+                original_file = conn.createOriginalFileFromFileObj(
+                    file_handle,
+                    name=os.path.basename(companion_file),
+                    path=os.path.dirname(companion_file),
+                    fileSize=file_size
+                )
+            # Get the file ID
+            file_id = original_file.getId()
+            self.logger.info(f"Uploaded companion file with ID: {file_id}")
+            
+            # Step 2: Create a FileAnnotation and set the OriginalFile
+            file_ann = FileAnnotationWrapper(conn)
+            file_ann.setFile(original_file)
+            file_ann.setDescription(rstring("Companion OME file"))
+            file_ann.save()
+
+            # Step 3: Link the FileAnnotation to the dataset
+            dataset = conn.getObject("Dataset", dataset_id)
+            dataset.linkAnnotation(file_ann)
+
+            self.logger.info(f"Successfully attached companion file {file_id} to dataset ID: {dataset_id}")
+            
+            return file_id
+        except Exception as e:
+            self.logger.error(f"Failed to attach companion file to dataset: {e}")
+            raise
 
     def upload_screen_as_parallel_dataset(self, user_conn, file_paths, temp_dataset_id, screen_id):
         for file_path in file_paths:
@@ -476,6 +475,10 @@ class DataPackageImporter:
             os.rename(companion_file, companion_temp)
 
             try:
+                # Step 3b: attach companion
+                self.logger.info(f"Attaching companion file {companion_temp} to dataset ID: {temp_dataset_id}")
+                companion_file_id = self.attach_companion_to_dataset(user_conn, temp_dataset_id, companion_temp)
+                
                 # Step 4: Perform upload
                 self.logger.info("Uploading screen as dataset...")
                 # Call upload_files with the appropriate ID
@@ -491,7 +494,7 @@ class DataPackageImporter:
                 self.logger.info(f"Restored companion file to its original location: {companion_file}")
                 
                 # TODO: run conversion script on temp_dataset_id -> screen_id
-                self.logger.info(f"TODO: Now we should run conversion to Plate script with {companion_file} on dataset {temp_dataset_id} to screen {screen_id}...")
+                self.logger.info(f"TODO: Now we should run conversion to Plate script with {companion_file} ({companion_file_id}) on dataset {temp_dataset_id} to screen {screen_id}...")
                 # TODO: and maybe cleanup the tmp dataset
                 # conn.deleteObjects("Dataset", [dataset_id], deleteAnns=True, wait=True)
                 
@@ -583,7 +586,7 @@ class DataPackageImporter:
                                 self.logger.info("Preprocessing ran successfully. Continuing import.")
                                 if screen_id:  # import as dataset first
                                     # make a temp OMERO dataset first
-                                    temp_dataset_id = self.create_new_dataset(name="test_to_plate", description="This is a tmp dataset.")
+                                    temp_dataset_id = self.create_new_dataset(name="test_to_plate", description=f"This is a tmp dataset for {self.data_package.get('UUID', 'Unknown')}")
                                     # TODO: move companion.ome and upload the first tiff.
                                     self.upload_screen_as_parallel_dataset(user_conn, file_paths, temp_dataset_id, screen_id)
                                     # TODO: Also handle metadata CSV
