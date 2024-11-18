@@ -13,6 +13,7 @@ import time
 from omero.cli import CLI
 from omero.rtypes import rstring, rlong
 from omero.plugins.sessions import SessionsControl
+from omero.model import DatasetI
 from subprocess import Popen, PIPE, STDOUT, CalledProcessError
 import re
 from importlib import import_module
@@ -491,6 +492,8 @@ class DataPackageImporter:
                 
                 # TODO: run conversion script on temp_dataset_id -> screen_id
                 self.logger.info(f"TODO: Now we should run conversion to Plate script with {companion_file} on dataset {temp_dataset_id} to screen {screen_id}...")
+                # TODO: and maybe cleanup the tmp dataset
+                # conn.deleteObjects("Dataset", [dataset_id], deleteAnns=True, wait=True)
                 
 
             except Exception as e:
@@ -501,6 +504,18 @@ class DataPackageImporter:
 
         return ome_tiff_file  # Return the selected OME-TIFF file if needed
 
+    @connection
+    def create_new_dataset(self, conn, name="New Dataset", description=""):
+        # Create a new Dataset object
+        dataset = DatasetI()
+        dataset.setName(rstring(name))
+        dataset.setDescription(rstring(description))
+
+        # Save the Dataset to OMERO
+        dataset = conn.getUpdateService().saveAndReturnObject(dataset)
+        dataset_id = dataset.getId().getValue()
+        self.logger.info(f"Created new dataset with ID: {dataset_id}")
+        return dataset_id
 
     def import_data_package(self):
         """
@@ -567,7 +582,8 @@ class DataPackageImporter:
                             if success:
                                 self.logger.info("Preprocessing ran successfully. Continuing import.")
                                 if screen_id:  # import as dataset first
-                                    temp_dataset_id = 2001  # TODO: make a temp OMERO dataset first
+                                    # make a temp OMERO dataset first
+                                    temp_dataset_id = self.create_new_dataset(name="test_to_plate", description="This is a tmp dataset.")
                                     # TODO: move companion.ome and upload the first tiff.
                                     self.upload_screen_as_parallel_dataset(user_conn, file_paths, temp_dataset_id, screen_id)
                                     # TODO: Also handle metadata CSV
