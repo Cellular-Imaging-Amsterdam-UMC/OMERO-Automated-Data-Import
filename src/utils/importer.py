@@ -398,21 +398,21 @@ class DataPackageImporter:
             base_name = os.path.splitext(os.path.basename(file_path))[0]
 
             # Step 1: Find the companion file
-            companion_pattern = os.path.join(folder, "*.companion.ome")
+            companion_pattern = os.path.join(relative_output_path, "*.companion.ome")
             companion_files = glob.glob(companion_pattern)
 
             if not companion_files:
-                raise FileNotFoundError(f"No companion OME file found in {folder}")
+                raise FileNotFoundError(f"No companion OME file found in {relative_output_path}")
             
             companion_file = companion_files[0]
             self.logger.info(f"Found companion file: {companion_file}")
 
             # Step 2: Find any OME-TIFF file
-            ome_tiff_pattern = os.path.join(folder, "*.ome.tiff")
+            ome_tiff_pattern = os.path.join(relative_output_path, "*.ome.tiff")
             ome_tiff_files = glob.glob(ome_tiff_pattern)
 
             if not ome_tiff_files:
-                raise FileNotFoundError(f"No OME-TIFF files found in {folder}")
+                raise FileNotFoundError(f"No OME-TIFF files found in {relative_output_path}")
             
             ome_tiff_file = ome_tiff_files[0]
             self.logger.info(f"Selected OME-TIFF file: {ome_tiff_file}")
