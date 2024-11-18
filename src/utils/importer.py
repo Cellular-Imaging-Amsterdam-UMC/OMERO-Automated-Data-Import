@@ -272,6 +272,49 @@ class DataPackageImporter:
             return False
 
     @connection
+    def get_my_image_ids(self, conn, file_path):
+        """Get the Ids of imported images.
+
+        Note that this will not find images if they have not been imported.
+        Also, while image_ids are returned, this method also sets
+        ``self.image_ids``.
+        Returns
+        -------
+        image_ids : list of ints
+            Ids of images imported from the specified client path, which
+            itself is derived from ``self.file_path`` and ``self.filename``.
+            
+        Adapted from https://github.com/TheJacksonLaboratory/ezomero/blob/main/ezomero/_importer.py#L296
+        """
+        if self.imported is not True:
+            logging.error(f'File {file_path} has not been imported')
+            return None
+        else:
+            self.logger.debug("Retrieving Image IDs")
+            q = conn.getQueryService()
+            params = Parameters()
+            path_query = self.make_substitutions(file_path)
+            path_query = path_query.strip('/')
+            if path_query.endswith(".zarr"):
+                path_query = f"{path_query}/.zattrs"
+            params.map = {"cpath": rstring(path_query)}
+            results = q.projection(
+                "SELECT i.id FROM Image i"
+                " JOIN i.fileset fs"
+                " JOIN fs.usedFiles u"
+                " WHERE u.clientPath=:cpath",
+                params,
+                conn.SERVICE_OPTS
+                )
+            image_ids = [r[0].val for r in results]
+            return image_ids
+
+    def make_substitutions(self, fpath):
+        mytable = fpath.maketrans("\"*:<>?\\|", "\'x;[]%/!")
+        final_path = fpath.translate(mytable)
+        return final_path    
+    
+    @connection
     def get_plate_ids(self, conn, file_path, screen_id):
         """Get the Ids of imported plates."""
         if self.imported is not True:
@@ -359,11 +402,20 @@ class DataPackageImporter:
                     image_ids = self.get_plate_ids(str(file_path), screen_id)
                 else:
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
-                    image_ids = self.import_dataset(
-                        target=str(file_path),
-                        dataset=dataset_id,
-                        transfer="ln_s"
+                    # image_ids = self.import_dataset(
+                    #     target=str(file_path),
+                    #     dataset=dataset_id,
+                    #     transfer="ln_s"
+                    # )
+                    imported = self.import_to_omero(
+                        file_path=str(file_path),
+                        target_id=dataset_id,
+                        target_type='dataset',
+                        uuid=uuid,
+                        depth=10
                     )
+                    self.logger.debug("Upload done. Retrieving image ids.")
+                    image_ids = self.get_my_image_ids(str(file_path))
 
                 if image_ids:
                     # Ensure we're working with a single integer ID
@@ -415,15 +467,15 @@ class DataPackageImporter:
                 raise FileNotFoundError(f"No OME-TIFF files found in {relative_output_path}")
             
             ome_tiff_file = ome_tiff_files[0]
-            self.logger.info(f"Selected OME-TIFF file: {ome_tiff_file}")
+            self.logger.info(f"Uploading OME-TIFF files like: {ome_tiff_file}")
 
-            # Step 3: Rename the companion file temporarily
-            companion_temp = companion_file + ".temp"
+            # Step 3: Rename the companion file temporarily            
+            companion_temp = os.path.join(folder, os.path.basename(companion_file))
+            self.logger.info(f"Moving companion file to parent directory: {companion_temp}")
             os.rename(companion_file, companion_temp)
-            self.logger.info(f"Renamed companion file to: {companion_temp}")
 
             try:
-                # Step 4: Perform your custom action (replace this with your logic)
+                # Step 4: Perform upload
                 self.logger.info("Uploading screen as dataset...")
                 # Call upload_files with the appropriate ID
                 successful_uploads, failed_uploads = self.upload_files(
@@ -435,7 +487,7 @@ class DataPackageImporter:
 
                 # Step 5: Rename the companion file back to its original name
                 os.rename(companion_temp, companion_file)
-                self.logger.info(f"Restored companion file to its original name: {companion_file}")
+                self.logger.info(f"Restored companion file to its original location: {companion_file}")
                 
                 # TODO: run conversion script on temp_dataset_id -> screen_id
                 self.logger.info(f"TODO: Now we should run conversion to Plate script with {companion_file} on dataset {temp_dataset_id} to screen {screen_id}...")
@@ -492,6 +544,8 @@ class DataPackageImporter:
 
                         all_successful_uploads = []
                         all_failed_uploads = []
+                        successful_uploads = []
+                        failed_uploads = []
 
                         dataset_id = self.data_package.get('DatasetID')
                         screen_id = self.data_package.get('ScreenID')
