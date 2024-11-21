@@ -136,6 +136,10 @@ class DataProcessor:
         # os.makedirs(relative_output_path, exist_ok=True)
         self.logger.info(f"output folder {relative_output_path} (--> /out)")
         kwargs.append("/out")
+        
+        self.logger.info(f"Alt output folder {mount_path} (--> /data)")
+        kwargs.append(f"--altoutputfolder")
+        kwargs.append("/data")        
 
         podman_command = podman_settings + [container] + kwargs
 
@@ -381,17 +385,17 @@ class DataPackageImporter:
                         # Ensure remote_path is the directory itself if file_path is a directory
                         remote_path = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
                         local_file_dir = local_file_dir[0].rstrip("/") + "/"
-                        self.logger.debug(f"Move {local_file_dir} to {remote_path}")
+                        # self.logger.debug(f"Move {local_file_dir} to {remote_path}")
                         # 1. Rsync the actual files to the remote location
-                        rsync_command = [
-                            "rsync", "-av", "--copy-links",  # Copy actual files instead of symlinks
-                            local_file_dir,  # Already guaranteed to have a trailing slash
-                            remote_path
-                        ]
-                        self.logger.info(f"Rsync command: {rsync_command}")
-                        subprocess.run(rsync_command, check=True)
+                        # rsync_command = [
+                        #     "rsync", "-av", "--copy-links",  # Copy actual files instead of symlinks
+                        #     local_file_dir,  # Already guaranteed to have a trailing slash
+                        #     remote_path
+                        # ]
+                        # self.logger.info(f"Rsync command: {rsync_command}")
+                        # subprocess.run(rsync_command, check=True)
                         # 2. Update the symlinks to point to the remote location
-                        self.logger.info(f"Rsynced. Now update symlinks in {local_file_dir}")
+                        self.logger.info(f"Now update symlinks in {local_file_dir} to {remote_path}")
                         for root, _, files in os.walk(local_file_dir):
                             for file in files:
                                 symlink_path = os.path.join(root, file)
@@ -400,6 +404,7 @@ class DataPackageImporter:
                                     os.unlink(symlink_path)  # Remove the old symlink
                                     new_target = os.path.join(remote_path, file)
                                     os.symlink(new_target, symlink_path)  # Create the new symlink
+                                    self.logger.debug(f"new symlinks {symlink_path} -> {new_target}")
                                     
                         # delete local copy in relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, UUID)
                     
