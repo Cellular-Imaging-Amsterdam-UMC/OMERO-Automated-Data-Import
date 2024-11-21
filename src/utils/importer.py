@@ -1,6 +1,7 @@
 # importer.py
 
 import os
+import shutil
 import glob
 import logging
 import ezomero
@@ -385,6 +386,7 @@ class DataPackageImporter:
                         # Ensure remote_path is the directory itself if file_path is a directory
                         remote_path = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
                         local_file_dir = local_file_dir[0].rstrip("/") + "/"
+                        local_file_dir = "/OMERO/ManagedRepository/" + local_file_dir
                         # self.logger.debug(f"Move {local_file_dir} to {remote_path}")
                         # 1. Rsync the actual files to the remote location
                         # rsync_command = [
@@ -406,7 +408,13 @@ class DataPackageImporter:
                                     os.symlink(new_target, symlink_path)  # Create the new symlink
                                     self.logger.debug(f"new symlinks {symlink_path} -> {new_target}")
                                     
-                        # delete local copy in relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, UUID)
+                        # delete local copy in tmp out folder
+                        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
+                        if os.path.exists(relative_output_path):
+                            self.logger.debug(f"Removing temporary local {relative_output_path} folder")
+                            shutil.rmtree(relative_output_path)
+                        else:
+                            self.logger.debug(f"The folder {relative_output_path} does not exist.")                        
                     
                 else:
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
