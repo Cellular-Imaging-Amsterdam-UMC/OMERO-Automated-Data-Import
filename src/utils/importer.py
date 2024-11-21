@@ -15,13 +15,14 @@ from omero.rtypes import rstring, rlong
 from omero.plugins.sessions import SessionsControl
 from omero.model import DatasetI
 from subprocess import Popen, PIPE, STDOUT, CalledProcessError
+import subprocess
 import re
 from importlib import import_module
 ImportControl = import_module("omero.plugins.import").ImportControl
 
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries (in seconds)
-TMP_OUTPUT_FOLDER = f"./converted-data"
+TMP_OUTPUT_FOLDER = f"OMERO_inplace"
 
 def connection(func):
     @functools.wraps(func)
@@ -129,11 +130,12 @@ class DataProcessor:
         # TODO don't hardcode   
         kwargs.append(f"--outputfolder")
         folder = os.path.dirname(file_path)
-        relative_output_path = os.path.join("/data", TMP_OUTPUT_FOLDER.lstrip('./'))
+        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+        podman_settings = podman_settings + ["-v", f"{relative_output_path}:/out"]
         # Create the directory if it doesn't exist
         # os.makedirs(relative_output_path, exist_ok=True)
-        self.logger.info(f"output folder {relative_output_path}")
-        kwargs.append(relative_output_path)
+        self.logger.info(f"output folder {relative_output_path} (--> /out)")
+        kwargs.append("/out")
 
         podman_command = podman_settings + [container] + kwargs
 
@@ -289,7 +291,7 @@ class DataPackageImporter:
                 "screen_id": rlong(screen_id),
             }
             results = q.projection(
-                "SELECT DISTINCT p.id, p.details.creationEvent.time FROM Plate p "
+                "SELECT DISTINCT p.id, p.details.creationEvent.time, fs.templatePrefix FROM Plate p "
                 "JOIN p.wells w "
                 "JOIN w.wellSamples ws "
                 "JOIN ws.image i "
@@ -303,7 +305,9 @@ class DataPackageImporter:
             )
             self.logger.debug(f"Query results: {results}")
             plate_ids = [r[0].val for r in results]
-            return plate_ids
+            template_prefixes = [r[2].val for r in results]  # Extract Template Prefixes
+            
+            return plate_ids, template_prefixes
 
     @connection
     def import_dataset(self, conn, target, dataset, transfer="ln_s", depth=None):
@@ -328,7 +332,7 @@ class DataPackageImporter:
 
         return ezomero.ezimport(conn=conn, target=target, dataset=dataset, **kwargs)
 
-    def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None):
+    def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None, local_paths=None):
         """
         Upload files to a specified dataset or screen in OMERO.
         """
@@ -344,20 +348,58 @@ class DataPackageImporter:
         
         self.logger.debug(f"{file_paths}")
 
-        for file_path in file_paths:
+        for i, file_path in enumerate(file_paths):
             self.logger.debug(f"Uploading file: {file_path}")
             try:
                 if screen_id:
                     self.logger.debug(f"Uploading to screen: {screen_id}")
-                    imported = self.import_to_omero(
-                        file_path=str(file_path),
-                        target_id=screen_id,
-                        target_type='screen',
-                        uuid=uuid,
-                        depth=10
-                    )
-                    self.logger.debug("Upload done. Retrieving plate id.")
-                    image_ids = self.get_plate_ids(str(file_path), screen_id)
+                    if not local_paths:
+                        imported = self.import_to_omero(
+                            file_path=str(file_path),
+                            target_id=screen_id,
+                            target_type='screen',
+                            uuid=uuid,
+                            depth=10
+                        )
+                        self.logger.debug("Upload done. Retrieving plate id.")
+                        image_ids, local_file_dir = self.get_plate_ids(str(file_path), screen_id)
+                    else:
+                        # upload from local, then symlink switch and delete
+                        
+                        imported = self.import_to_omero(
+                            file_path=str(local_paths[i]),
+                            target_id=screen_id,
+                            target_type='screen',
+                            uuid=uuid,
+                            depth=10
+                        )
+                        self.logger.debug("Upload done. Retrieving plate id.")
+                        image_ids, local_file_dir = self.get_plate_ids(str(local_paths[i]), screen_id)
+                        
+                        # rsync file to remote and point symlink there
+                        # Ensure remote_path is the directory itself if file_path is a directory
+                        remote_path = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
+                        # 1. Rsync the actual files to the remote location
+                        rsync_command = [
+                            "rsync", "-av", "--copy-links",  # Copy actual files instead of symlinks
+                            local_file_dir + "/",  # Add trailing slash to sync directory contents
+                            remote_path
+                        ]
+                        self.logger.info(f"Rsync command: {rsync_command}")
+                        subprocess.run(rsync_command, check=True)
+                        # 2. Update the symlinks to point to the remote location
+                        self.logger.info(f"Rsynced. Now update symlinks in {local_file_dir}")
+                        for root, _, files in os.walk(local_file_dir):
+                            for file in files:
+                                symlink_path = os.path.join(root, file)
+                                if os.path.islink(symlink_path):  # Only process symlinks
+                                    # Update symlink to point to remote location
+                                    os.unlink(symlink_path)  # Remove the old symlink
+                                    new_target = os.path.join(remote_path, file)
+                                    os.symlink(new_target, symlink_path)  # Create the new symlink
+                                    
+                        # delete local copy in relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+                    
                 else:
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
                     if os.path.isfile(file_path):
@@ -430,14 +472,16 @@ class DataPackageImporter:
             file_ann.setFile(original_file)
             file_ann.setDescription(rstring("Companion OME file"))
             file_ann.save()
+            # Get the Annotation ID
+            annotation_id = file_ann.getId()
 
             # Step 3: Link the FileAnnotation to the dataset
             dataset = conn.getObject("Dataset", dataset_id)
             dataset.linkAnnotation(file_ann)
 
-            self.logger.info(f"Successfully attached companion file {file_id} to dataset ID: {dataset_id}")
+            self.logger.info(f"Successfully attached companion file {annotation_id} to dataset ID: {dataset_id}")
             
-            return file_id
+            return annotation_id
         except Exception as e:
             self.logger.error(f"Failed to attach companion file to dataset: {e}")
             raise
@@ -586,10 +630,22 @@ class DataPackageImporter:
                                 self.logger.info("Preprocessing ran successfully. Continuing import.")
                                 if screen_id:  # import as dataset first
                                     # make a temp OMERO dataset first
-                                    temp_dataset_id = self.create_new_dataset(name="test_to_plate", description=f"This is a tmp dataset for {self.data_package.get('UUID', 'Unknown')}")
+                                    # temp_dataset_id = self.create_new_dataset(name="test_to_plate", description=f"This is a tmp dataset for {self.data_package.get('UUID', 'Unknown')}")
                                     # TODO: move companion.ome and upload the first tiff.
-                                    self.upload_screen_as_parallel_dataset(user_conn, file_paths, temp_dataset_id, screen_id)
-                                    # TODO: Also handle metadata CSV
+                                    # self.upload_screen_as_parallel_dataset(user_conn, file_paths, temp_dataset_id, screen_id)
+                                    
+                                    # 1. file is now in os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+                                    # 2. upload as screen in-place
+                                    file_paths_local = os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=None,
+                                        screen_id=screen_id,
+                                        local_paths=[file_paths_local]
+                                    )                              
+                                    
+                                    
                                 else:
                                     # Call upload_files with the appropriate ID
                                     successful_uploads, failed_uploads = self.upload_files(
@@ -612,6 +668,8 @@ class DataPackageImporter:
                                 dataset_id=dataset_id,
                                 screen_id=screen_id
                             )
+                            
+                        # TODO: Also handle metadata CSV
                         self.logger.debug(f"Successful uploads: {successful_uploads}")
                         self.logger.debug(f"Failed uploads: {failed_uploads}")
 
