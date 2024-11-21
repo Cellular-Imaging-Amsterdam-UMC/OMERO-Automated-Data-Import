@@ -380,10 +380,12 @@ class DataPackageImporter:
                         # rsync file to remote and point symlink there
                         # Ensure remote_path is the directory itself if file_path is a directory
                         remote_path = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
+                        local_file_dir = local_file_dir[0].rstrip("/") + "/"
+                        self.logger.debug(f"Move {local_file_dir} to {remote_path}")
                         # 1. Rsync the actual files to the remote location
                         rsync_command = [
                             "rsync", "-av", "--copy-links",  # Copy actual files instead of symlinks
-                            local_file_dir + "/",  # Add trailing slash to sync directory contents
+                            local_file_dir,  # Already guaranteed to have a trailing slash
                             remote_path
                         ]
                         self.logger.info(f"Rsync command: {rsync_command}")
@@ -399,7 +401,7 @@ class DataPackageImporter:
                                     new_target = os.path.join(remote_path, file)
                                     os.symlink(new_target, symlink_path)  # Create the new symlink
                                     
-                        # delete local copy in relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+                        # delete local copy in relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, UUID)
                     
                 else:
                     self.logger.debug(f"Uploading to dataset: {dataset_id}")
