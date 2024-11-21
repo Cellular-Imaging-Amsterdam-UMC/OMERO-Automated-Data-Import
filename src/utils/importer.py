@@ -130,7 +130,7 @@ class DataProcessor:
         # TODO don't hardcode   
         kwargs.append(f"--outputfolder")
         folder = os.path.dirname(file_path)
-        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
         podman_settings = podman_settings + ["-v", f"{relative_output_path}:/out"]
         # Create the directory if it doesn't exist
         # os.makedirs(relative_output_path, exist_ok=True)
@@ -346,7 +346,7 @@ class DataPackageImporter:
         successful_uploads = []
         failed_uploads = []
         
-        self.logger.debug(f"{file_paths}")
+        self.logger.debug(f"{file_paths} \ local: {local_paths}")
 
         for i, file_path in enumerate(file_paths):
             self.logger.debug(f"Uploading file: {file_path}")
@@ -365,9 +365,10 @@ class DataPackageImporter:
                         image_ids, local_file_dir = self.get_plate_ids(str(file_path), screen_id)
                     else:
                         # upload from local, then symlink switch and delete
-                        
+                        fp = str(local_paths[i])
+                        self.logger.debug(f"Importing {fp}")
                         imported = self.import_to_omero(
-                            file_path=str(local_paths[i]),
+                            file_path=fp,
                             target_id=screen_id,
                             target_type='screen',
                             uuid=uuid,
@@ -624,6 +625,10 @@ class DataPackageImporter:
                         # Run preprocessing if needed
                         processor = DataProcessor(self.data_package, self.logger)
                         if processor.has_preprocessing():
+                            file_paths_local = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
+                            self.logger.debug(f"Creating local tmp folder: {file_paths_local}")
+                            os.makedirs(file_paths_local, exist_ok=True)
+                            self.logger.debug(f"Setup local tmp folder: {file_paths_local}")
                             log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
                             success = processor.run(dry_run=False)
                             if success:
@@ -636,7 +641,8 @@ class DataPackageImporter:
                                     
                                     # 1. file is now in os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
                                     # 2. upload as screen in-place
-                                    file_paths_local = os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
+                                    # file_paths_local = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
+
                                     successful_uploads, failed_uploads = self.upload_files(
                                         user_conn,
                                         file_paths,
