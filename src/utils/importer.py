@@ -74,32 +74,68 @@ class DataProcessor:
         container = self.data_package.get("preprocessing_container")
         if not container:
             self.logger.warning("No 'preprocessing_container' defined in data package.")
+            raise ValueError("Missing required 'preprocessing_container' in data package.")
             return None, None, None
+        
         # Add 'docker.io/' prefix if not already present
         if not container.startswith("docker.io/"):
             container = "docker.io/" + container
-
+            
+         # Check mandatory keys
+        output_folder = self.data_package.get("preprocessing_outputfolder")
+        input_file = self.data_package.get("preprocessing_inputfile")
+        if not output_folder or not input_file:
+            self.logger.warning(f"output_folder: {output_folder} / input_file: {input_file}")
+            raise ValueError("Missing required 'preprocessing_outputfolder' or 'preprocessing_inputfile' in data package.")
+      
         # Build kwargs from remaining 'preprocessing_' keys (exclude 'preprocessing_container')
         kwargs = []
+        mount_paths = []
         mount_path = None
         for key, value in self.data_package.items():
-            if key.startswith("preprocessing_") and key != "preprocessing_container":
-                # Check if the value contains a placeholder like {Files}
+           if key.startswith("preprocessing_") and key not in ("preprocessing_container", "preprocessing_outputfolder", "preprocessing_altoutputfolder"):
+                # Replace {Files} with file path in secondary mount
                 if isinstance(value, str) and "{Files}" in value:
                     if file_path:
                         # Replace {Files} with the file paths in the secondary mount
-                        data_file_path = os.path.join("/data", os.path.basename(file_path))
+                        self.logger.debug(f"output_folder: {output_folder} - file_path: {file_path} - basename: {os.path.basename(file_path)}")
+                        data_file_path = os.path.join(output_folder, os.path.basename(file_path))
                         value = value.replace("{Files}", data_file_path)
 
-                        # Gather the mount path (replace parent dir with /data)
+                        # Gather the mount path (replace parent dir with /data (output_folder))
                         mount_path = os.path.dirname(file_path)
 
                 # Convert key to '--key', 'value' format
                 arg_key = key.replace("preprocessing_", "")
                 kwargs.append(f"--{arg_key}")
                 kwargs.append(value)
+                
+        if output_folder: # its a given, just aesthetically to mirror alt_output_folder
+            # Handle output folder (required)
+            kwargs.append("--outputfolder")
+            kwargs.append(output_folder)
+            
+            # Mount path for output folder
+            mount_paths.append((mount_path, output_folder))
+            # Log the folder mappings
+            self.logger.info(f"Output folder {mount_path} (--> {output_folder})")
+        
+        # Handle alt output folder (optional)
+        alt_output_folder = self.data_package.get("preprocessing_altoutputfolder")
+        if alt_output_folder:
+            kwargs.append("--altoutputfolder")
+            kwargs.append(alt_output_folder)
 
-        return container, kwargs, mount_path
+            # Mount path for alt output folder
+            relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
+            mount_paths.append((relative_output_path, alt_output_folder))
+            self.logger.info(f"Alt output folder {relative_output_path} (--> {alt_output_folder})")
+        else:
+            # TODO: else, make our own folder and copy there?
+            self.logger.error(f"Missing altoutputfolder. This is not handled yet: TODO.")
+            return None, None, None            
+
+        return container, kwargs, mount_paths
 
     def replace_placeholders(self, value):
         """Replace placeholders like {key} with corresponding data package values."""
@@ -118,29 +154,16 @@ class DataProcessor:
 
     def build_podman_command(self, file_path):
         """Constructs the full Podman command."""
-        container, kwargs, mount_path = self.get_preprocessing_args(file_path)
+        container, kwargs, mount_paths = self.get_preprocessing_args(file_path)
         if not container:
+            self.logger.warning("No container given to build podman command")
             return None
 
         # Predefined Podman settings
         podman_settings = ["podman", "run", "--rm", "--userns=keep-id"]
-        # Add the volume mount if mount_path is available
-        if mount_path:
-            podman_settings = podman_settings + ["-v", f"{mount_path}:/data"]
-        
-        # TODO don't hardcode   
-        kwargs.append(f"--outputfolder")
-        folder = os.path.dirname(file_path)
-        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
-        podman_settings = podman_settings + ["-v", f"{relative_output_path}:/out"]
-        # Create the directory if it doesn't exist
-        # os.makedirs(relative_output_path, exist_ok=True)
-        self.logger.info(f"output folder {relative_output_path} (--> /out)")
-        kwargs.append("/out")
-        
-        self.logger.info(f"Alt output folder {mount_path} (--> /data)")
-        kwargs.append(f"--altoutputfolder")
-        kwargs.append("/data")        
+        # Add the volume mounts if mount_paths is available
+        for k,v in mount_paths:
+            podman_settings = podman_settings + ["-v", f"{k}:{v}"]       
 
         podman_command = podman_settings + [container] + kwargs
 
@@ -648,12 +671,7 @@ class DataPackageImporter:
                             success = processor.run(dry_run=False)
                             if success:
                                 self.logger.info("Preprocessing ran successfully. Continuing import.")
-                                if screen_id:  # import as dataset first
-                                    # make a temp OMERO dataset first
-                                    # temp_dataset_id = self.create_new_dataset(name="test_to_plate", description=f"This is a tmp dataset for {self.data_package.get('UUID', 'Unknown')}")
-                                    # TODO: move companion.ome and upload the first tiff.
-                                    # self.upload_screen_as_parallel_dataset(user_conn, file_paths, temp_dataset_id, screen_id)
-                                    
+                                if screen_id:
                                     # 1. file is now in os.path.join("/OMERO", TMP_OUTPUT_FOLDER)
                                     # 2. upload as screen in-place
                                     # file_paths_local = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
@@ -664,9 +682,7 @@ class DataPackageImporter:
                                         dataset_id=None,
                                         screen_id=screen_id,
                                         local_paths=[file_paths_local]
-                                    )                              
-                                    
-                                    
+                                    ) 
                                 else:
                                     # Call upload_files with the appropriate ID
                                     successful_uploads, failed_uploads = self.upload_files(

@@ -61,6 +61,8 @@ def create_upload_order(group, core_group_name, username, dataset, files):
     if preprocessing: #exists
         order_content["preprocessing_container"] = "cellularimagingcf/cimagexpresstoometiff:v0.7"
         order_content["preprocessing_inputfile"] = "{Files}"
+        order_content["preprocessing_outputfolder"] = "/data"
+        order_content["preprocessing_altoutputfolder"] = "/out"
         order_content["preprocessing_saveoption"] = "single"
         
     
