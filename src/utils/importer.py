@@ -1,6 +1,7 @@
 # importer.py
 
 import os
+import csv
 import shutil
 import glob
 import logging
@@ -488,107 +489,107 @@ class DataPackageImporter:
                 failed_uploads.append((file_path, dataset_id or screen_id, os.path.basename(file_path), None))
         return successful_uploads, failed_uploads
     
-    def attach_companion_to_dataset(self, conn, dataset_id, companion_file):
-        try:
-            self.logger.info(f"Attaching companion file: {companion_file} to dataset ID: {dataset_id}")
+    # def attach_companion_to_dataset(self, conn, dataset_id, companion_file):
+    #     try:
+    #         self.logger.info(f"Attaching companion file: {companion_file} to dataset ID: {dataset_id}")
 
-            # Step 1: Upload the companion file to OMERO as an OriginalFile
-            # Get the file size
-            file_size = os.path.getsize(companion_file)
-            with open(companion_file, 'rb') as file_handle:
-                original_file = conn.createOriginalFileFromFileObj(
-                    file_handle,
-                    name=os.path.basename(companion_file),
-                    path=os.path.dirname(companion_file),
-                    fileSize=file_size
-                )
-            # Get the file ID
-            file_id = original_file.getId()
-            self.logger.info(f"Uploaded companion file with ID: {file_id}")
+    #         # Step 1: Upload the companion file to OMERO as an OriginalFile
+    #         # Get the file size
+    #         file_size = os.path.getsize(companion_file)
+    #         with open(companion_file, 'rb') as file_handle:
+    #             original_file = conn.createOriginalFileFromFileObj(
+    #                 file_handle,
+    #                 name=os.path.basename(companion_file),
+    #                 path=os.path.dirname(companion_file),
+    #                 fileSize=file_size
+    #             )
+    #         # Get the file ID
+    #         file_id = original_file.getId()
+    #         self.logger.info(f"Uploaded companion file with ID: {file_id}")
             
-            # Step 2: Create a FileAnnotation and set the OriginalFile
-            file_ann = FileAnnotationWrapper(conn)
-            file_ann.setFile(original_file)
-            file_ann.setDescription(rstring("Companion OME file"))
-            file_ann.save()
-            # Get the Annotation ID
-            annotation_id = file_ann.getId()
+    #         # Step 2: Create a FileAnnotation and set the OriginalFile
+    #         file_ann = FileAnnotationWrapper(conn)
+    #         file_ann.setFile(original_file)
+    #         file_ann.setDescription(rstring("Companion OME file"))
+    #         file_ann.save()
+    #         # Get the Annotation ID
+    #         annotation_id = file_ann.getId()
 
-            # Step 3: Link the FileAnnotation to the dataset
-            dataset = conn.getObject("Dataset", dataset_id)
-            dataset.linkAnnotation(file_ann)
+    #         # Step 3: Link the FileAnnotation to the dataset
+    #         dataset = conn.getObject("Dataset", dataset_id)
+    #         dataset.linkAnnotation(file_ann)
 
-            self.logger.info(f"Successfully attached companion file {annotation_id} to dataset ID: {dataset_id}")
+    #         self.logger.info(f"Successfully attached companion file {annotation_id} to dataset ID: {dataset_id}")
             
-            return annotation_id
-        except Exception as e:
-            self.logger.error(f"Failed to attach companion file to dataset: {e}")
-            raise
+    #         return annotation_id
+    #     except Exception as e:
+    #         self.logger.error(f"Failed to attach companion file to dataset: {e}")
+    #         raise
 
-    def upload_screen_as_parallel_dataset(self, user_conn, file_paths, temp_dataset_id, screen_id):
-        for file_path in file_paths:
-            folder = os.path.dirname(file_path)
-            relative_output_path = os.path.join(folder, TMP_OUTPUT_FOLDER.lstrip('./'))
-            self.logger.info(f"Uploading dataset from {relative_output_path}")
-            base_name = os.path.splitext(os.path.basename(file_path))[0]
+    # def upload_screen_as_parallel_dataset(self, user_conn, file_paths, temp_dataset_id, screen_id):
+    #     for file_path in file_paths:
+    #         folder = os.path.dirname(file_path)
+    #         relative_output_path = os.path.join(folder, TMP_OUTPUT_FOLDER.lstrip('./'))
+    #         self.logger.info(f"Uploading dataset from {relative_output_path}")
+    #         base_name = os.path.splitext(os.path.basename(file_path))[0]
 
-            # Step 1: Find the companion file
-            companion_pattern = os.path.join(relative_output_path, "*.companion.ome")
-            companion_files = glob.glob(companion_pattern)
+    #         # Step 1: Find the companion file
+    #         companion_pattern = os.path.join(relative_output_path, "*.companion.ome")
+    #         companion_files = glob.glob(companion_pattern)
 
-            if not companion_files:
-                raise FileNotFoundError(f"No companion OME file found in {relative_output_path}")
+    #         if not companion_files:
+    #             raise FileNotFoundError(f"No companion OME file found in {relative_output_path}")
             
-            companion_file = companion_files[0]
-            self.logger.info(f"Found companion file: {companion_file}")
+    #         companion_file = companion_files[0]
+    #         self.logger.info(f"Found companion file: {companion_file}")
 
-            # Step 2: Find any OME-TIFF file
-            ome_tiff_pattern = os.path.join(relative_output_path, "*.ome.tiff")
-            ome_tiff_files = glob.glob(ome_tiff_pattern)
+    #         # Step 2: Find any OME-TIFF file
+    #         ome_tiff_pattern = os.path.join(relative_output_path, "*.ome.tiff")
+    #         ome_tiff_files = glob.glob(ome_tiff_pattern)
 
-            if not ome_tiff_files:
-                raise FileNotFoundError(f"No OME-TIFF files found in {relative_output_path}")
+    #         if not ome_tiff_files:
+    #             raise FileNotFoundError(f"No OME-TIFF files found in {relative_output_path}")
             
-            ome_tiff_file = ome_tiff_files[0]
-            self.logger.info(f"Uploading OME-TIFF files like: {ome_tiff_file}")
+    #         ome_tiff_file = ome_tiff_files[0]
+    #         self.logger.info(f"Uploading OME-TIFF files like: {ome_tiff_file}")
 
-            # Step 3: Rename the companion file temporarily            
-            companion_temp = os.path.join(folder, os.path.basename(companion_file))
-            self.logger.info(f"Moving companion file to parent directory: {companion_temp}")
-            os.rename(companion_file, companion_temp)
+    #         # Step 3: Rename the companion file temporarily            
+    #         companion_temp = os.path.join(folder, os.path.basename(companion_file))
+    #         self.logger.info(f"Moving companion file to parent directory: {companion_temp}")
+    #         os.rename(companion_file, companion_temp)
 
-            try:
-                # Step 3b: attach companion
-                self.logger.info(f"Attaching companion file {companion_temp} to dataset ID: {temp_dataset_id}")
-                companion_file_id = self.attach_companion_to_dataset(user_conn, temp_dataset_id, companion_temp)
+    #         try:
+    #             # Step 3b: attach companion
+    #             self.logger.info(f"Attaching companion file {companion_temp} to dataset ID: {temp_dataset_id}")
+    #             companion_file_id = self.attach_companion_to_dataset(user_conn, temp_dataset_id, companion_temp)
                 
-                # Step 4: Perform upload
-                self.logger.info("Uploading screen as dataset...")
-                # Call upload_files with the appropriate ID
-                successful_uploads, failed_uploads = self.upload_files(
-                    user_conn,
-                    [relative_output_path],
-                    dataset_id=temp_dataset_id,
-                    screen_id=None
-                )
+    #             # Step 4: Perform upload
+    #             self.logger.info("Uploading screen as dataset...")
+    #             # Call upload_files with the appropriate ID
+    #             successful_uploads, failed_uploads = self.upload_files(
+    #                 user_conn,
+    #                 [relative_output_path],
+    #                 dataset_id=temp_dataset_id,
+    #                 screen_id=None
+    #             )
 
-                # Step 5: Rename the companion file back to its original name
-                os.rename(companion_temp, companion_file)
-                self.logger.info(f"Restored companion file to its original location: {companion_file}")
+    #             # Step 5: Rename the companion file back to its original name
+    #             os.rename(companion_temp, companion_file)
+    #             self.logger.info(f"Restored companion file to its original location: {companion_file}")
                 
-                # TODO: run conversion script on temp_dataset_id -> screen_id
-                self.logger.info(f"TODO: Now we should run conversion to Plate script with {companion_file} ({companion_file_id}) on dataset {temp_dataset_id} to screen {screen_id}...")
-                # TODO: and maybe cleanup the tmp dataset
-                # conn.deleteObjects("Dataset", [dataset_id], deleteAnns=True, wait=True)
+    #             # TODO: run conversion script on temp_dataset_id -> screen_id
+    #             self.logger.info(f"TODO: Now we should run conversion to Plate script with {companion_file} ({companion_file_id}) on dataset {temp_dataset_id} to screen {screen_id}...")
+    #             # TODO: and maybe cleanup the tmp dataset
+    #             # conn.deleteObjects("Dataset", [dataset_id], deleteAnns=True, wait=True)
                 
 
-            except Exception as e:
-                # If any error occurs, attempt to restore the original file name
-                os.rename(companion_temp, companion_file)
-                self.logger.info(f"Error occurred: {e}. Restored companion file to: {companion_file}")
-                raise
+    #         except Exception as e:
+    #             # If any error occurs, attempt to restore the original file name
+    #             os.rename(companion_temp, companion_file)
+    #             self.logger.info(f"Error occurred: {e}. Restored companion file to: {companion_file}")
+    #             raise
 
-        return ome_tiff_file  # Return the selected OME-TIFF file if needed
+    #     return ome_tiff_file  # Return the selected OME-TIFF file if needed
 
     @connection
     def create_new_dataset(self, conn, name="New Dataset", description=""):
@@ -747,8 +748,28 @@ class DataPackageImporter:
             else:
                 self.logger.debug(f"Attempting to add annotations to Image ID: {object_id}")
                 object_type = "Image"  # Set to Image when it's a dataset
+                
+            # Add metadata.csv key-value pairs if available
+            metadata_file = self.data_package.get('metadata_file', 'metadata.csv') # default to `metadata.csv`
+            metadata_path = os.path.join(os.path.dirname(file_path), metadata_file)
+            if os.path.exists(metadata_path):
+                self.logger.info(f"Found metadata at {metadata_path}. Reading metadata...")
+                try:
+                    with open(metadata_path, 'r', newline='') as csvfile:
+                        reader = csv.reader(csvfile)
+                        for row in reader:
+                            if len(row) == 2:  # Ensure the row has exactly 2 columns
+                                key, value = row[0], row[1]
+                                if key:  # Only add non-empty keys
+                                    annotation_dict[key] = value or ''  # Add key-value pair (empty value if missing)
+                            else:
+                                self.logger.warning(f"Invalid row in metadata: {row}. Expecting 2 columns on every row, for key-value.")
+                except Exception as e:
+                    self.logger.error(f"Error reading metadata: {str(e)}")
+            else:
+                self.logger.info(f"Found no metadata at {metadata_path}.")
 
-            self.logger.debug(f"Annotation dict: {annotation_dict}")
+            self.logger.debug(f"Final annotation dictionary: {annotation_dict}")
 
             map_ann_id = ezomero.post_map_annotation(
                 conn=conn,
