@@ -49,11 +49,11 @@ def create_upload_order(group, core_group_name, username, dataset, files):
     order_content = {
         "Version": "2.0",
         "UUID": str(uuid.uuid4()),
-        "Username": "rrosas",  # Remember to also change the UserID
+        "Username": config.get('sample_user_name',"rrosas"),  # Remember to also change the UserID
         "Group": group,
-        "UserID": 34,
-        "GroupID": 134,
-        "ProjectID": 1001,
+        "UserID": config.get('sample_user_id', 34),
+        "GroupID": config.get('sample_group_id', 134),
+        "ProjectID": config.get('sample_project_id', 1001),
         "Files": files,
     }
     
