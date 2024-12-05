@@ -94,10 +94,12 @@ ENV _CONTAINERS_USERNS_CONFIGURED="" \
     BUILDAH_ISOLATION=chroot
 
 
-
 # Clone the specific branch of the repository
-ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
-RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
+# ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
+# RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
+
+# Copy the auto-importer application code
+COPY . /auto-importer
 
 # Install the Python dependencies from the repository
 RUN pip install /auto-importer
