@@ -99,7 +99,7 @@ ENV _CONTAINERS_USERNS_CONFIGURED="" \
 # RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
 
 # Copy the auto-importer application code
-COPY . /auto-importer
+ADD / /auto-importer
 
 # Install the Python dependencies from the repository
 RUN pip install /auto-importer
