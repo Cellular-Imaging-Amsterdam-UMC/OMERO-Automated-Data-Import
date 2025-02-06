@@ -1,9 +1,0 @@
-Version: 2.0
-UUID: afe38fe0-ea2b-43e6-949d-364827c66230
-Username: "rrosas"
-Group: "Demo"
-UserID: 102
-GroupID: 3
-ProjectID: 455
-DatasetID: 807
-Files: ["/divg/coreKrawczyk/Carrousell pictures/Retina_LAM+occln_20201204_Series007Snapshot1_ch00.tif","/divg/coreKrawczyk/Carrousell pictures/Retina_LAM+occln_20201204_Series007Snapshot1_ch00.tif"]

@@ -14,6 +14,8 @@
 
 #get_omero_info.py
 
+#TODO: GET RID OF THIS AND PUT IN INITIALIZE THE PARTS THAT ARE STILL NEEDED
+
 import subprocess
 import os
 import csv

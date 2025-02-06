@@ -1,11 +1,7 @@
 # Paths settings
 log_file_path: logs/app.logs
-group_list: config/groups_list.json
 base_dir: /data
-upload_orders_dir_name: .2BUploaded
 data_dir_name: .omerodata
-failed_uploads_directory_name: .failed_uploads
-completed_orders_dir_name: .Uploaded
 
 # Worker settings
 max_workers: 4
