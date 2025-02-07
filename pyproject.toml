@@ -46,3 +46,6 @@ find = { where = ["omero_adi"] }
 
 [project.urls]
 "Homepage" = "https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import"
+
+[tool.pytest.ini_options]
+cache_dir = "/tmp/.pytest_cache"

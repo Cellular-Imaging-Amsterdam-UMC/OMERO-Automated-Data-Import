@@ -8,35 +8,35 @@ import logging
 from pathlib import Path
 from utils.ingest_tracker import initialize_ingest_tracker  # Ensure this import if needed elsewhere
 
-def load_settings(file_path):
+def load_settings(file_path: str) -> dict:
     """
     Load settings from either a YAML or JSON file.
     """
     logger = logging.getLogger(__name__)
     try:
-        file_path = Path(file_path)  # Convert to Path object
-        if not file_path.exists():
-            logger.error(f"Settings file not found: {file_path}")
-            raise FileNotFoundError(f"Settings file not found: {file_path}")
+        file_path_obj = Path(file_path)  # Convert to Path object
+        if not file_path_obj.exists():
+            logger.error(f"Settings file not found: {file_path_obj}")
+            raise FileNotFoundError(f"Settings file not found: {file_path_obj}")
 
-        logger.debug(f"Loading settings from {file_path}")
-        with file_path.open('r') as file:
-            if file_path.suffix in ['.yml', '.yaml']:
+        logger.debug(f"Loading settings from {file_path_obj}")
+        with file_path_obj.open('r') as file:
+            if file_path_obj.suffix in ['.yml', '.yaml']:
                 settings = yaml.safe_load(file)
                 logger.debug("Successfully loaded YAML settings")
                 return settings
-            elif file_path.suffix == '.json':
+            elif file_path_obj.suffix == '.json':
                 settings = json.load(file)
                 logger.debug("Successfully loaded JSON settings")
                 return settings
             else:
-                logger.error(f"Unsupported file format: {file_path}")
-                raise ValueError(f"Unsupported file format: {file_path}")
+                logger.error(f"Unsupported file format: {file_path_obj}")
+                raise ValueError(f"Unsupported file format: {file_path_obj}")
     except Exception as e:
-        logger.error(f"Failed to load settings from {file_path}: {str(e)}")
+        logger.error(f"Failed to load settings from {file_path_obj}: {str(e)}")
         raise
 
-def initialize_system(config):
+def initialize_system(config: dict) -> None:
     """
     Performs initial system setup.
     In the updated database-driven mode, group checks are no longer performed.

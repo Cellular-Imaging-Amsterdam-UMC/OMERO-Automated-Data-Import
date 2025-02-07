@@ -143,56 +143,56 @@ class DatabasePoller:
         self.shutdown_event.set()
         self.poller_thread.join()
 
-    def poll_database(self):
+    def poll_database(self) -> None:
         """
-        Continuously poll the database for new upload orders.
-        A new order is identified by having stage == STAGE_NEW_ORDER and (for simplicity) not having been processed further.
-        
-        To improve efficiency, we track the highest processed ID (last_max_id) and only query for new orders.
+        Continuously polls the database for new upload orders using a context manager
+        and processes each new order.
         """
-        from sqlalchemy.orm import sessionmaker
         Session = self.ingest_tracker.Session
         last_max_id = 0  # Initialize the highest processed ID
         while not self.shutdown_event.is_set():
-            session = Session()
-            try:
-                # Retrieve new orders with stage STAGE_NEW_ORDER and id greater than last_max_id
-                new_orders = session.query(self.IngestionTracking).filter(
-                    self.IngestionTracking.stage == STAGE_NEW_ORDER,
-                    self.IngestionTracking.id > last_max_id
-                ).order_by(self.IngestionTracking.id.asc()).all()
-                for order in new_orders:
-                    if order.id > last_max_id:
-                        last_max_id = order.id
-                    self.logger.info(f"Detected new upload order with UUID {order.uuid}")
-                    # Log detection as a new ingestion step.
-                    log_ingestion_step(order.__dict__, STAGE_DETECTED)
-                    # Create a DataPackage using the order record.
-                    data_package = DataPackage(order.__dict__, order_identifier=order.uuid)
-                    # Instantiate the UploadOrderManager from the order record.
-                    order_manager = UploadOrderManager.from_order_record(order.__dict__, self.config)
-                    ingestion_process = IngestionProcess(data_package, self.config, order_manager)
-                    # Submit the ingestion process to the executor.
-                    future = self.executor.submit(ingestion_process.import_data_package)
-                    future.add_done_callback(
-                        lambda f, uuid=order.uuid: self.logger.info(f"Order {uuid} processing complete.")
-                    )
-            except Exception as e:
-                self.logger.error(f"Error polling database: {e}", exc_info=True)
-            finally:
-                session.close()
+            with Session() as session:
+                try:
+                    new_orders = session.query(self.IngestionTracking).filter(
+                        self.IngestionTracking.stage == STAGE_NEW_ORDER,
+                        self.IngestionTracking.id > last_max_id
+                    ).order_by(self.IngestionTracking.id.asc()).all()
+                    for order in new_orders:
+                        last_max_id = max(last_max_id, order.id)
+                        self.process_order(order)
+                except Exception as e:
+                    self.logger.error(f"Error polling database: {e}", exc_info=True)
             time.sleep(self.poll_interval)
+
+    def process_order(self, order) -> None:
+        """
+        Process a single new order by logging, creating a DataPackage, and submitting an ingestion process.
+        """
+        self.logger.info(f"Detected new upload order with UUID {order.uuid}")
+        log_ingestion_step(order.__dict__, STAGE_DETECTED)
+        data_package = DataPackage(order.__dict__, order_identifier=order.uuid)
+        order_manager = UploadOrderManager.from_order_record(order.__dict__, self.config)
+        ingestion_process = IngestionProcess(data_package, self.config, order_manager)
+        future = self.executor.submit(ingestion_process.import_data_package)
+        future.add_done_callback(self.create_order_callback(order.uuid))
+
+    def create_order_callback(self, uuid: str):
+        """
+        Returns a callback function that logs when the order processing is complete.
+        """
+        def callback(future) -> None:
+            self.logger.info(f"Order {uuid} processing complete.")
+        return callback
 
 # --------------------------------------------------
 # Application run loop
 # --------------------------------------------------
-def run_application(config, groups_info, executor):
+def run_application(config: dict, groups_info, executor) -> None:
+    """
+    Runs the main application loop.
+    Assumes system initialization has already been done.
+    """
     logger = logging.getLogger(__name__)
-    initialize_system(config)
-    # Initialize the global ingest tracker (must be called before polling)
-    from utils.ingest_tracker import initialize_ingest_tracker
-    initialize_ingest_tracker(config)
-
     shutdown_event = Event()
     shutdown_timeout = config.get('shutdown_timeout', 30)
 

@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func
 from datetime import datetime
 import json
+from sqlalchemy.sql import text
 
 # Stage constants
 STAGE_IMPORTED = "Data Imported"
@@ -55,18 +56,34 @@ class IngestTracker:
     """Handles tracking of ingestion steps in the database."""
     def __init__(self, config):
         """Initialize IngestTracker with logging and database connection."""
+        if not config or 'ingest_tracking_db' not in config:
+            raise ValueError("Configuration must include 'ingest_tracking_db'")
+            
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing IngestTracker")
 
         try:
-            # Use a default for testing if not provided.
-            self.database_url = config.get('ingest_tracking_db', "sqlite:///:memory:")
+            self.database_url = config['ingest_tracking_db']
             self.logger.debug(f"Using database URL: {self.database_url}")
 
-            self.engine = create_engine(self.database_url)
+            # Configure connection based on database type
+            connect_args = {}
+            if self.database_url.startswith('sqlite'):
+                connect_args['timeout'] = 5
+            else:  # PostgreSQL or other databases
+                connect_args['connect_timeout'] = 5
+
+            self.engine = create_engine(
+                self.database_url,
+                connect_args=connect_args
+            )
             self.Session = sessionmaker(bind=self.engine)
 
-            # Log table creation/verification
+            # Verify connection
+            with self.engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+
+            # Create tables
             self.logger.debug("Verifying database schema...")
             Base.metadata.create_all(self.engine)
             self.logger.info("Database initialization successful")
@@ -75,8 +92,8 @@ class IngestTracker:
             self.logger.error(f"Database initialization error: {e}", exc_info=True)
             raise
         except Exception as e:
-            self.logger.error(f"Unexpected error during initialization: {e}", exc_info=True)
-            raise
+                    self.logger.error(f"Unexpected error during initialization: {e}", exc_info=True)
+                    raise
 
     def dispose(self):
         """Safely dispose of database resources."""
@@ -87,46 +104,51 @@ class IngestTracker:
         except Exception as e:
             self.logger.error(f"Error disposing database resources: {e}")
 
-    def db_log_ingestion_event(self, order_info, stage):
-        """Log an ingestion step to the database with proper error handling."""
-        session = self.Session()
+    def db_log_ingestion_event(self, order_info: dict, stage: str) -> int:
+        """
+        Log an ingestion step to the database using a context manager for the session.
+        Returns the new entry ID or None if logging failed.
+        """
+        required_fields = ['Group', 'Username', 'UUID']
+        if not all(field in order_info for field in required_fields):
+            self.logger.error(f"Missing required fields in order_info: {required_fields}")
+            return None
+    
+        if not ('DatasetID' in order_info or 'ScreenID' in order_info):
+            self.logger.error("Either DatasetID or ScreenID must be provided")
+            return None
+    
         self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}")
         try:
-            new_entry = IngestionTracking(
-                group_name=order_info.get('Group'),       # Trust the group name provided by the user
-                group_id=order_info.get('GroupID'),         # Capture group ID if provided
-                user_name=order_info.get('Username', 'Unknown'),
-                data_package=str(order_info.get('DatasetID', order_info.get('ScreenID'))),
-                stage=stage,
-                uuid=str(order_info.get('UUID', 'Unknown')),
-                files=order_info.get('Files', []),
-                file_names=order_info.get('file_names', [])
-            )
-
-            session.add(new_entry)
-            session.commit()
-
-            self.logger.info(
-                f"Ingestion event logged: {stage} | "
-                f"UUID: {new_entry.uuid} | "
-                f"Group: {new_entry.group_name} (ID: {new_entry.group_id}) | "
-                f"User: {new_entry.user_name} | "
-                f"Dataset: {new_entry.data_package}"
-            )
-            self.logger.debug(f"Created database entry: {new_entry.id}")
-            return new_entry.id
-
+            with self.Session() as session:
+                new_entry = IngestionTracking(
+                    group_name=order_info.get('Group'),
+                    group_id=order_info.get('GroupID'),
+                    user_name=order_info.get('Username', 'Unknown'),
+                    data_package=str(order_info.get('DatasetID', order_info.get('ScreenID'))),
+                    stage=stage,
+                    uuid=str(order_info.get('UUID', 'Unknown')),
+                    files=order_info.get('Files', []),
+                    file_names=order_info.get('file_names', [])
+                )
+                session.add(new_entry)
+                session.commit()
+    
+                self.logger.info(
+                    f"Ingestion event logged: {stage} | "
+                    f"UUID: {new_entry.uuid} | "
+                    f"Group: {new_entry.group_name} (ID: {new_entry.group_id}) | "
+                    f"User: {new_entry.user_name} | "
+                    f"Dataset: {new_entry.data_package}"
+                )
+                self.logger.debug(f"Created database entry: {new_entry.id}")
+                return new_entry.id
         except SQLAlchemyError as e:
-            session.rollback()
             self.logger.error(f"Database error logging ingestion step: {e}", exc_info=True)
             return None
         except Exception as e:
-            session.rollback()
             self.logger.error(f"Unexpected error logging ingestion step: {e}", exc_info=True)
             return None
-        finally:
-            session.close()
-            self.logger.debug("Database session closed")
 
 # Global instance management
 _ingest_tracker = None

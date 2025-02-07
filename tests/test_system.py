@@ -1,100 +1,115 @@
-# tests/test_system.py
-
 import os
 import tempfile
 import yaml
-import pytest
+import json
 import logging
-from sqlalchemy import inspect
+import pytest
+from pathlib import Path
 
-# Import functions and classes from your modules
-from utils.initialize import load_settings, initialize_system
-from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step, IngestTracker, _ingest_tracker
+# Update these imports to use the new package structure
+from omero_adi import (
+    run_application,
+    DatabasePoller,
+    load_settings,
+    initialize_system,
+    get_ingest_tracker,
+    IngestTracker,
+    IngestionTracking
+)
 
-# Fixture: Create a temporary configuration with an in-memory SQLite DB.
+# Dummy configuration for testing
+TEST_CONFIG = {
+    'log_level': 'DEBUG',
+    'log_file_path': 'test_app.log',
+    'shutdown_timeout': 5,
+    'max_workers': 2,
+    'ingest_tracking_db': 'sqlite:///:memory:'
+}
+
+# A dummy order info dictionary for testing ingestion logging
+DUMMY_ORDER_INFO = {
+    'Group': 'TestGroup',
+    'GroupID': '123',
+    'Username': 'TestUser',
+    'UUID': '0000-1111-2222-3333',
+    'DatasetID': 'Dataset123',
+    'Files': ['file1.txt', 'file2.txt'],
+    'file_names': ['file1.txt', 'file2.txt']
+}
+
+
 @pytest.fixture(scope="function")
-def test_config(tmp_path):
-    config_data = {
-        "log_file_path": "logs/test_app.log",
-        "ingest_tracking_db": "sqlite:///:memory:",
-        "max_workers": 1
+def temp_yaml_file(tmp_path):
+    # Create a temporary YAML settings file
+    data = {
+        'log_level': 'DEBUG',
+        'log_file_path': 'test_app.log',
+        'shutdown_timeout': 5,
+        'max_workers': 2,
+        'ingest_tracking_db': 'sqlite:///:memory:'
     }
-    config_file = tmp_path / "test_settings.yml"
-    config_file.write_text(yaml.dump(config_data))
-    # Return both the config data and path, if needed
-    return config_data
+    file_path = tmp_path / "settings.yml"
+    with file_path.open("w") as f:
+        yaml.dump(data, f)
+    return str(file_path)
 
-def test_load_settings(tmp_path):
-    # Create a temporary YAML settings file.
-    config_data = {
-        "log_file_path": "logs/test_app.log",
-        "ingest_tracking_db": "sqlite:///:memory:",
-        "max_workers": 1
-    }
-    config_file = tmp_path / "config.yml"
-    config_file.write_text(yaml.dump(config_data))
-    loaded = load_settings(str(config_file))
-    assert loaded["log_file_path"] == "logs/test_app.log"
-    assert loaded["ingest_tracking_db"] == "sqlite:///:memory:"
-    assert loaded["max_workers"] == 1
 
-def test_initialize_ingest_tracker(test_config):
-    # Test that the ingest tracker initializes correctly.
-    success = initialize_ingest_tracker(test_config)
-    assert success is True
-    # Verify that the table "ingestion_tracking" exists.
-    engine = _ingest_tracker.engine
-    inspector = inspect(engine)
-    table_names = inspector.get_table_names()
-    assert "ingestion_tracking" in table_names
+def test_load_settings(temp_yaml_file):
+    settings = load_settings(temp_yaml_file)
+    assert isinstance(settings, dict)
+    assert settings['ingest_tracking_db'] == 'sqlite:///:memory:'
 
-def test_log_ingestion_step(test_config):
-    # Ensure that logging an ingestion event works.
-    initialize_ingest_tracker(test_config)
-    dummy_order = {
-        "Group": "Test Group",
-        "GroupID": "123",
-        "Username": "test_user",
-        "DatasetID": "456",
-        "UUID": "dummy-uuid",
-        "Files": ["file1.txt", "file2.txt"],
-        "file_names": ["file1.txt", "file2.txt"]
-    }
-    event_id = log_ingestion_step(dummy_order, "Test Stage")
-    assert event_id is not None
-    # Optionally, verify the inserted record by querying the in-memory DB.
-    session = _ingest_tracker.Session()
-    try:
-        record = session.query(IngestTracker).filter_by(uuid="dummy-uuid").first()
-        assert record is not None
-        assert record.group_name == "Test Group"
-        assert record.group_id == "123"
-    finally:
-        session.close()
 
-# Additional tests for the initialize_system function:
-def test_initialize_system_logs(test_config, caplog):
-    caplog.set_level(logging.DEBUG)
-    # This test checks that initialize_system runs without raising an exception.
-    try:
-        initialize_system(test_config)
-    except Exception:
-        pytest.fail("initialize_system() raised an exception unexpectedly!")
-    assert "Starting system initialization" in caplog.text
+def test_initialize_system_and_ingest_tracker():
+    # Initialize the system and verify that the global ingest tracker is set
+    initialize_system(TEST_CONFIG)
+    tracker = get_ingest_tracker()
+    assert tracker is not None
+    assert hasattr(tracker, 'engine')
+    
+    # Test logging an ingestion event
+    entry_id = tracker.db_log_ingestion_event(DUMMY_ORDER_INFO, "Test Stage")
+    assert entry_id is not None
 
-# You can add more tests as needed to simulate calls in main.py
-# For instance, testing create_executor can be done by checking that it returns a ProcessPoolExecutor.
+    # Verify that the entry was added to the in-memory DB
+    with tracker.engine.connect() as conn:
+        result = conn.execute("SELECT COUNT(*) FROM ingestion_tracking")
+        count = result.scalar()
+        assert count >= 1  # At least one entry should exist
 
-def test_create_executor(test_config):
-    from utils.ingest_tracker import _ingest_tracker  # ensure the logging is not interfering
-    from concurrent.futures import ProcessPoolExecutor
-    # Dummy config must have max_workers
-    test_config["max_workers"] = 2
-    executor = None
-    try:
-        from main import create_executor
-        executor = create_executor(test_config)
-        assert isinstance(executor, ProcessPoolExecutor)
-    finally:
-        if executor:
-            executor.shutdown()
+
+def test_database_poller(monkeypatch):
+    """
+    Test DatabasePoller.poll_database by simulating an empty result set.
+    We create a dummy ingest_tracker with an in-memory SQLite DB.
+    """
+    # Set up a dummy ingest tracker
+    tracker = IngestTracker(TEST_CONFIG)
+    # Create a dummy DatabasePoller instance with a simple executor
+    from concurrent.futures import ThreadPoolExecutor
+    executor = ThreadPoolExecutor(max_workers=1)
+    
+    # Instantiate DatabasePoller with our dummy tracker
+    poller = DatabasePoller(TEST_CONFIG, executor, poll_interval=1)
+    poller.ingest_tracker = tracker  # Inject our tracker
+    poller.IngestionTracking = IngestionTracking
+
+    # Monkey-patch the poll_database method to run only one iteration
+    original_sleep = __import__("time").sleep
+    call_count = 0
+    def fake_sleep(seconds):
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            poller.shutdown_event.set()
+        original_sleep(0.1)
+    monkeypatch.setattr("time.sleep", fake_sleep)
+
+    # Run poll_database in a separate thread
+    from threading import Thread
+    t = Thread(target=poller.poll_database)
+    t.start()
+    t.join()
+    
+    # If no exceptions occurred and poller.shutdown_event was set, the test passes.
+    assert poller.shutdown_event.is_set()

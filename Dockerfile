@@ -42,21 +42,17 @@ RUN chown -R autoimportuser:autoimportgroup /auto-importer/logs
 # Ensure your application's startup script is executable
 RUN chmod +x /auto-importer/omero_adi/main.py
 
-# Create a development entrypoint script
-RUN echo '#!/bin/bash\n\
-if [ "$1" = "dev" ]; then\n\
-    exec /bin/bash\n\
-else\n\
-    exec /opt/conda/bin/conda run -n auto-import-env python /auto-importer/omero_adi/main.py\n\
-fi' > /auto-importer/entrypoint.sh && \
-    chmod +x /auto-importer/entrypoint.sh
+# Create a simplified development entrypoint script in /usr/local/bin instead
+RUN echo '#!/bin/bash' > /usr/local/bin/entrypoint.sh && \
+    echo 'pip install -e /auto-importer' >> /usr/local/bin/entrypoint.sh && \
+    echo 'exec /bin/bash' >> /usr/local/bin/entrypoint.sh && \
+    chmod +x /usr/local/bin/entrypoint.sh
 
 # Switch to the new user for all subsequent commands
 USER autoimportuser
 
-# Replace the existing ENTRYPOINT with our new script
-ENTRYPOINT ["/auto-importer/entrypoint.sh"]
-# Default to running the main application
+# Update the entrypoint path
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["run"]
 
 
