@@ -129,9 +129,12 @@ class DatabasePoller:
         self.shutdown_event = Event()
         self.logger = logging.getLogger(f"{__name__}.db_poller")
 
-        from utils.ingest_tracker import _ingest_tracker, IngestionTracking
+        from utils.ingest_tracker import _ingest_tracker, IngestionTracking, Base
         self.ingest_tracker = _ingest_tracker  # global instance
         self.IngestionTracking = IngestionTracking
+        
+        # Ensure tables exist
+        Base.metadata.create_all(self.ingest_tracker.engine)
 
     def start(self):
         """Start the polling thread."""
@@ -217,7 +220,7 @@ def run_application(config: dict, groups_info, executor) -> None:
         logger.info("Initiating shutdown sequence...")
         log_flag(logger, 'end')
         db_poller.stop()
-        executor.shutdown(wait=True, timeout=shutdown_timeout)
+        executor.shutdown(wait=True)
         end_time = datetime.datetime.now()
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 

@@ -10,15 +10,14 @@ class UploadOrderManager:
     def __init__(self, order_record, settings):
         """
         Initialize the UploadOrderManager with the given order record and settings.
-        :param order_record: Dictionary containing order information from the database
-        :param settings: Dictionary containing application settings
+        Now relying on group information provided in the order_record.
         """
         self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing UploadOrderManager for order with UUID: {order_record.get('UUID')}")
         self.settings = settings
-        self.order_info = order_record  # Already a dictionary from the DB
-        self.groups_info = self.load_groups_info(self.settings.get('group_list', 'config/groups_list.json'))
+        self.order_info = order_record
         self.validate_order_attributes()
+
 
     @classmethod
     def from_order_record(cls, order_record, settings):
@@ -34,10 +33,12 @@ class UploadOrderManager:
 
     def validate_order_attributes(self):
         """
-        Validate the attributes of the upload order against those specified in settings.
+        Validate the attributes of the upload order.
+        Now checks for 'Group' and 'GroupID' in the order_info.
         Raises a ValueError if any required attribute is missing.
         """
-        required_attributes = self.settings.get('upload_order_attributes', [])
+        # Define required attributes based on the new system.
+        required_attributes = ['Group', 'GroupID', 'Username', 'UUID']
         missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
 
         if missing_attributes:
@@ -46,6 +47,7 @@ class UploadOrderManager:
             raise ValueError(error_message)
 
         self.logger.info("All required attributes are present in the upload order.")
+
 
     def switch_path_prefix(self):
         """

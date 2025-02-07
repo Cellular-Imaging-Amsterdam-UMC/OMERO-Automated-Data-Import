@@ -54,14 +54,3 @@ USER autoimportuser
 # Update the entrypoint path
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["run"]
-
-
-# Command for dev
-# docker run -it \
-#   --name auto-importer-dev \
-#   -v $(pwd)/src:/auto-importer/auto-importer \
-#   -v $(pwd)/logs:/auto-importer/logs \
-#   auto-importer:local dev
-
-# Command for 'prod'
-# docker run -d --name auto-importer auto-importer:local

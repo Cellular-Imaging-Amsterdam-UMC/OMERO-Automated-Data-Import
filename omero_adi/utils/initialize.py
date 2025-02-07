@@ -6,7 +6,7 @@ import yaml
 import json
 import logging
 from pathlib import Path
-from utils.ingest_tracker import initialize_ingest_tracker  # Ensure this import if needed elsewhere
+from .ingest_tracker import initialize_ingest_tracker
 
 def load_settings(file_path: str) -> dict:
     """
@@ -43,10 +43,15 @@ def initialize_system(config: dict) -> None:
     Errors are logged but do not cause the container to exit.
     """
     logger = logging.getLogger(__name__)
+    print("THIS IS A TEST CHANGE")
     try:
         logger.info("Starting system initialization (database-driven mode)...")
         logger.debug("Initializing ingest tracking database...")
-        initialize_ingest_tracker(config)
+        success = initialize_ingest_tracker(config)  # Capture the return value
+        print(f"Initialization success: {success}")  # Debug print
+        if not success:
+            logger.error("Failed to initialize ingest tracker")
         logger.info("System initialization completed successfully.")
     except Exception as e:
         logger.error(f"System initialization failed: {str(e)}", exc_info=True)
+        print(f"Exception during initialization: {str(e)}")  # Debug print
