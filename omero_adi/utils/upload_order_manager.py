@@ -26,11 +26,6 @@ class UploadOrderManager:
         """
         return cls(order_record, settings)
 
-    def load_groups_info(self, group_list_path):
-        """Load group information from the JSON configuration file."""
-        with open(group_list_path) as f:
-            return json.load(f)
-
     def validate_order_attributes(self):
         """
         Validate the attributes of the upload order.
