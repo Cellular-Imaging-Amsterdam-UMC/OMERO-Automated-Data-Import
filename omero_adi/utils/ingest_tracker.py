@@ -9,12 +9,12 @@ import json
 from sqlalchemy.sql import text
 
 # Stage constants
-Stage_IMPORTED = "Data Imported"
-Stage_MOVED_COMPLETED = "Order Moved to Completed"
-Stage_MOVED_FAILED = "Order Moved to Failed"
-Stage_DETECTED = "Data Package Detected"
-Stage_PREPROCESSING = "Preprocessing Data"
-Stage_NEW_ORDER = "Upload Order Received"
+STAGE_IMPORTED = "Data Imported"
+STAGE_MOVED_COMPLETED = "Order Moved to Completed"
+STAGE_MOVED_FAILED = "Order Moved to Failed"
+STAGE_DETECTED = "Data Package Detected"
+STAGE_PREPROCESSING = "Preprocessing Data"
+STAGE_NEW_ORDER = "Upload Order Received"
 
 Base = declarative_base()
 

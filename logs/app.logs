@@ -1,0 +1,86 @@
+2025-02-13 16:15:05,119 - PID:7 - __main__.db_poller - INFO - Detected new upload order with UUID e25e3248-f2ae-4d9b-b081-5fa873951ff1
+2025-02-13 16:15:05,121 - PID:7 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Data Package Detected, UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
+2025-02-13 16:15:05,127 - PID:7 - utils.ingest_tracker - INFO - Ingestion event logged: Data Package Detected | UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1 | Group: Test Group (ID: 3) | User: ttest | DataPackage: 1
+2025-02-13 16:15:05,127 - PID:7 - utils.ingest_tracker - DEBUG - Created database entry: 11
+2025-02-13 16:15:05,127 - PID:7 - utils.upload_order_manager - DEBUG - Initializing UploadOrderManager for order with UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
+2025-02-13 16:15:05,128 - PID:7 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2025-02-13 16:15:05,133 - PID:28 - utils.importer - DEBUG - Initializing DataPackageImporter for UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
+2025-02-13 16:15:05,137 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-13 16:15:05,137 - PID:28 - omero.gateway - DEBUG - 4064
+2025-02-13 16:15:05,137 - PID:28 - omero.gateway - DEBUG - []
+2025-02-13 16:15:05,148 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
+2025-02-13 16:15:05,148 - PID:28 - omero.gateway - DEBUG - Creating Session...
+2025-02-13 16:15:05,235 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '449aede3-7625-4d54-b8f4-e8e52998ba6c'
+2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
+2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '9597e942-183f-4f3e-8640-789cc4dbd223'
+2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '449aede3-7625-4d54-b8f4-e8e52998ba6c', 'omero.event': 'Internal', 'omero.session.uuid': '9597e942-183f-4f3e-8640-789cc4dbd223'}>
+2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '449aede3-7625-4d54-b8f4-e8e52998ba6c', 'omero.event': 'Internal', 'omero.session.uuid': '9597e942-183f-4f3e-8640-789cc4dbd223'}>
+2025-02-13 16:15:05,236 - PID:28 - omero.gateway - DEBUG - Session created
+2025-02-13 16:15:05,236 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-13 16:15:05,237 - PID:28 - omero.gateway - INFO - created connection (uuid=9597e942-183f-4f3e-8640-789cc4dbd223)
+2025-02-13 16:15:05,237 - PID:28 - omero.gateway - DEBUG - .. connected!
+2025-02-13 16:15:05,237 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=9597e942-183f-4f3e-8640-789cc4dbd223
+2025-02-13 16:15:05,237 - PID:28 - omero.gateway - DEBUG - connected via client
+2025-02-13 16:15:05,237 - PID:28 - utils.importer - INFO - Connected to OMERO as root.
+2025-02-13 16:15:05,309 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-13 16:15:05,309 - PID:28 - omero.gateway - DEBUG - 4064
+2025-02-13 16:15:05,309 - PID:28 - omero.gateway - DEBUG - []
+2025-02-13 16:15:05,311 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75, group=None, self.sUuid=None
+2025-02-13 16:15:05,311 - PID:28 - omero.gateway - DEBUG - connected? False
+2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to 'd186447f-2c18-4788-9fff-6b8aa8015615'
+2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75'
+2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': 'd186447f-2c18-4788-9fff-6b8aa8015615', 'omero.session.uuid': '0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75'}>
+2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': 'd186447f-2c18-4788-9fff-6b8aa8015615', 'omero.session.uuid': '0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75'}>
+2025-02-13 16:15:05,321 - PID:28 - omero.gateway - DEBUG - Joined Session OK with Uuid: 0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75
+2025-02-13 16:15:05,321 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-13 16:15:05,322 - PID:28 - omero.gateway - INFO - created connection (uuid=0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75)
+2025-02-13 16:15:05,322 - PID:28 - omero.gateway - DEBUG - .. connected!
+2025-02-13 16:15:05,333 - PID:28 - utils.importer - INFO - Connected as user ttest in group Test Group
+2025-02-13 16:15:05,333 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-13 16:15:05,333 - PID:28 - omero.gateway - DEBUG - 4064
+2025-02-13 16:15:05,333 - PID:28 - omero.gateway - DEBUG - []
+2025-02-13 16:15:05,334 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
+2025-02-13 16:15:05,334 - PID:28 - omero.gateway - DEBUG - Creating Session...
+2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '31ae8d44-5afe-413d-875d-1bc6a8562ac2'
+2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
+2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '3d9a56f6-73ad-4429-ba76-aef6e698c3f6'
+2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '31ae8d44-5afe-413d-875d-1bc6a8562ac2', 'omero.event': 'Internal', 'omero.session.uuid': '3d9a56f6-73ad-4429-ba76-aef6e698c3f6'}>
+2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '31ae8d44-5afe-413d-875d-1bc6a8562ac2', 'omero.event': 'Internal', 'omero.session.uuid': '3d9a56f6-73ad-4429-ba76-aef6e698c3f6'}>
+2025-02-13 16:15:05,381 - PID:28 - omero.gateway - DEBUG - Session created
+2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-13 16:15:05,382 - PID:28 - omero.gateway - INFO - created connection (uuid=3d9a56f6-73ad-4429-ba76-aef6e698c3f6)
+2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - .. connected!
+2025-02-13 16:15:05,382 - PID:28 - utils.importer - DEBUG - Connected as root to OMERO.
+2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=3d9a56f6-73ad-4429-ba76-aef6e698c3f6
+2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - connected via client
+2025-02-13 16:15:05,382 - PID:28 - utils.importer - DEBUG - Using TTL: 6000000
+2025-02-13 16:15:05,419 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-13 16:15:05,419 - PID:28 - omero.gateway - DEBUG - 4064
+2025-02-13 16:15:05,419 - PID:28 - omero.gateway - DEBUG - []
+2025-02-13 16:15:05,421 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=6a1dd320-3bce-4199-8c49-6ce0af590c80, group=None, self.sUuid=None
+2025-02-13 16:15:05,421 - PID:28 - omero.gateway - DEBUG - connected? False
+2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '1d55a7a0-b48c-4108-8acf-502a89473000'
+2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '6a1dd320-3bce-4199-8c49-6ce0af590c80'
+2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '1d55a7a0-b48c-4108-8acf-502a89473000', 'omero.session.uuid': '6a1dd320-3bce-4199-8c49-6ce0af590c80'}>
+2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '1d55a7a0-b48c-4108-8acf-502a89473000', 'omero.session.uuid': '6a1dd320-3bce-4199-8c49-6ce0af590c80'}>
+2025-02-13 16:15:05,432 - PID:28 - omero.gateway - DEBUG - Joined Session OK with Uuid: 6a1dd320-3bce-4199-8c49-6ce0af590c80
+2025-02-13 16:15:05,433 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-13 16:15:05,433 - PID:28 - omero.gateway - INFO - created connection (uuid=6a1dd320-3bce-4199-8c49-6ce0af590c80)
+2025-02-13 16:15:05,433 - PID:28 - omero.gateway - DEBUG - .. connected!
+2025-02-13 16:15:05,435 - PID:28 - utils.importer - DEBUG - Connected as user ttest
+2025-02-13 16:15:05,443 - PID:28 - utils.importer - DEBUG - Session group set to Test Group
+2025-02-13 16:15:05,455 - PID:28 - utils.importer - DEBUG - ID 1 identified as Dataset
+2025-02-13 16:15:05,463 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-13 16:15:05,467 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-13 16:15:05,467 - PID:28 - utils.importer - INFO - Target ID 1 identified as Dataset.
+2025-02-13 16:15:05,467 - PID:28 - utils.importer - DEBUG - Files to upload: []
+2025-02-13 16:15:05,467 - PID:28 - utils.importer - DEBUG - Initializing DataProcessor for package: e25e3248-f2ae-4d9b-b081-5fa873951ff1
+2025-02-13 16:15:05,467 - PID:28 - utils.importer - INFO - No preprocessing required; continuing upload.
+2025-02-13 16:15:05,467 - PID:28 - utils.importer - DEBUG - Uploading files: []
+2025-02-13 16:15:05,473 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-13 16:15:05,475 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-13 16:15:05,476 - PID:28 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Order Moved to Completed, UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
+2025-02-13 16:15:05,485 - PID:28 - utils.ingest_tracker - INFO - Ingestion event logged: Order Moved to Completed | UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1 | Group: Test Group (ID: 3) | User: ttest | DataPackage: 1
+2025-02-13 16:15:05,485 - PID:28 - utils.ingest_tracker - DEBUG - Created database entry: 12
+2025-02-13 16:15:05,485 - PID:28 - __main__ - INFO - Data package e25e3248-f2ae-4d9b-b081-5fa873951ff1 in 1 processed successfully with 0 successful uploads.
+2025-02-13 16:15:05,486 - PID:7 - __main__.db_poller - INFO - Order e25e3248-f2ae-4d9b-b081-5fa873951ff1 processing complete.

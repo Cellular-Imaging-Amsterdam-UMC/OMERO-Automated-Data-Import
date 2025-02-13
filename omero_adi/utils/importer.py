@@ -27,9 +27,23 @@ RETRY_DELAY = 5  # Delay between retries (in seconds)
 TMP_OUTPUT_FOLDER = "OMERO_inplace"
 
 
+def get_tmp_output_path(data_package):
+    """
+    Helper function to generate the temporary output folder path.
+    """
+    return os.path.join("/OMERO", TMP_OUTPUT_FOLDER, data_package.get('UUID'))
+
+
 def connection(func):
+    """
+    A decorator that wraps a function so that it receives an OMERO user connection.
+    If a connection is already provided (as the first positional argument after self), it is reused.
+    """
     @functools.wraps(func)
     def wrapper_connection(self, *args, **kwargs):
+        # If a connection is already provided, simply call the function.
+        if args and hasattr(args[0], "keepAlive"):
+            return func(self, *args, **kwargs)
         try:
             with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
                 self.logger.debug("Connected as root to OMERO.")
@@ -53,6 +67,29 @@ def connection(func):
     return wrapper_connection
 
 
+def retry_on_connection_issue(func):
+    """
+    A decorator to retry a function when connection issues occur.
+    If an exception with 'connect' in its message is raised, the function is retried.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        logger = args[0].logger  # Assumes the first argument is 'self' with a logger
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if "connect" in str(e).lower():
+                    logger.error(f"Connection issue (attempt {attempt}/{MAX_RETRIES}): {e}")
+                    if attempt < MAX_RETRIES:
+                        logger.info(f"Retrying in {RETRY_DELAY} seconds...")
+                        time.sleep(RETRY_DELAY)
+                        continue
+                raise
+        raise ValueError(f"Max retries ({MAX_RETRIES}) reached in {func.__name__}")
+    return wrapper
+
+
 class DataProcessor:
     def __init__(self, data_package, logger=None):
         """Initialize DataProcessor with proper logging."""
@@ -65,6 +102,7 @@ class DataProcessor:
         return any(key.startswith("preprocessing_") for key in self.data_package)
 
     def get_preprocessing_args(self, file_path):
+        # TODO: Check that this is NOT PODMAN SPECIFIC! or I will have to rewrite it for Docker...
         """Generate podman command arguments based on preprocessing keys."""
         self.logger.debug(f"Getting preprocessing args for file: {file_path}")
         if not self.has_preprocessing():
@@ -106,7 +144,7 @@ class DataProcessor:
         alt_output_folder = self.data_package.get("preprocessing_altoutputfolder")
         if alt_output_folder:
             kwargs += ["--altoutputfolder", alt_output_folder]
-            relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
+            relative_output_path = get_tmp_output_path(self.data_package)
             mount_paths.append((relative_output_path, alt_output_folder))
             self.logger.info(f"Alt output folder mount: {relative_output_path} --> {alt_output_folder}")
         else:
@@ -176,6 +214,12 @@ class DataPackageImporter:
         self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
+
+        # Validate environment variables
+        if not all([self.host, self.password, self.user, self.port]):
+            self.logger.error("OMERO connection details missing from environment variables.")
+            raise ValueError("Missing OMERO connection environment variables.")
+            
         self.imported = False
 
     @connection
@@ -211,12 +255,13 @@ class DataPackageImporter:
                 arguments += ['--skip', 'upgrade']
         if depth:
             arguments += ['--depth', str(depth)]
-        if target_type == 'screen':
+        # Use capitalized target type for consistency
+        if target_type == 'Screen':
             arguments += ['-r', str(target_id)]
-        elif target_type == 'dataset':
+        elif target_type == 'Dataset':
             arguments += ['-d', str(target_id)]
         else:
-            raise ValueError("Invalid target_type. Must be 'dataset' or 'screen'.")
+            raise ValueError("Invalid target_type. Must be 'Screen' or 'Dataset'.")
         arguments.append(str(file_path))
         cli.invoke(arguments)
         if cli.rv == 0:
@@ -288,7 +333,7 @@ class DataPackageImporter:
                         imported = self.import_to_omero(
                             file_path=str(file_path),
                             target_id=screen_id,
-                            target_type='screen',
+                            target_type='Screen',
                             uuid=uuid,
                             depth=10
                         )
@@ -298,7 +343,7 @@ class DataPackageImporter:
                         imported = self.import_to_omero(
                             file_path=fp,
                             target_id=screen_id,
-                            target_type='screen',
+                            target_type='Screen',
                             uuid=uuid,
                             depth=10
                         )
@@ -314,7 +359,7 @@ class DataPackageImporter:
                                     new_target = os.path.join(remote_path, file)
                                     os.symlink(new_target, symlink_path)
                                     self.logger.debug(f"Updated symlink {symlink_path} -> {new_target}")
-                        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
+                        relative_output_path = get_tmp_output_path(self.data_package)
                         if os.path.exists(relative_output_path):
                             self.logger.debug(f"Removing temporary folder: {relative_output_path}")
                             shutil.rmtree(relative_output_path)
@@ -330,7 +375,7 @@ class DataPackageImporter:
                         imported = self.import_to_omero(
                             file_path=str(file_path),
                             target_id=dataset_id,
-                            target_type='dataset',
+                            target_type='Dataset',
                             uuid=uuid,
                             depth=10
                         )
@@ -402,94 +447,146 @@ class DataPackageImporter:
         self.logger.info(f"Created new dataset with ID: {dataset_id}")
         return dataset_id
 
-    def import_data_package(self):
-        self.logger.info(f"Starting import for data package: {self.data_package.get('UUID', 'Unknown')}")
-        intended_username = self.data_package.get('Username')
-        group_id = self.data_package.get('GroupID')
-        group_name = self.data_package.get('Group')
+    @retry_on_connection_issue
+    @connection
+    def determine_target_type(self, conn, target_id):
+        """
+        Determine if the target_id belongs to a Dataset or Screen in OMERO.
+        Checks Dataset first as it's more common.
 
-        if not (intended_username and group_id and group_name):
-            self.logger.error("Missing required user or group information in data package.")
+        Args:
+            conn: OMERO connection (provided by decorator)
+            target_id: The ID to check
+
+        Returns:
+            bool: True if Screen, False if Dataset
+            Raises ValueError if neither or if ID doesn't exist.
+        """
+        conn.keepAlive()  # Keep connection alive
+
+        # Try Dataset first (more common)
+        dataset = conn.getObject("Dataset", target_id)
+        if dataset is not None:
+            self.logger.debug(f"ID {target_id} identified as Dataset")
+            return False
+
+        # If not Dataset, try Screen
+        screen = conn.getObject("Screen", target_id)
+        if screen is not None:
+            self.logger.debug(f"ID {target_id} identified as Screen")
+            return True
+
+        # If we get here, the ID doesn't exist as either type
+        raise ValueError(f"ID {target_id} not found as either Dataset or Screen in OMERO")
+
+    def import_data_package(self):
+        """Import the data package and log the outcome."""
+        try:
+            # Get target ID from DataPackage
+            target_id = self.data_package.get('DataPackage')
+            if not target_id:
+                self.logger.error("No DataPackage ID provided")
+                return [], [], True
+
+            intended_username = self.data_package.get('Username')
+            group_id = self.data_package.get('GroupID')
+            group_name = self.data_package.get('Group')
+
+            if not (intended_username and group_id and group_name):
+                self.logger.error("Missing required user or group information in data package.")
+                return [], [], True
+
+            retry_count = 0
+            while retry_count < MAX_RETRIES:
+                try:
+                    with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
+                        if not root_conn.connect():
+                            self.logger.error("Failed to connect to OMERO as root.")
+                            return [], [], True
+                        self.logger.info("Connected to OMERO as root.")
+                        root_conn.keepAlive()
+                    
+                        with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
+                            if not user_conn:
+                                self.logger.error(f"Failed to connect as user {intended_username}")
+                                return [], [], True
+                            user_conn.keepAlive()
+                            user_conn.setGroupForSession(group_id)
+                            self.logger.info(f"Connected as user {intended_username} in group {group_name}")
+                        
+                            # Determine if the target ID is a Dataset or a Screen
+                            is_screen = self.determine_target_type(target_id)
+                            target_type = "Screen" if is_screen else "Dataset"
+                            self.logger.info(f"Target ID {target_id} identified as {target_type}.")
+
+                            all_successful_uploads = []
+                            all_failed_uploads = []
+                            file_paths = self.data_package.get('Files', [])
+                            self.logger.debug(f"Files to upload: {file_paths}")
+
+                            processor = DataProcessor(self.data_package, self.logger)
+                            if processor.has_preprocessing():
+                                local_tmp_folder = get_tmp_output_path(self.data_package)
+                                os.makedirs(local_tmp_folder, exist_ok=True)
+                                log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
+                                if not processor.run(dry_run=False):
+                                    self.logger.error("Preprocessing failed.")
+                                    return [], [], True
+                                self.logger.info("Preprocessing succeeded; proceeding with upload.")
+                            
+                                # Pass the target id based on its type; include local paths if preprocessed
+                                if is_screen:
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=None,
+                                        screen_id=target_id,
+                                        local_paths=[local_tmp_folder]
+                                    )
+                                else:
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=target_id,
+                                        screen_id=None,
+                                        local_paths=[local_tmp_folder]
+                                    )
+                            else:
+                                self.logger.info("No preprocessing required; continuing upload.")
+                                if is_screen:
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=None,
+                                        screen_id=target_id
+                                    )
+                                else:
+                                    successful_uploads, failed_uploads = self.upload_files(
+                                        user_conn,
+                                        file_paths,
+                                        dataset_id=target_id,
+                                        screen_id=None
+                                    )
+                            if successful_uploads:
+                                log_ingestion_step(self.data_package, STAGE_IMPORTED)
+                            all_successful_uploads.extend(successful_uploads)
+                            all_failed_uploads.extend(failed_uploads)
+                            return all_successful_uploads, all_failed_uploads, False
+
+                except Exception as e:
+                    if "connect" in str(e).lower():
+                        retry_count += 1
+                        self.logger.error(f"Connection issue (attempt {retry_count}/{MAX_RETRIES}): {e}")
+                        if retry_count < MAX_RETRIES:
+                            self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
+                            time.sleep(RETRY_DELAY)
+                            continue
+                    self.logger.error(f"Error during import: {e}", exc_info=True)
+                    return [], [], True
+
+            self.logger.error(f"Max retries ({MAX_RETRIES}) reached during import")
             return [], [], True
 
-        # Ensure that exactly one target is provided.
-        dataset_id = self.data_package.get('DatasetID')
-        screen_id = self.data_package.get('ScreenID')
-        if dataset_id and screen_id:
-            raise ValueError("Both DatasetID and ScreenID provided; only one is allowed.")
-        if not (dataset_id or screen_id):
-            raise ValueError("Neither DatasetID nor ScreenID provided; one must be specified.")
-
-        retry_count = 0
-        while retry_count < MAX_RETRIES:
-            try:
-                with BlitzGateway(self.user, self.password, host=self.host, port=self.port, secure=True) as root_conn:
-                    if not root_conn.connect():
-                        self.logger.error("Failed to connect to OMERO as root.")
-                        return [], [], True
-                    self.logger.info("Connected to OMERO as root.")
-                    root_conn.keepAlive()
-                    with root_conn.suConn(intended_username, ttl=self.ttl_for_user_conn) as user_conn:
-                        if not user_conn:
-                            self.logger.error(f"Failed to connect as user {intended_username}")
-                            return [], [], True
-                        user_conn.keepAlive()
-                        user_conn.setGroupForSession(group_id)
-                        self.logger.info(f"Connected as user {intended_username} in group {group_name}")
-                        all_successful_uploads = []
-                        all_failed_uploads = []
-
-                        file_paths = self.data_package.get('Files', [])
-                        self.logger.debug(f"Files to upload: {file_paths}")
-
-                        processor = DataProcessor(self.data_package, self.logger)
-                        if processor.has_preprocessing():
-                            local_tmp_folder = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
-                            os.makedirs(local_tmp_folder, exist_ok=True)
-                            log_ingestion_step(self.data_package, STAGE_PREPROCESSING)
-                            if not processor.run(dry_run=False):
-                                self.logger.error("Preprocessing failed.")
-                                return [], [], True
-                            self.logger.info("Preprocessing succeeded; proceeding with upload.")
-                            if screen_id:
-                                successful_uploads, failed_uploads = self.upload_files(
-                                    user_conn,
-                                    file_paths,
-                                    dataset_id=None,
-                                    screen_id=screen_id,
-                                    local_paths=[local_tmp_folder]
-                                )
-                            else:
-                                successful_uploads, failed_uploads = self.upload_files(
-                                    user_conn,
-                                    file_paths,
-                                    dataset_id=dataset_id,
-                                    screen_id=None
-                                )
-                        else:
-                            self.logger.info("No preprocessing required; continuing upload.")
-                            successful_uploads, failed_uploads = self.upload_files(
-                                user_conn,
-                                file_paths,
-                                dataset_id=dataset_id,
-                                screen_id=screen_id
-                            )
-                        if successful_uploads:
-                            log_ingestion_step(self.data_package, STAGE_IMPORTED)
-                        all_successful_uploads.extend(successful_uploads)
-                        all_failed_uploads.extend(failed_uploads)
-                        return all_successful_uploads, all_failed_uploads, False
-            except Exception as e:
-                if "connect" in str(e).lower():
-                    retry_count += 1
-                    self.logger.error(f"Connection issue (attempt {retry_count}/{MAX_RETRIES}): {e}")
-                    if retry_count < MAX_RETRIES:
-                        self.logger.info(f"Retrying in {RETRY_DELAY} seconds...")
-                        time.sleep(RETRY_DELAY)
-                    else:
-                        self.logger.error("Max retries reached. Aborting import.")
-                        return [], [], True
-                else:
-                    self.logger.error(f"Unexpected exception during import: {e}", exc_info=True)
-                    return [], [], True
-        return [], [], True
+        except Exception as e:
+            self.logger.error(f"Error during import_data_package: {e}", exc_info=True)
+            return [], [], True
