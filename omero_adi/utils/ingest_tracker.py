@@ -9,12 +9,12 @@ import json
 from sqlalchemy.sql import text
 
 # Stage constants
-STAGE_IMPORTED = "Data Imported"
-STAGE_MOVED_COMPLETED = "Order Moved to Completed"
-STAGE_MOVED_FAILED = "Order Moved to Failed"
-STAGE_DETECTED = "Data Package Detected"
-STAGE_PREPROCESSING = "Preprocessing Data"
-STAGE_NEW_ORDER = "Upload Order Received"
+Stage_IMPORTED = "Data Imported"
+Stage_MOVED_COMPLETED = "Order Moved to Completed"
+Stage_MOVED_FAILED = "Order Moved to Failed"
+Stage_DETECTED = "Data Package Detected"
+Stage_PREPROCESSING = "Preprocessing Data"
+Stage_NEW_ORDER = "Upload Order Received"
 
 Base = declarative_base()
 
@@ -23,34 +23,34 @@ class IngestionTracking(Base):
     __tablename__ = 'ingestion_tracking'
 
     id = Column(Integer, primary_key=True)
-    group_name = Column(String, nullable=False)
-    group_id = Column(String, nullable=True)  # New field for group ID (if provided by user)
-    user_name = Column(String, nullable=False, index=True)
-    data_package = Column(String, nullable=False)
-    stage = Column(String, nullable=False)
-    uuid = Column(String(36), nullable=False, index=True)
-    timestamp = Column(DateTime(timezone=True), default=func.now())
-    _files = Column("files", Text, nullable=False)
-    _file_names = Column("file_names", Text, nullable=True)
+    Group = Column(String, nullable=False)
+    GroupID = Column(String, nullable=True)
+    Username = Column(String, nullable=False, index=True)
+    DataPackage = Column(String, nullable=False)  # Single identifier for both Dataset and Screen
+    Stage = Column(String, nullable=False)
+    UUID = Column(String(36), nullable=False, index=True)
+    Timestamp = Column(DateTime(timezone=True), default=func.now())
+    _Files = Column("Files", Text, nullable=False)
+    _FileNames = Column("FileNames", Text, nullable=True)
 
     @property
-    def files(self):
-        return json.loads(self._files)
+    def Files(self):
+        return json.loads(self._Files)
 
-    @files.setter
-    def files(self, files):
-        self._files = json.dumps(files)
+    @Files.setter
+    def Files(self, files):
+        self._Files = json.dumps(files)
 
     @property
-    def file_names(self):
-        return json.loads(self._file_names) if self._file_names else []
+    def FileNames(self):
+        return json.loads(self._FileNames) if self._FileNames else []
 
-    @file_names.setter
-    def file_names(self, file_names):
-        self._file_names = json.dumps(file_names)
+    @FileNames.setter
+    def FileNames(self, file_names):
+        self._FileNames = json.dumps(file_names)
 
 # Define the index outside of the class
-Index('ix_uuid_timestamp', IngestionTracking.uuid, IngestionTracking.timestamp)
+Index('ix_uuid_timestamp', IngestionTracking.UUID, IngestionTracking.Timestamp)
 
 class IngestTracker:
     def __init__(self, config):
@@ -97,7 +97,7 @@ class IngestTracker:
         except Exception as e:
             self.logger.error(f"Error disposing database resources: {e}")
 
-    def db_log_ingestion_event(self, order_info: dict, stage: str) -> int:
+    def db_log_ingestion_event(self, order_info: dict, Stage: str) -> int:
         """
         Log an ingestion step to the database using a context manager for the session.
         Returns the new entry ID or None if logging failed.
@@ -107,32 +107,32 @@ class IngestTracker:
             self.logger.error(f"Missing required fields in order_info: {required_fields}")
             return None
     
-        if not ('DatasetID' in order_info or 'ScreenID' in order_info):
-            self.logger.error("Either DatasetID or ScreenID must be provided")
+        if 'DataPackage' not in order_info:
+            self.logger.error("DataPackage must be provided")
             return None
     
-        self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}")
+        self.logger.debug(f"Logging ingestion event - Stage: {Stage}, UUID: {order_info.get('UUID')}")
         try:
             with self.Session() as session:
                 new_entry = IngestionTracking(
-                    group_name=order_info.get('Group'),
-                    group_id=order_info.get('GroupID'),
-                    user_name=order_info.get('Username', 'Unknown'),
-                    data_package=str(order_info.get('DatasetID', order_info.get('ScreenID'))),
-                    stage=stage,
-                    uuid=str(order_info.get('UUID', 'Unknown')),
-                    files=order_info.get('Files', []),
-                    file_names=order_info.get('file_names', [])
+                    Group=order_info.get('Group'),
+                    GroupID=order_info.get('GroupID'),
+                    Username=order_info.get('Username', 'Unknown'),
+                    DataPackage=str(order_info.get('DataPackage')),  # Single identifier for both Dataset and Screen
+                    Stage=Stage,
+                    UUID=str(order_info.get('UUID', 'Unknown')),
+                    Files=order_info.get('Files', []),
+                    FileNames=order_info.get('FileNames', [])
                 )
                 session.add(new_entry)
                 session.commit()
     
                 self.logger.info(
-                    f"Ingestion event logged: {stage} | "
-                    f"UUID: {new_entry.uuid} | "
-                    f"Group: {new_entry.group_name} (ID: {new_entry.group_id}) | "
-                    f"User: {new_entry.user_name} | "
-                    f"Dataset: {new_entry.data_package}"
+                    f"Ingestion event logged: {Stage} | "
+                    f"UUID: {new_entry.UUID} | "
+                    f"Group: {new_entry.Group} (ID: {new_entry.GroupID}) | "
+                    f"User: {new_entry.Username} | "
+                    f"DataPackage: {new_entry.DataPackage}"
                 )
                 self.logger.debug(f"Created database entry: {new_entry.id}")
                 return new_entry.id
@@ -164,11 +164,11 @@ def initialize_ingest_tracker(config):
         _ingest_tracker = None
         return False
 
-def log_ingestion_step(order_info, stage):
+def log_ingestion_step(order_info, Stage):
     """Thread-safe function to log ingestion steps."""
     tracker = get_ingest_tracker()
     if tracker is not None:
-        return tracker.db_log_ingestion_event(order_info, stage)
+        return tracker.db_log_ingestion_event(order_info, Stage)
     else:
         logger = logging.getLogger(__name__)
         logger.error("IngestTracker not initialized. Call initialize_ingest_tracker first.")

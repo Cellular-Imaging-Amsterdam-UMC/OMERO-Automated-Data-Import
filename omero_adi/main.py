@@ -95,18 +95,17 @@ class IngestionProcess:
     def import_data_package(self):
         """
         Import the data package and log the outcome.
-        Instead of moving files, we log the step.
         """
         try:
             importer = DataPackageImporter(self.config, self.data_package)
             successful_uploads, failed_uploads, import_failed = importer.import_data_package()
-            parent_id = self.data_package.get('DatasetID', self.data_package.get('ScreenID', 'Unknown'))
+            data_package_id = self.data_package.get('DataPackage') # Make sure this is nevery used as a unique identifier.
             if import_failed or failed_uploads:
                 log_ingestion_step(self.data_package.data, STAGE_MOVED_FAILED)
-                self.logger.error(f"Import process failed for data package {self.data_package.get('UUID')} in {parent_id} due to failed uploads or importer failure.")
+                self.logger.error(f"Import process failed for data package {self.data_package.get('UUID')} in {data_package_id} due to failed uploads or importer failure.")
             else:
                 log_ingestion_step(self.data_package.data, STAGE_MOVED_COMPLETED)
-                self.logger.info(f"Data package {self.data_package.get('UUID')} in {parent_id} processed successfully with {len(successful_uploads)} successful uploads.")
+                self.logger.info(f"Data package {self.data_package.get('UUID')} in {data_package_id} processed successfully with {len(successful_uploads)} successful uploads.")
             return self.data_package.get('UUID')
         except Exception as e:
             self.logger.error(f"Error during import_data_package: {e}", exc_info=True)
@@ -119,7 +118,7 @@ class IngestionProcess:
 class DatabasePoller:
     """
     Polls the database for new upload orders.
-    New orders are identified by the stage STAGE_NEW_ORDER ("Upload Order Received").
+    New orders are identified by the Stage STAGE_NEW_ORDER ("Upload Order Received").
     Once detected, a new ingestion process is triggered.
     """
     def __init__(self, config, executor, poll_interval=5):
@@ -157,7 +156,7 @@ class DatabasePoller:
             with Session() as session:
                 try:
                     new_orders = session.query(self.IngestionTracking).filter(
-                        self.IngestionTracking.stage == STAGE_NEW_ORDER,
+                        self.IngestionTracking.Stage == STAGE_NEW_ORDER,
                         self.IngestionTracking.id > last_max_id
                     ).order_by(self.IngestionTracking.id.asc()).all()
                     for order in new_orders:
@@ -170,14 +169,16 @@ class DatabasePoller:
     def process_order(self, order) -> None:
         """
         Process a single new order by logging, creating a DataPackage, and submitting an ingestion process.
+        Uses SQLAlchemy model's attribute access directly.
         """
-        self.logger.info(f"Detected new upload order with UUID {order.uuid}")
+        self.logger.info(f"Detected new upload order with UUID {order.UUID}")
+        
         log_ingestion_step(order.__dict__, STAGE_DETECTED)
-        data_package = DataPackage(order.__dict__, order_identifier=order.uuid)
+        data_package = DataPackage(order.__dict__, order_identifier=order.UUID)
         order_manager = UploadOrderManager.from_order_record(order.__dict__, self.config)
         ingestion_process = IngestionProcess(data_package, self.config, order_manager)
         future = self.executor.submit(ingestion_process.import_data_package)
-        future.add_done_callback(self.create_order_callback(order.uuid))
+        future.add_done_callback(self.create_order_callback(order.UUID))
 
     def create_order_callback(self, uuid: str):
         """

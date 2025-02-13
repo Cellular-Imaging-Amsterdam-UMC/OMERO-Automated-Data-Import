@@ -29,19 +29,19 @@ class UploadOrderManager:
     def validate_order_attributes(self):
         """
         Validate the attributes of the upload order.
-        Now checks for 'Group' and 'GroupID' in the order_info.
+        Now checks for 'Group', 'GroupID', 'Username', and 'UUID' which match the database.
         Raises a ValueError if any required attribute is missing.
         """
-        # Define required attributes based on the new system.
         required_attributes = ['Group', 'GroupID', 'Username', 'UUID']
         missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
-
+    
         if missing_attributes:
             error_message = f"Missing required attributes in upload order: {', '.join(missing_attributes)}"
             self.logger.error(error_message)
             raise ValueError(error_message)
-
+    
         self.logger.info("All required attributes are present in the upload order.")
+
 
 
     def switch_path_prefix(self):
