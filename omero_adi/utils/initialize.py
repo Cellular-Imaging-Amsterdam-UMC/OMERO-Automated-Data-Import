@@ -55,3 +55,25 @@ def initialize_system(config: dict) -> None:
     except Exception as e:
         logger.error(f"System initialization failed: {str(e)}", exc_info=True)
         print(f"Exception during initialization: {str(e)}")  # Debug print
+
+
+def test_omero_connection():
+    import os
+    from omero.gateway import BlitzGateway
+    logger = logging.getLogger(__name__)
+    host = os.getenv("OMERO_HOST")
+    user = os.getenv("OMERO_USER")
+    password = os.getenv("OMERO_PASSWORD")
+    port = os.getenv("OMERO_PORT")
+    try:
+        conn = BlitzGateway(user, password, host=host, port=port, secure=True)
+        if conn.connect():
+            logger.info("Successfully connected to OMERO server at %s:%s", host, port)
+            conn.close()
+            return True
+        else:
+            logger.error("Failed to connect to OMERO server at %s:%s", host, port)
+            return False
+    except Exception as e:
+        logger.error("Exception during OMERO connection test: %s", e, exc_info=True)
+        return False

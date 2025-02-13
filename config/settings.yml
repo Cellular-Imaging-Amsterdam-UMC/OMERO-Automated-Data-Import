@@ -2,6 +2,7 @@
 log_file_path: logs/app.logs
 base_dir: /data
 data_dir_name: .omerodata
+ingest_tracking_db: "sqlite:////auto-importer/db/ingestion_tracking.db"
 
 # Worker settings
 max_workers: 4

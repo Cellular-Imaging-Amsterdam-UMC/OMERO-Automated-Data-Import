@@ -225,12 +225,9 @@ def run_application(config: dict, groups_info, executor) -> None:
         logger.info(f"Program completed. Total runtime: {end_time - start_time}")
 
 def main():
+    logger = logging.getLogger(__name__)
     try:
-        # Load configuration first
-        config = load_config()
-        # Groups are now obtained directly from OMERO via the database; no separate groups file is needed.
-        groups_info = None  # (Placeholder; not used by ADI anymore.)
-        # Setup logging
+        config = load_config()  # e.g., "config/settings.yml"
         log_level = config.get('log_level', 'DEBUG').upper()
         log_file = config['log_file_path']
 
@@ -243,19 +240,21 @@ def main():
             ]
         )
 
-        logger = logging.getLogger(__name__)
         logger.info("Starting application...")
 
-        # Initialize System (which includes IngestTracker)
-        initialize_system(config)
+        # (Optional) Test OMERO connectivity
+        from utils.initialize import test_omero_connection
+        test_omero_connection()
 
+        initialize_system(config)
         logger.info("Creating process executor...")
         executor = create_executor(config)
-
+        groups_info = None
         run_application(config, groups_info, executor)
     except Exception as e:
-        print(f"Fatal error in main: {e}")
-        sys.exit(1)
+        logger.error("Fatal error in main: %s", e, exc_info=True)
+        while True:
+            time.sleep(60)
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,63 @@
+2025-02-11 13:53:56,822 - PID:7 - __main__.db_poller - INFO - Detected new upload order with UUID 03dfc51b-4f0c-4736-8949-9add0df90982
+2025-02-11 13:53:56,824 - PID:7 - utils.ingest_tracker - ERROR - Missing required fields in order_info: ['Group', 'Username', 'UUID']
+2025-02-11 13:53:56,825 - PID:7 - utils.upload_order_manager - DEBUG - Initializing UploadOrderManager for order with UUID: None
+2025-02-11 13:53:56,825 - PID:7 - utils.upload_order_manager - ERROR - Missing required attributes in upload order: Group, GroupID, Username, UUID
+2025-02-11 13:53:56,825 - PID:7 - __main__.db_poller - ERROR - Error polling database: Missing required attributes in upload order: Group, GroupID, Username, UUID
+Traceback (most recent call last):
+  File "/auto-importer/omero_adi/main.py", line 165, in poll_database
+    self.process_order(order)
+  File "/auto-importer/omero_adi/main.py", line 177, in process_order
+    order_manager = UploadOrderManager.from_order_record(order.__dict__, self.config)
+  File "/auto-importer/omero_adi/utils/upload_order_manager.py", line 27, in from_order_record
+    return cls(order_record, settings)
+  File "/auto-importer/omero_adi/utils/upload_order_manager.py", line 19, in __init__
+    self.validate_order_attributes()
+  File "/auto-importer/omero_adi/utils/upload_order_manager.py", line 42, in validate_order_attributes
+    raise ValueError(error_message)
+ValueError: Missing required attributes in upload order: Group, GroupID, Username, UUID
+2025-02-13 04:04:25,262 - PID:7 - __main__ - INFO - Starting application...
+2025-02-13 04:04:25,262 - PID:7 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-13 04:04:25,262 - PID:7 - omero.gateway - DEBUG - 4064
+2025-02-13 04:04:25,263 - PID:7 - omero.gateway - DEBUG - []
+2025-02-13 04:04:25,266 - PID:7 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
+2025-02-13 04:04:25,266 - PID:7 - omero.gateway - DEBUG - Creating Session...
+2025-02-13 04:04:25,536 - PID:7 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to 'b334eee3-3bcc-4f6f-8f9a-4ad0f4f3a102'
+2025-02-13 04:04:25,536 - PID:7 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
+2025-02-13 04:04:25,536 - PID:7 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to 'b61c4d87-035b-432d-a1eb-d35754ba33e9'
+2025-02-13 04:04:25,537 - PID:7 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': 'b334eee3-3bcc-4f6f-8f9a-4ad0f4f3a102', 'omero.event': 'Internal', 'omero.session.uuid': 'b61c4d87-035b-432d-a1eb-d35754ba33e9'}>
+2025-02-13 04:04:25,537 - PID:7 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': 'b334eee3-3bcc-4f6f-8f9a-4ad0f4f3a102', 'omero.event': 'Internal', 'omero.session.uuid': 'b61c4d87-035b-432d-a1eb-d35754ba33e9'}>
+2025-02-13 04:04:25,537 - PID:7 - omero.gateway - DEBUG - Session created
+2025-02-13 04:04:25,537 - PID:7 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-13 04:04:25,537 - PID:7 - omero.gateway - INFO - created connection (uuid=b61c4d87-035b-432d-a1eb-d35754ba33e9)
+2025-02-13 04:04:25,537 - PID:7 - omero.gateway - DEBUG - .. connected!
+2025-02-13 04:04:25,537 - PID:7 - utils.initialize - INFO - Successfully connected to OMERO server at nl-biomero-omeroserver-1:4064
+2025-02-13 04:04:25,557 - PID:7 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-13 04:04:25,557 - PID:7 - utils.initialize - INFO - Starting system initialization (database-driven mode)...
+2025-02-13 04:04:25,557 - PID:7 - utils.initialize - DEBUG - Initializing ingest tracking database...
+2025-02-13 04:04:25,557 - PID:7 - utils.ingest_tracker - INFO - Initializing IngestTracker
+2025-02-13 04:04:25,557 - PID:7 - utils.ingest_tracker - DEBUG - Using database URL: sqlite:////auto-importer/db/ingestion_tracking.db
+2025-02-13 04:04:25,570 - PID:7 - utils.ingest_tracker - DEBUG - Creating tables if they do not exist...
+2025-02-13 04:04:25,571 - PID:7 - utils.ingest_tracker - INFO - Database initialization successful
+2025-02-13 04:04:25,571 - PID:7 - utils.initialize - INFO - System initialization completed successfully.
+2025-02-13 04:04:25,571 - PID:7 - __main__ - INFO - Creating process executor...
+2025-02-13 04:04:25,575 - PID:7 - __main__ - INFO - 
+    /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+           READY TO UPLOAD DATA TO OMERO
+    /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+2025-02-13 04:04:25,576 - PID:7 - __main__.db_poller - INFO - Detected new upload order with UUID 03dfc51b-4f0c-4736-8949-9add0df90982
+2025-02-13 04:04:25,576 - PID:7 - utils.ingest_tracker - ERROR - Missing required fields in order_info: ['Group', 'Username', 'UUID']
+2025-02-13 04:04:25,576 - PID:7 - utils.upload_order_manager - DEBUG - Initializing UploadOrderManager for order with UUID: None
+2025-02-13 04:04:25,576 - PID:7 - utils.upload_order_manager - ERROR - Missing required attributes in upload order: Group, GroupID, Username, UUID
+2025-02-13 04:04:25,576 - PID:7 - __main__.db_poller - ERROR - Error polling database: Missing required attributes in upload order: Group, GroupID, Username, UUID
+Traceback (most recent call last):
+  File "/auto-importer/omero_adi/main.py", line 165, in poll_database
+    self.process_order(order)
+  File "/auto-importer/omero_adi/main.py", line 177, in process_order
+    order_manager = UploadOrderManager.from_order_record(order.__dict__, self.config)
+  File "/auto-importer/omero_adi/utils/upload_order_manager.py", line 27, in from_order_record
+    return cls(order_record, settings)
+  File "/auto-importer/omero_adi/utils/upload_order_manager.py", line 19, in __init__
+    self.validate_order_attributes()
+  File "/auto-importer/omero_adi/utils/upload_order_manager.py", line 42, in validate_order_attributes
+    raise ValueError(error_message)
+ValueError: Missing required attributes in upload order: Group, GroupID, Username, UUID

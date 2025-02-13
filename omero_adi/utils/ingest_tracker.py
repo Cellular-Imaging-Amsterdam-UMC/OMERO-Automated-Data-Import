@@ -53,24 +53,20 @@ class IngestionTracking(Base):
 Index('ix_uuid_timestamp', IngestionTracking.uuid, IngestionTracking.timestamp)
 
 class IngestTracker:
-    """Handles tracking of ingestion steps in the database."""
     def __init__(self, config):
-        """Initialize IngestTracker with logging and database connection."""
         if not config or 'ingest_tracking_db' not in config:
             raise ValueError("Configuration must include 'ingest_tracking_db'")
             
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing IngestTracker")
-
         try:
             self.database_url = config['ingest_tracking_db']
             self.logger.debug(f"Using database URL: {self.database_url}")
 
-            # Configure connection based on database type
             connect_args = {}
             if self.database_url.startswith('sqlite'):
                 connect_args['timeout'] = 5
-            else:  # PostgreSQL or other databases
+            else:
                 connect_args['connect_timeout'] = 5
 
             self.engine = create_engine(
@@ -82,18 +78,15 @@ class IngestTracker:
             # Verify connection
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-
-            # Create tables
-            self.logger.debug("Verifying database schema...")
+            
+            # Create tables now
+            self.logger.debug("Creating tables if they do not exist...")
             Base.metadata.create_all(self.engine)
             self.logger.info("Database initialization successful")
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Database initialization error: {e}", exc_info=True)
-            raise
         except Exception as e:
-                    self.logger.error(f"Unexpected error during initialization: {e}", exc_info=True)
-                    raise
+            self.logger.error(f"Unexpected error during IngestTracker initialization: {e}", exc_info=True)
+            raise
+
 
     def dispose(self):
         """Safely dispose of database resources."""
