@@ -43,7 +43,6 @@ def initialize_system(config: dict) -> None:
     Errors are logged but do not cause the container to exit.
     """
     logger = logging.getLogger(__name__)
-    print("THIS IS A TEST CHANGE")
     try:
         logger.info("Starting system initialization (database-driven mode)...")
         logger.debug("Initializing ingest tracking database...")

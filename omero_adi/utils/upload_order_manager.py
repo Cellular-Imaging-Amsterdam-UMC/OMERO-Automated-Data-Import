@@ -1,16 +1,11 @@
-# upload_order_manager.py
-
-import json
 import logging
 from pathlib import Path
-
-from .ingest_tracker import log_ingestion_step
 
 class UploadOrderManager:
     def __init__(self, order_record, settings):
         """
         Initialize the UploadOrderManager with the given order record and settings.
-        Now relying on group information provided in the order_record.
+        Relies on group information provided in the order_record.
         """
         self.logger = logging.getLogger(__name__)
         self.logger.debug(f"Initializing UploadOrderManager for order with UUID: {order_record.get('UUID')}")
@@ -18,21 +13,20 @@ class UploadOrderManager:
         self.order_info = order_record
         self.validate_order_attributes()
 
-
     @classmethod
     def from_order_record(cls, order_record, settings):
         """
-        Class method to instantiate an UploadOrderManager from a database order record.
+        Instantiate an UploadOrderManager from a database order record.
         """
         return cls(order_record, settings)
 
     def validate_order_attributes(self):
         """
         Validate the attributes of the upload order.
-        Now checks for 'Group', 'GroupID', 'Username', and 'UUID' which match the database.
+        Now checks for 'Group', 'GroupID', 'Username', 'UUID', and 'DestinationID'.
         Raises a ValueError if any required attribute is missing.
         """
-        required_attributes = ['Group', 'GroupID', 'Username', 'UUID']
+        required_attributes = ['Group', 'GroupID', 'Username', 'UUID', 'DestinationID']
         missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
     
         if missing_attributes:
@@ -63,4 +57,3 @@ class UploadOrderManager:
     def get_order_info(self):
         """Return the order information."""
         return self.order_info
-

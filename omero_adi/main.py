@@ -1,23 +1,28 @@
+#!/usr/bin/env python
 # main.py
 
-# Standard library imports
-from pathlib import Path
 import time
-from concurrent.futures import ProcessPoolExecutor
 import signal
-from threading import Event, Thread, Lock
 import datetime
 import yaml
 import json
 import sys
 import logging
+from concurrent.futures import ProcessPoolExecutor
+from threading import Event, Thread
 from collections import UserDict
 
-# Local module importsa
-from utils.initialize import initialize_system
+# Local module imports
+from utils.initialize import initialize_system, test_omero_connection
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
-from utils.ingest_tracker import log_ingestion_step, STAGE_NEW_ORDER
+from utils.ingest_tracker import (
+    log_ingestion_step, 
+    STAGE_NEW_ORDER, 
+    STAGE_INGEST_STARTED, 
+    STAGE_INGEST_FAILED,
+    STAGE_IMPORTED
+)
 
 # --------------------------------------------------
 # Utility function to load settings
@@ -65,34 +70,29 @@ def log_flag(logger, flag_type):
 # --------------------------------------------------
 # DataPackage and IngestionProcess
 # --------------------------------------------------
-#TODO: Review this example one more time to have may be nicer names and example files.
 class DataPackage(UserDict):
-    #TODO: Change DataPackage attribute to Destination ID or something like that.
-    # Data package attribute within datapackage class is just sloppy naming.
     """
     A dictionary-like object that represents a data package for OMERO upload orders.
     
-    This class extends UserDict to provide dictionary functionality for handling OMERO 
-    upload order information. Each DataPackage instance corresponds to a specific upload 
-    request tracked in the database, containing essential information such as:
-    - Target OMERO Dataset/Screen ID (stored in 'DataPackage' key)
+    This class holds information for an upload order including:
+    - DestinationID: The target OMERO Dataset/Screen ID where the data is to be uploaded.
     - Unique order identifier (UUID)
     - Group and user information
-    - File paths and names to be uploaded
+    - File paths and original file names to be uploaded
 
     Example order data:
         {
-            "Group": "Test Group",          # OMERO group name
-            "GroupID": "3",                 # OMERO group identifier
-            "Username": "ttest",            # OMERO username
-            "DataPackage": "1",             # Target Dataset/Screen ID in OMERO
-            "UUID": "550e8400-e29b-41d4-a716-446655440000",  # Unique order ID
-            "Files": [                      # Full paths to files
+            "Group": "Test Group",
+            "GroupID": "3",
+            "Username": "ttest",
+            "DestinationID": "1",  # Target Dataset/Screen ID in OMERO
+            "UUID": "550e8400-e29b-41d4-a716-446655440000",
+            "Files": [
                 "/auto-importer/tests/Barbie1.tif",
                 "/auto-importer/tests/Barbie2.tif",
                 "/auto-importer/tests/Barbie3.tif"
             ],
-            "FileNames": [                  # Original file names
+            "FileNames": [
                 "Barbie1.tif",
                 "Barbie2.tif",
                 "Barbie3.tif"
@@ -114,8 +114,8 @@ class IngestionProcess:
     def __init__(self, data_package, config, order_manager):
         """
         :param data_package: DataPackage object.
-        :param config: Configuration dictionary gathered from load_config function.
-        :param order_manager: UploadOrderManager object
+        :param config: Configuration dictionary.
+        :param order_manager: UploadOrderManager object.
         """
         self.data_package = data_package
         self.config = config
@@ -125,26 +125,26 @@ class IngestionProcess:
     def import_data_package(self):
         """
         Import the data package and return the UUID for tracking.
-        
-        Returns:
-            str: The UUID of the data package that was processed
+        If the importer returns a failure (or no files are uploaded), log STAGE_INGEST_FAILED.
         """
         try:
             importer = DataPackageImporter(self.config, self.data_package)
             successful_uploads, failed_uploads, import_failed = importer.import_data_package()
-            target_id = self.data_package.get('DataPackage')
+            destination_id = self.data_package.get('DestinationID')
             package_uuid = self.data_package.get('UUID')
 
-            if import_failed or failed_uploads:
+            if import_failed or failed_uploads or (not successful_uploads and not failed_uploads):
                 self.logger.error(
-                    f"Import failed for data package {package_uuid} targeting OMERO {target_id}. "
+                    f"Import failed for data package {package_uuid} targeting OMERO {destination_id}. "
                     f"Failed files: {[f[0] for f in failed_uploads]}"
                 )
+                log_ingestion_step(self.data_package, STAGE_INGEST_FAILED)
             else:
                 self.logger.info(
-                    f"Successfully imported data package {package_uuid} to OMERO {target_id}. "
+                    f"Successfully imported data package {package_uuid} to OMERO {destination_id}. "
                     f"Imported {len(successful_uploads)} files: {[f[2] for f in successful_uploads]}"
                 )
+                log_ingestion_step(self.data_package, STAGE_IMPORTED)
             
             if successful_uploads:
                 self.logger.debug(
@@ -156,6 +156,7 @@ class IngestionProcess:
             
         except Exception as e:
             self.logger.error(f"Error during import_data_package: {e}", exc_info=True)
+            log_ingestion_step(self.data_package, STAGE_INGEST_FAILED)
             return self.data_package.get('UUID')
 
 # --------------------------------------------------
@@ -164,8 +165,7 @@ class IngestionProcess:
 class DatabasePoller:
     """
     Polls the database for new upload orders.
-    New orders are identified by the Stage STAGE_NEW_ORDER ("Upload Order Received").
-    Once detected, a new ingestion process is triggered.
+    New orders are identified by the Stage STAGE_NEW_ORDER.
     """
     def __init__(self, config, executor, poll_interval=5):
         self.config = config
@@ -173,6 +173,8 @@ class DatabasePoller:
         self.poll_interval = poll_interval
         self.shutdown_event = Event()
         self.logger = logging.getLogger(f"{__name__}.db_poller")
+        # Maintain a set of processed order UUIDs to avoid reprocessing.
+        self.processed_uuids = set()
 
         from utils.ingest_tracker import _ingest_tracker, IngestionTracking, Base
         self.ingest_tracker = _ingest_tracker  # global instance
@@ -193,8 +195,8 @@ class DatabasePoller:
 
     def poll_database(self) -> None:
         """
-        Continuously polls the database for new upload orders using a context manager
-        and processes each new order.
+        Continuously polls the database for new upload orders and processes each new order.
+        Only process an order if its UUID has not been processed before.
         """
         Session = self.ingest_tracker.Session
         last_max_id = 0  # Initialize the highest processed ID
@@ -206,32 +208,50 @@ class DatabasePoller:
                         self.IngestionTracking.id > last_max_id
                     ).order_by(self.IngestionTracking.id.asc()).all()
                     for order in new_orders:
+                        if order.UUID in self.processed_uuids:
+                            continue  # Skip if this order has been processed already
                         last_max_id = max(last_max_id, order.id)
-                        self.process_order(order)
+                        # Build a clean dictionary from the model attributes.
+                        order_dict = {
+                            'Group': order.Group,
+                            'GroupID': order.GroupID,
+                            'Username': order.Username,
+                            'UUID': order.UUID,
+                            'DestinationID': order.DestinationID,
+                            'Files': order.Files,
+                            'FileNames': order.FileNames
+                        }
+                        self.process_order(order_dict)
+                        self.processed_uuids.add(order.UUID)
                 except Exception as e:
                     self.logger.error(f"Error polling database: {e}", exc_info=True)
             time.sleep(self.poll_interval)
 
-    def process_order(self, order) -> None:
+    def process_order(self, order_dict) -> None:
         """
         Process a single new order by logging, creating a DataPackage, and submitting an ingestion process.
-        Uses SQLAlchemy model's attribute access directly.
+        Uses the provided dictionary (built from the model) to preserve original attributes.
         """
-        self.logger.info(f"Detected new upload order with UUID {order.UUID}")
+        uuid_val = order_dict.get('UUID')
+        self.logger.info(f"Detected new upload order with UUID {uuid_val}")
         
-        log_ingestion_step(order.__dict__, STAGE_DETECTED) #TODO: Remove this, we are no longer using detected...
-        data_package = DataPackage(order.__dict__, order_identifier=order.UUID)
-        order_manager = UploadOrderManager.from_order_record(order.__dict__, self.config)
+        # Log the new order using the original attributes.
+        log_ingestion_step(order_dict, STAGE_NEW_ORDER)
+        # Mark that ingest has started.
+        log_ingestion_step(order_dict, STAGE_INGEST_STARTED)
+        
+        data_package = DataPackage(order_dict, order_identifier=uuid_val)
+        order_manager = UploadOrderManager.from_order_record(order_dict, self.config)
         ingestion_process = IngestionProcess(data_package, self.config, order_manager)
         future = self.executor.submit(ingestion_process.import_data_package)
-        future.add_done_callback(self.create_order_callback(order.UUID))
+        future.add_done_callback(self.create_order_callback(uuid_val))
 
-    def create_order_callback(self, uuid: str):
+    def create_order_callback(self, uuid_val: str):
         """
         Returns a callback function that logs when the order processing is complete.
         """
         def callback(future) -> None:
-            self.logger.info(f"Order {uuid} processing complete.")
+            self.logger.info(f"Order {uuid_val} processing complete.")
         return callback
 
 # --------------------------------------------------
@@ -240,7 +260,6 @@ class DatabasePoller:
 def run_application(config: dict, groups_info, executor) -> None:
     """
     Runs the main application loop.
-    Assumes system initialization has already been done.
     """
     logger = logging.getLogger(__name__)
     shutdown_event = Event()
@@ -254,7 +273,7 @@ def run_application(config: dict, groups_info, executor) -> None:
     signal.signal(signal.SIGINT, graceful_exit)
     signal.signal(signal.SIGTERM, graceful_exit)
 
-    # Start the DatabasePoller instead of the DirectoryPoller.
+    # Start the DatabasePoller
     db_poller = DatabasePoller(config, executor)
     db_poller.start()
     log_flag(logger, 'start')
@@ -290,7 +309,6 @@ def main():
         logger.info("Starting application...")
 
         # Test OMERO connectivity
-        from utils.initialize import test_omero_connection
         test_omero_connection()
 
         initialize_system(config)

@@ -1,18 +1,22 @@
+#!/usr/bin/env python
+# ingest_tracker.py
+
 import logging
-import enum
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Enum, Index
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Index
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 from datetime import datetime
 import json
-from sqlalchemy.sql import text
 
+# --------------------------------------------------
 # Stage constants
-#TODO: There should be also failed/incomplete.
+# --------------------------------------------------
 STAGE_IMPORTED = "Data Imported"
 STAGE_PREPROCESSING = "Preprocessing Data"
 STAGE_NEW_ORDER = "Upload Order Received"
+STAGE_INGEST_STARTED = "Data Package Ingest Started"
+STAGE_INGEST_FAILED = "Data Package Ingest Failed"
 
 Base = declarative_base()
 
@@ -24,7 +28,7 @@ class IngestionTracking(Base):
     Group = Column(String, nullable=False)
     GroupID = Column(String, nullable=True)
     Username = Column(String, nullable=False, index=True)
-    DataPackage = Column(String, nullable=False)  # Single identifier for both Dataset and Screen
+    DestinationID = Column(String, nullable=False)
     Stage = Column(String, nullable=False)
     UUID = Column(String(36), nullable=False, index=True)
     Timestamp = Column(DateTime(timezone=True), default=func.now())
@@ -77,14 +81,13 @@ class IngestTracker:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
             
-            # Create tables now
+            # Create tables if they do not exist
             self.logger.debug("Creating tables if they do not exist...")
             Base.metadata.create_all(self.engine)
             self.logger.info("Database initialization successful")
         except Exception as e:
             self.logger.error(f"Unexpected error during IngestTracker initialization: {e}", exc_info=True)
             raise
-
 
     def dispose(self):
         """Safely dispose of database resources."""
@@ -97,16 +100,12 @@ class IngestTracker:
 
     def db_log_ingestion_event(self, order_info: dict, Stage: str) -> int:
         """
-        Log an ingestion step to the database using a context manager for the session.
+        Log an ingestion step to the database.
         Returns the new entry ID or None if logging failed.
         """
-        required_fields = ['Group', 'Username', 'UUID']
+        required_fields = ['Group', 'Username', 'UUID', 'DestinationID']
         if not all(field in order_info for field in required_fields):
             self.logger.error(f"Missing required fields in order_info: {required_fields}")
-            return None
-    
-        if 'DataPackage' not in order_info:
-            self.logger.error("DataPackage must be provided")
             return None
     
         self.logger.debug(f"Logging ingestion event - Stage: {Stage}, UUID: {order_info.get('UUID')}")
@@ -116,7 +115,7 @@ class IngestTracker:
                     Group=order_info.get('Group'),
                     GroupID=order_info.get('GroupID'),
                     Username=order_info.get('Username', 'Unknown'),
-                    DataPackage=str(order_info.get('DataPackage')),  # Single identifier for both Dataset and Screen
+                    DestinationID=str(order_info.get('DestinationID', '')),
                     Stage=Stage,
                     UUID=str(order_info.get('UUID', 'Unknown')),
                     Files=order_info.get('Files', []),
@@ -130,7 +129,7 @@ class IngestTracker:
                     f"UUID: {new_entry.UUID} | "
                     f"Group: {new_entry.Group} (ID: {new_entry.GroupID}) | "
                     f"User: {new_entry.Username} | "
-                    f"DataPackage: {new_entry.DataPackage}"
+                    f"DestinationID: {new_entry.DestinationID}"
                 )
                 self.logger.debug(f"Created database entry: {new_entry.id}")
                 return new_entry.id
@@ -141,7 +140,9 @@ class IngestTracker:
             self.logger.error(f"Unexpected error logging ingestion step: {e}", exc_info=True)
             return None
 
+# --------------------------------------------------
 # Global instance management
+# --------------------------------------------------
 _ingest_tracker = None
 
 def get_ingest_tracker():
@@ -149,7 +150,7 @@ def get_ingest_tracker():
     return _ingest_tracker
 
 def initialize_ingest_tracker(config):
-    """Initialize the global IngestTracker instance with proper error handling."""
+    """Initialize the global IngestTracker instance."""
     global _ingest_tracker
     try:
         _ingest_tracker = IngestTracker(config)

@@ -91,7 +91,7 @@ def retry_on_connection_issue(func):
 
 
 class DataProcessor:
-    #TODO: Change so it is not PODMAN specific. Otherwise testing will be... tricky.
+    #TODO: Change so it is not PODMAN specific. Otherwise testing will be... tricky. Or we skip for now :)
     def __init__(self, data_package, logger=None):
         """Initialize DataProcessor with proper logging."""
         self.data_package = data_package
@@ -201,7 +201,7 @@ class DataProcessor:
 
 
 class DataPackageImporter:
-    #TODO: Separate the scenarios into their own functions. This gigaclass is getting too big.
+    #TODO: Check if I can clean up this class. Its a bit messy.
     """
     Handles the import of data packages into OMERO using database-driven order details.
     """
@@ -314,7 +314,6 @@ class DataPackageImporter:
         kwargs['errs'] = f"logs/cli.{uuid}.errs"
         return ezomero.ezimport(conn=conn, target=target, dataset=dataset, **kwargs)
 
-    #TODO: Why is imported not used?
     def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None, local_paths=None):
         uuid = self.data_package.get('UUID')
         if dataset_id and screen_id:
@@ -483,10 +482,10 @@ class DataPackageImporter:
     def import_data_package(self):
         """Import the data package and log the outcome."""
         try:
-            # Get target ID from DataPackage
-            target_id = self.data_package.get('DataPackage')
+            # Get DestinationID from DataPackage
+            target_id = self.data_package.get('DestinationID')
             if not target_id:
-                self.logger.error("No DataPackage ID provided")
+                self.logger.error("No DestinationID provided")
                 return [], [], True
 
             intended_username = self.data_package.get('Username')

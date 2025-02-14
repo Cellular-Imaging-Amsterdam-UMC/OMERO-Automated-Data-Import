@@ -1,86 +1,118 @@
-2025-02-13 16:15:05,119 - PID:7 - __main__.db_poller - INFO - Detected new upload order with UUID e25e3248-f2ae-4d9b-b081-5fa873951ff1
-2025-02-13 16:15:05,121 - PID:7 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Data Package Detected, UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
-2025-02-13 16:15:05,127 - PID:7 - utils.ingest_tracker - INFO - Ingestion event logged: Data Package Detected | UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1 | Group: Test Group (ID: 3) | User: ttest | DataPackage: 1
-2025-02-13 16:15:05,127 - PID:7 - utils.ingest_tracker - DEBUG - Created database entry: 11
-2025-02-13 16:15:05,127 - PID:7 - utils.upload_order_manager - DEBUG - Initializing UploadOrderManager for order with UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
-2025-02-13 16:15:05,128 - PID:7 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
-2025-02-13 16:15:05,133 - PID:28 - utils.importer - DEBUG - Initializing DataPackageImporter for UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
-2025-02-13 16:15:05,137 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
-2025-02-13 16:15:05,137 - PID:28 - omero.gateway - DEBUG - 4064
-2025-02-13 16:15:05,137 - PID:28 - omero.gateway - DEBUG - []
-2025-02-13 16:15:05,148 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
-2025-02-13 16:15:05,148 - PID:28 - omero.gateway - DEBUG - Creating Session...
-2025-02-13 16:15:05,235 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '449aede3-7625-4d54-b8f4-e8e52998ba6c'
-2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
-2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '9597e942-183f-4f3e-8640-789cc4dbd223'
-2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '449aede3-7625-4d54-b8f4-e8e52998ba6c', 'omero.event': 'Internal', 'omero.session.uuid': '9597e942-183f-4f3e-8640-789cc4dbd223'}>
-2025-02-13 16:15:05,236 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '449aede3-7625-4d54-b8f4-e8e52998ba6c', 'omero.event': 'Internal', 'omero.session.uuid': '9597e942-183f-4f3e-8640-789cc4dbd223'}>
-2025-02-13 16:15:05,236 - PID:28 - omero.gateway - DEBUG - Session created
-2025-02-13 16:15:05,236 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
-2025-02-13 16:15:05,237 - PID:28 - omero.gateway - INFO - created connection (uuid=9597e942-183f-4f3e-8640-789cc4dbd223)
-2025-02-13 16:15:05,237 - PID:28 - omero.gateway - DEBUG - .. connected!
-2025-02-13 16:15:05,237 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=9597e942-183f-4f3e-8640-789cc4dbd223
-2025-02-13 16:15:05,237 - PID:28 - omero.gateway - DEBUG - connected via client
-2025-02-13 16:15:05,237 - PID:28 - utils.importer - INFO - Connected to OMERO as root.
-2025-02-13 16:15:05,309 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
-2025-02-13 16:15:05,309 - PID:28 - omero.gateway - DEBUG - 4064
-2025-02-13 16:15:05,309 - PID:28 - omero.gateway - DEBUG - []
-2025-02-13 16:15:05,311 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75, group=None, self.sUuid=None
-2025-02-13 16:15:05,311 - PID:28 - omero.gateway - DEBUG - connected? False
-2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to 'd186447f-2c18-4788-9fff-6b8aa8015615'
-2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75'
-2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': 'd186447f-2c18-4788-9fff-6b8aa8015615', 'omero.session.uuid': '0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75'}>
-2025-02-13 16:15:05,321 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': 'd186447f-2c18-4788-9fff-6b8aa8015615', 'omero.session.uuid': '0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75'}>
-2025-02-13 16:15:05,321 - PID:28 - omero.gateway - DEBUG - Joined Session OK with Uuid: 0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75
-2025-02-13 16:15:05,321 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
-2025-02-13 16:15:05,322 - PID:28 - omero.gateway - INFO - created connection (uuid=0ef6d0e8-fabb-4f64-9c74-3d8a57a24f75)
-2025-02-13 16:15:05,322 - PID:28 - omero.gateway - DEBUG - .. connected!
-2025-02-13 16:15:05,333 - PID:28 - utils.importer - INFO - Connected as user ttest in group Test Group
-2025-02-13 16:15:05,333 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
-2025-02-13 16:15:05,333 - PID:28 - omero.gateway - DEBUG - 4064
-2025-02-13 16:15:05,333 - PID:28 - omero.gateway - DEBUG - []
-2025-02-13 16:15:05,334 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
-2025-02-13 16:15:05,334 - PID:28 - omero.gateway - DEBUG - Creating Session...
-2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '31ae8d44-5afe-413d-875d-1bc6a8562ac2'
-2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
-2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '3d9a56f6-73ad-4429-ba76-aef6e698c3f6'
-2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '31ae8d44-5afe-413d-875d-1bc6a8562ac2', 'omero.event': 'Internal', 'omero.session.uuid': '3d9a56f6-73ad-4429-ba76-aef6e698c3f6'}>
-2025-02-13 16:15:05,381 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '31ae8d44-5afe-413d-875d-1bc6a8562ac2', 'omero.event': 'Internal', 'omero.session.uuid': '3d9a56f6-73ad-4429-ba76-aef6e698c3f6'}>
-2025-02-13 16:15:05,381 - PID:28 - omero.gateway - DEBUG - Session created
-2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
-2025-02-13 16:15:05,382 - PID:28 - omero.gateway - INFO - created connection (uuid=3d9a56f6-73ad-4429-ba76-aef6e698c3f6)
-2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - .. connected!
-2025-02-13 16:15:05,382 - PID:28 - utils.importer - DEBUG - Connected as root to OMERO.
-2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=3d9a56f6-73ad-4429-ba76-aef6e698c3f6
-2025-02-13 16:15:05,382 - PID:28 - omero.gateway - DEBUG - connected via client
-2025-02-13 16:15:05,382 - PID:28 - utils.importer - DEBUG - Using TTL: 6000000
-2025-02-13 16:15:05,419 - PID:28 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
-2025-02-13 16:15:05,419 - PID:28 - omero.gateway - DEBUG - 4064
-2025-02-13 16:15:05,419 - PID:28 - omero.gateway - DEBUG - []
-2025-02-13 16:15:05,421 - PID:28 - omero.gateway - DEBUG - Connect attempt, sUuid=6a1dd320-3bce-4199-8c49-6ce0af590c80, group=None, self.sUuid=None
-2025-02-13 16:15:05,421 - PID:28 - omero.gateway - DEBUG - connected? False
-2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '1d55a7a0-b48c-4108-8acf-502a89473000'
-2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '6a1dd320-3bce-4199-8c49-6ce0af590c80'
-2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '1d55a7a0-b48c-4108-8acf-502a89473000', 'omero.session.uuid': '6a1dd320-3bce-4199-8c49-6ce0af590c80'}>
-2025-02-13 16:15:05,432 - PID:28 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '1d55a7a0-b48c-4108-8acf-502a89473000', 'omero.session.uuid': '6a1dd320-3bce-4199-8c49-6ce0af590c80'}>
-2025-02-13 16:15:05,432 - PID:28 - omero.gateway - DEBUG - Joined Session OK with Uuid: 6a1dd320-3bce-4199-8c49-6ce0af590c80
-2025-02-13 16:15:05,433 - PID:28 - omero.gateway - DEBUG - ## Creating proxies
-2025-02-13 16:15:05,433 - PID:28 - omero.gateway - INFO - created connection (uuid=6a1dd320-3bce-4199-8c49-6ce0af590c80)
-2025-02-13 16:15:05,433 - PID:28 - omero.gateway - DEBUG - .. connected!
-2025-02-13 16:15:05,435 - PID:28 - utils.importer - DEBUG - Connected as user ttest
-2025-02-13 16:15:05,443 - PID:28 - utils.importer - DEBUG - Session group set to Test Group
-2025-02-13 16:15:05,455 - PID:28 - utils.importer - DEBUG - ID 1 identified as Dataset
-2025-02-13 16:15:05,463 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
-2025-02-13 16:15:05,467 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
-2025-02-13 16:15:05,467 - PID:28 - utils.importer - INFO - Target ID 1 identified as Dataset.
-2025-02-13 16:15:05,467 - PID:28 - utils.importer - DEBUG - Files to upload: []
-2025-02-13 16:15:05,467 - PID:28 - utils.importer - DEBUG - Initializing DataProcessor for package: e25e3248-f2ae-4d9b-b081-5fa873951ff1
-2025-02-13 16:15:05,467 - PID:28 - utils.importer - INFO - No preprocessing required; continuing upload.
-2025-02-13 16:15:05,467 - PID:28 - utils.importer - DEBUG - Uploading files: []
-2025-02-13 16:15:05,473 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
-2025-02-13 16:15:05,475 - PID:28 - omero.gateway - INFO - closed connection (uuid=None)
-2025-02-13 16:15:05,476 - PID:28 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Order Moved to Completed, UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1
-2025-02-13 16:15:05,485 - PID:28 - utils.ingest_tracker - INFO - Ingestion event logged: Order Moved to Completed | UUID: e25e3248-f2ae-4d9b-b081-5fa873951ff1 | Group: Test Group (ID: 3) | User: ttest | DataPackage: 1
-2025-02-13 16:15:05,485 - PID:28 - utils.ingest_tracker - DEBUG - Created database entry: 12
-2025-02-13 16:15:05,485 - PID:28 - __main__ - INFO - Data package e25e3248-f2ae-4d9b-b081-5fa873951ff1 in 1 processed successfully with 0 successful uploads.
-2025-02-13 16:15:05,486 - PID:7 - __main__.db_poller - INFO - Order e25e3248-f2ae-4d9b-b081-5fa873951ff1 processing complete.
+2025-02-14 14:43:09,820 - PID:7 - __main__ - INFO - Starting application...
+2025-02-14 14:43:09,820 - PID:7 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-14 14:43:09,820 - PID:7 - omero.gateway - DEBUG - 4064
+2025-02-14 14:43:09,820 - PID:7 - omero.gateway - DEBUG - []
+2025-02-14 14:43:09,822 - PID:7 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
+2025-02-14 14:43:09,822 - PID:7 - omero.gateway - DEBUG - Creating Session...
+2025-02-14 14:43:09,901 - PID:7 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '5c2af715-5d31-471b-a5ea-90891aa9bc17'
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to 'dad70f8e-9a0d-492f-a9c4-e9914dbc2cbd'
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '5c2af715-5d31-471b-a5ea-90891aa9bc17', 'omero.event': 'Internal', 'omero.session.uuid': 'dad70f8e-9a0d-492f-a9c4-e9914dbc2cbd'}>
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '5c2af715-5d31-471b-a5ea-90891aa9bc17', 'omero.event': 'Internal', 'omero.session.uuid': 'dad70f8e-9a0d-492f-a9c4-e9914dbc2cbd'}>
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway - DEBUG - Session created
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway - INFO - created connection (uuid=dad70f8e-9a0d-492f-a9c4-e9914dbc2cbd)
+2025-02-14 14:43:09,902 - PID:7 - omero.gateway - DEBUG - .. connected!
+2025-02-14 14:43:09,903 - PID:7 - utils.initialize - INFO - Successfully connected to OMERO server at nl-biomero-omeroserver-1:4064
+2025-02-14 14:43:09,909 - PID:7 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-14 14:43:09,909 - PID:7 - utils.initialize - INFO - Starting system initialization (database-driven mode)...
+2025-02-14 14:43:09,910 - PID:7 - utils.initialize - DEBUG - Initializing ingest tracking database...
+2025-02-14 14:43:09,910 - PID:7 - utils.ingest_tracker - INFO - Initializing IngestTracker
+2025-02-14 14:43:09,910 - PID:7 - utils.ingest_tracker - DEBUG - Using database URL: sqlite:////auto-importer/db/ingestion_tracking.db
+2025-02-14 14:43:09,917 - PID:7 - utils.ingest_tracker - DEBUG - Creating tables if they do not exist...
+2025-02-14 14:43:09,923 - PID:7 - utils.ingest_tracker - INFO - Database initialization successful
+2025-02-14 14:43:09,924 - PID:7 - utils.initialize - INFO - System initialization completed successfully.
+2025-02-14 14:43:09,924 - PID:7 - __main__ - INFO - Creating process executor...
+2025-02-14 14:43:09,927 - PID:7 - __main__ - INFO - 
+    /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+           READY TO UPLOAD DATA TO OMERO
+    /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/
+2025-02-14 14:44:35,235 - PID:7 - __main__.db_poller - INFO - Detected new upload order with UUID 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,236 - PID:7 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Upload Order Received, UUID: 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,250 - PID:7 - utils.ingest_tracker - INFO - Ingestion event logged: Upload Order Received | UUID: 01e423ab-abae-4902-98cc-f4da25a40b01 | Group: Test Group (ID: 3) | User: ttest | DestinationID: 1
+2025-02-14 14:44:35,250 - PID:7 - utils.ingest_tracker - DEBUG - Created database entry: 2
+2025-02-14 14:44:35,250 - PID:7 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Data Package Ingest Started, UUID: 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,253 - PID:7 - utils.ingest_tracker - INFO - Ingestion event logged: Data Package Ingest Started | UUID: 01e423ab-abae-4902-98cc-f4da25a40b01 | Group: Test Group (ID: 3) | User: ttest | DestinationID: 1
+2025-02-14 14:44:35,253 - PID:7 - utils.ingest_tracker - DEBUG - Created database entry: 3
+2025-02-14 14:44:35,254 - PID:7 - utils.upload_order_manager - DEBUG - Initializing UploadOrderManager for order with UUID: 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,254 - PID:7 - utils.upload_order_manager - INFO - All required attributes are present in the upload order.
+2025-02-14 14:44:35,275 - PID:47 - utils.importer - DEBUG - Initializing DataPackageImporter for UUID: 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,276 - PID:47 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-14 14:44:35,276 - PID:47 - omero.gateway - DEBUG - 4064
+2025-02-14 14:44:35,276 - PID:47 - omero.gateway - DEBUG - []
+2025-02-14 14:44:35,283 - PID:47 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
+2025-02-14 14:44:35,283 - PID:47 - omero.gateway - DEBUG - Creating Session...
+2025-02-14 14:44:35,380 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '0a104790-7576-48ef-b4f9-929bce8db62c'
+2025-02-14 14:44:35,380 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
+2025-02-14 14:44:35,380 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '60e124ef-89ec-4ace-ad7a-7673db3849cc'
+2025-02-14 14:44:35,380 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '0a104790-7576-48ef-b4f9-929bce8db62c', 'omero.event': 'Internal', 'omero.session.uuid': '60e124ef-89ec-4ace-ad7a-7673db3849cc'}>
+2025-02-14 14:44:35,380 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '0a104790-7576-48ef-b4f9-929bce8db62c', 'omero.event': 'Internal', 'omero.session.uuid': '60e124ef-89ec-4ace-ad7a-7673db3849cc'}>
+2025-02-14 14:44:35,381 - PID:47 - omero.gateway - DEBUG - Session created
+2025-02-14 14:44:35,381 - PID:47 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-14 14:44:35,381 - PID:47 - omero.gateway - INFO - created connection (uuid=60e124ef-89ec-4ace-ad7a-7673db3849cc)
+2025-02-14 14:44:35,381 - PID:47 - omero.gateway - DEBUG - .. connected!
+2025-02-14 14:44:35,381 - PID:47 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=60e124ef-89ec-4ace-ad7a-7673db3849cc
+2025-02-14 14:44:35,381 - PID:47 - omero.gateway - DEBUG - connected via client
+2025-02-14 14:44:35,382 - PID:47 - utils.importer - INFO - Connected to OMERO as root.
+2025-02-14 14:44:35,437 - PID:47 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-14 14:44:35,437 - PID:47 - omero.gateway - DEBUG - 4064
+2025-02-14 14:44:35,437 - PID:47 - omero.gateway - DEBUG - []
+2025-02-14 14:44:35,439 - PID:47 - omero.gateway - DEBUG - Connect attempt, sUuid=bcda293a-2139-46c9-ad89-0638e96470c3, group=None, self.sUuid=None
+2025-02-14 14:44:35,439 - PID:47 - omero.gateway - DEBUG - connected? False
+2025-02-14 14:44:35,447 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '99b93d50-170d-4e64-863e-a7c68994644a'
+2025-02-14 14:44:35,447 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to 'bcda293a-2139-46c9-ad89-0638e96470c3'
+2025-02-14 14:44:35,447 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '99b93d50-170d-4e64-863e-a7c68994644a', 'omero.session.uuid': 'bcda293a-2139-46c9-ad89-0638e96470c3'}>
+2025-02-14 14:44:35,447 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '99b93d50-170d-4e64-863e-a7c68994644a', 'omero.session.uuid': 'bcda293a-2139-46c9-ad89-0638e96470c3'}>
+2025-02-14 14:44:35,447 - PID:47 - omero.gateway - DEBUG - Joined Session OK with Uuid: bcda293a-2139-46c9-ad89-0638e96470c3
+2025-02-14 14:44:35,447 - PID:47 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-14 14:44:35,448 - PID:47 - omero.gateway - INFO - created connection (uuid=bcda293a-2139-46c9-ad89-0638e96470c3)
+2025-02-14 14:44:35,448 - PID:47 - omero.gateway - DEBUG - .. connected!
+2025-02-14 14:44:35,460 - PID:47 - utils.importer - INFO - Connected as user ttest in group Test Group
+2025-02-14 14:44:35,460 - PID:47 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-14 14:44:35,460 - PID:47 - omero.gateway - DEBUG - 4064
+2025-02-14 14:44:35,460 - PID:47 - omero.gateway - DEBUG - []
+2025-02-14 14:44:35,462 - PID:47 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=None
+2025-02-14 14:44:35,462 - PID:47 - omero.gateway - DEBUG - Creating Session...
+2025-02-14 14:44:35,507 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '83827756-4ab6-480f-b543-fabcc40c975a'
+2025-02-14 14:44:35,508 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.event' to 'Internal'
+2025-02-14 14:44:35,508 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '0eb381fa-f445-4e57-a722-265bc7a21c9d'
+2025-02-14 14:44:35,508 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '83827756-4ab6-480f-b543-fabcc40c975a', 'omero.event': 'Internal', 'omero.session.uuid': '0eb381fa-f445-4e57-a722-265bc7a21c9d'}>
+2025-02-14 14:44:35,508 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '83827756-4ab6-480f-b543-fabcc40c975a', 'omero.event': 'Internal', 'omero.session.uuid': '0eb381fa-f445-4e57-a722-265bc7a21c9d'}>
+2025-02-14 14:44:35,508 - PID:47 - omero.gateway - DEBUG - Session created
+2025-02-14 14:44:35,508 - PID:47 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-14 14:44:35,509 - PID:47 - omero.gateway - INFO - created connection (uuid=0eb381fa-f445-4e57-a722-265bc7a21c9d)
+2025-02-14 14:44:35,509 - PID:47 - omero.gateway - DEBUG - .. connected!
+2025-02-14 14:44:35,509 - PID:47 - utils.importer - DEBUG - Connected as root to OMERO.
+2025-02-14 14:44:35,509 - PID:47 - omero.gateway - DEBUG - Connect attempt, sUuid=None, group=None, self.sUuid=0eb381fa-f445-4e57-a722-265bc7a21c9d
+2025-02-14 14:44:35,509 - PID:47 - omero.gateway - DEBUG - connected via client
+2025-02-14 14:44:35,509 - PID:47 - utils.importer - DEBUG - Using TTL: 6000000
+2025-02-14 14:44:35,541 - PID:47 - omero.gateway - DEBUG - nl-biomero-omeroserver-1
+2025-02-14 14:44:35,541 - PID:47 - omero.gateway - DEBUG - 4064
+2025-02-14 14:44:35,541 - PID:47 - omero.gateway - DEBUG - []
+2025-02-14 14:44:35,543 - PID:47 - omero.gateway - DEBUG - Connect attempt, sUuid=2eca102c-122e-4c6c-acfb-3abfed39ebe1, group=None, self.sUuid=None
+2025-02-14 14:44:35,543 - PID:47 - omero.gateway - DEBUG - connected? False
+2025-02-14 14:44:35,551 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.client.uuid' to '937481f2-f110-428f-b8da-a072e4b2f1b6'
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway.utils - DEBUG - Setting 'omero.session.uuid' to '2eca102c-122e-4c6c-acfb-3abfed39ebe1'
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.group' not found in <ServiceOptsDict: {'omero.client.uuid': '937481f2-f110-428f-b8da-a072e4b2f1b6', 'omero.session.uuid': '2eca102c-122e-4c6c-acfb-3abfed39ebe1'}>
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway.utils - DEBUG - Key 'omero.user' not found in <ServiceOptsDict: {'omero.client.uuid': '937481f2-f110-428f-b8da-a072e4b2f1b6', 'omero.session.uuid': '2eca102c-122e-4c6c-acfb-3abfed39ebe1'}>
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway - DEBUG - Joined Session OK with Uuid: 2eca102c-122e-4c6c-acfb-3abfed39ebe1
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway - DEBUG - ## Creating proxies
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway - INFO - created connection (uuid=2eca102c-122e-4c6c-acfb-3abfed39ebe1)
+2025-02-14 14:44:35,552 - PID:47 - omero.gateway - DEBUG - .. connected!
+2025-02-14 14:44:35,554 - PID:47 - utils.importer - DEBUG - Connected as user ttest
+2025-02-14 14:44:35,565 - PID:47 - utils.importer - DEBUG - Session group set to Test Group
+2025-02-14 14:44:35,591 - PID:47 - utils.importer - DEBUG - ID 1 identified as Dataset
+2025-02-14 14:44:35,601 - PID:47 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-14 14:44:35,606 - PID:47 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-14 14:44:35,606 - PID:47 - utils.importer - INFO - Target ID 1 identified as Dataset.
+2025-02-14 14:44:35,606 - PID:47 - utils.importer - DEBUG - Files to upload: []
+2025-02-14 14:44:35,607 - PID:47 - utils.importer - DEBUG - Initializing DataProcessor for package: 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,607 - PID:47 - utils.importer - INFO - No preprocessing required; continuing upload.
+2025-02-14 14:44:35,607 - PID:47 - utils.importer - DEBUG - Uploading files: []
+2025-02-14 14:44:35,612 - PID:47 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-14 14:44:35,615 - PID:47 - omero.gateway - INFO - closed connection (uuid=None)
+2025-02-14 14:44:35,616 - PID:47 - __main__ - ERROR - Import failed for data package 01e423ab-abae-4902-98cc-f4da25a40b01 targeting OMERO 1. Failed files: []
+2025-02-14 14:44:35,616 - PID:47 - utils.ingest_tracker - DEBUG - Logging ingestion event - Stage: Data Package Ingest Failed, UUID: 01e423ab-abae-4902-98cc-f4da25a40b01
+2025-02-14 14:44:35,622 - PID:47 - utils.ingest_tracker - INFO - Ingestion event logged: Data Package Ingest Failed | UUID: 01e423ab-abae-4902-98cc-f4da25a40b01 | Group: Test Group (ID: 3) | User: ttest | DestinationID: 1
+2025-02-14 14:44:35,622 - PID:47 - utils.ingest_tracker - DEBUG - Created database entry: 4
+2025-02-14 14:44:35,622 - PID:7 - __main__.db_poller - INFO - Order 01e423ab-abae-4902-98cc-f4da25a40b01 processing complete.

@@ -30,10 +30,10 @@ def main():
             "Group": "Test Group",
             "GroupID": "3",
             "Username": "ttest",
-            "DataPackage": "1",
+            "DestinationID": "1",  # Updated from "DataPackage" to "DestinationID"
             "UUID": str(uuid.uuid4()),
-            "Files": ["/auto-importer/tests/Barbie1.tif", "/auto-importer/tests/Barbie2.tif","/auto-importer/tests/Barbie3.tif"],
-            "FileNames": ["Barbie1.tif", "Barbie2.tif","Barbie3.tif"]
+            "Files": ["/auto-importer/tests/Barbie1.tif", "/auto-importer/tests/Barbie2.tif", "/auto-importer/tests/Barbie3.tif"],
+            "FileNames": ["Barbie1.tif", "Barbie2.tif", "Barbie3.tif"]
         }
         
         # Create a new IngestionTracking instance
@@ -41,7 +41,7 @@ def main():
             Group=order_info["Group"],
             GroupID=order_info["GroupID"],
             Username=order_info["Username"],
-            DataPackage=order_info["DataPackage"],
+            DestinationID=order_info["DestinationID"],  # Updated field name
             Stage=STAGE_NEW_ORDER,
             UUID=order_info["UUID"],
             Files=order_info["Files"],
