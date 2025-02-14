@@ -14,7 +14,7 @@ def load_settings(file_path: str) -> dict:
     """
     logger = logging.getLogger(__name__)
     try:
-        file_path_obj = Path(file_path)  # Convert to Path object
+        file_path_obj = Path(file_path)
         if not file_path_obj.exists():
             logger.error(f"Settings file not found: {file_path_obj}")
             raise FileNotFoundError(f"Settings file not found: {file_path_obj}")

@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 
-from .ingest_tracker import log_ingestion_step, STAGE_MOVED_COMPLETED, STAGE_MOVED_FAILED
+from .ingest_tracker import log_ingestion_step
 
 class UploadOrderManager:
     def __init__(self, order_record, settings):
@@ -41,8 +41,6 @@ class UploadOrderManager:
             raise ValueError(error_message)
     
         self.logger.info("All required attributes are present in the upload order.")
-
-
 
     def switch_path_prefix(self):
         """

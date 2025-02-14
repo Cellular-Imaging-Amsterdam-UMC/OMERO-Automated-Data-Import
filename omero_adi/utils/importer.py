@@ -91,6 +91,7 @@ def retry_on_connection_issue(func):
 
 
 class DataProcessor:
+    #TODO: Change so it is not PODMAN specific. Otherwise testing will be... tricky.
     def __init__(self, data_package, logger=None):
         """Initialize DataProcessor with proper logging."""
         self.data_package = data_package
@@ -102,7 +103,6 @@ class DataProcessor:
         return any(key.startswith("preprocessing_") for key in self.data_package)
 
     def get_preprocessing_args(self, file_path):
-        # TODO: Check that this is NOT PODMAN SPECIFIC! or I will have to rewrite it for Docker...
         """Generate podman command arguments based on preprocessing keys."""
         self.logger.debug(f"Getting preprocessing args for file: {file_path}")
         if not self.has_preprocessing():
@@ -201,8 +201,9 @@ class DataProcessor:
 
 
 class DataPackageImporter:
+    #TODO: Separate the scenarios into their own functions. This gigaclass is getting too big.
     """
-    Handles the import of data packages into OMERO using the new, database-driven order details.
+    Handles the import of data packages into OMERO using database-driven order details.
     """
     def __init__(self, config, data_package, ttl_for_user_conn=6000000):
         self.config = config
@@ -255,7 +256,6 @@ class DataPackageImporter:
                 arguments += ['--skip', 'upgrade']
         if depth:
             arguments += ['--depth', str(depth)]
-        # Use capitalized target type for consistency
         if target_type == 'Screen':
             arguments += ['-r', str(target_id)]
         elif target_type == 'Dataset':
@@ -266,17 +266,17 @@ class DataPackageImporter:
         cli.invoke(arguments)
         if cli.rv == 0:
             self.imported = True
-            self.logger.info(f'Imported {str(file_path)} successfully.')
+            self.logger.info(f'Imported successfully for {str(file_path)}')
             return True
         else:
             self.imported = False
-            self.logger.error(f'Import failed for {str(file_path)}.')
+            self.logger.error(f'Import failed for {str(file_path)}')
             return False  
 
     @connection
     def get_plate_ids(self, conn, file_path, screen_id):
         if not self.imported:
-            self.logger.error(f'File {file_path} was not imported.')
+            self.logger.error(f'File {file_path} was not imported')
             return None
         self.logger.debug("Retrieving Plate IDs")
         q = conn.getQueryService()
@@ -314,6 +314,7 @@ class DataPackageImporter:
         kwargs['errs'] = f"logs/cli.{uuid}.errs"
         return ezomero.ezimport(conn=conn, target=target, dataset=dataset, **kwargs)
 
+    #TODO: Why is imported not used?
     def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None, local_paths=None):
         uuid = self.data_package.get('UUID')
         if dataset_id and screen_id:
