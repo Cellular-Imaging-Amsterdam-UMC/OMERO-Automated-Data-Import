@@ -40,9 +40,12 @@ test = [
 ]
 
 [tool.setuptools.packages]
-find = { where = ["src"] }
+find = { where = ["omero_adi"] }
 
 [tool.setuptools_scm]
 
 [project.urls]
 "Homepage" = "https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import"
+
+[tool.pytest.ini_options]
+cache_dir = "/tmp/.pytest_cache"
