@@ -12,8 +12,8 @@ import json
 # --------------------------------------------------
 # Stage constants
 # --------------------------------------------------
-STAGE_IMPORTED = "Data Imported"
-STAGE_PREPROCESSING = "Preprocessing Data"
+STAGE_IMPORTED = "Import Completed"
+STAGE_PREPROCESSING = "Import Preprocessing"
 STAGE_NEW_ORDER = "Import Pending"
 STAGE_INGEST_STARTED = "Import Started"
 STAGE_INGEST_FAILED = "Import Failed"

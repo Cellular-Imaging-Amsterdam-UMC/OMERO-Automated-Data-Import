@@ -13,7 +13,7 @@ from threading import Event, Thread
 from collections import UserDict
 
 # Local module imports
-from utils.initialize import initialize_system, test_omero_connection
+from utils.initialize import finalize_dangling_orders_and_get_last_id, initialize_system, test_omero_connection
 from utils.upload_order_manager import UploadOrderManager
 from utils.importer import DataPackageImporter
 from utils.ingest_tracker import (
@@ -182,6 +182,9 @@ class DatabasePoller:
         
         # Ensure tables exist
         Base.metadata.create_all(self.ingest_tracker.engine)
+        
+        # Setup for new orders
+        self.last_max_id = finalize_dangling_orders_and_get_last_id(self.ingest_tracker, self.IngestionTracking, days=10)
 
     def start(self):
         """Start the polling thread."""
@@ -199,18 +202,17 @@ class DatabasePoller:
         Only process an order if its UUID has not been processed before.
         """
         Session = self.ingest_tracker.Session
-        last_max_id = 0  # Initialize the highest processed ID
         while not self.shutdown_event.is_set():
             with Session() as session:
                 try:
                     new_orders = session.query(self.IngestionTracking).filter(
                         self.IngestionTracking.stage == STAGE_NEW_ORDER,
-                        self.IngestionTracking.id > last_max_id
+                        self.IngestionTracking.id > self.last_max_id
                     ).order_by(self.IngestionTracking.id.asc()).all()
                     for order in new_orders:
                         if order.uuid in self.processed_uuids:
                             continue  # Skip if this order has been processed already
-                        last_max_id = max(last_max_id, order.id)
+                        self.last_max_id = max(self.last_max_id, order.id)
                         # Build a clean dictionary from the model attributes.
                         order_dict = {
                             'Group': order.group_name,

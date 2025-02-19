@@ -317,7 +317,8 @@ class DataPackageImporter:
         uuid = self.data_package.get('UUID')
         kwargs['file'] = f"logs/cli.{uuid}.logs"
         kwargs['errs'] = f"logs/cli.{uuid}.errs"
-        return ezomero.ezimport(conn=conn, target=target, dataset=dataset, **kwargs)
+        self.logger.debug(f"{conn} {target} {int(dataset)} {kwargs}")
+        return ezomero.ezimport(conn=conn, target=target, dataset=int(dataset), **kwargs)
 
     def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None, local_paths=None):
         uuid = self.data_package.get('UUID')
@@ -334,6 +335,13 @@ class DataPackageImporter:
             self.logger.debug(f"Uploading file: {file_path}")
             try:
                 if screen_id:
+                    try:
+                        screen_id = int(screen_id)
+                    except (ValueError, TypeError):
+                        error_message = f"Invalid 'DestinationID': must be a valid integer. Found: {screen_id}"
+                        self.logger.error(error_message)
+                        raise ValueError(error_message)
+                    
                     if not local_paths:
                         imported = self.import_to_omero(
                             file_path=str(file_path),
@@ -370,6 +378,13 @@ class DataPackageImporter:
                             shutil.rmtree(relative_output_path)
                     upload_target = screen_id
                 else:
+                    try:
+                        dataset_id = int(dataset_id)
+                    except (ValueError, TypeError):
+                        error_message = f"Invalid 'DestinationID': must be a valid integer. Found: {dataset_id}"
+                        self.logger.error(error_message)
+                        raise ValueError(error_message)
+                    
                     if os.path.isfile(file_path):
                         image_ids = self.import_dataset(
                             target=str(file_path),
@@ -525,7 +540,7 @@ class DataPackageImporter:
                             # Determine if the target ID is a Dataset or a Screen
                             is_screen = self.determine_target_type(target_id)
                             target_type = "Screen" if is_screen else "Dataset"
-                            self.logger.info(f"Target ID {target_id} identified as {target_type}.")
+                            self.logger.info(f"Target ID {target_id} ({type(target_id)}) identified as {target_type}.")
 
                             all_successful_uploads = []
                             all_failed_uploads = []
@@ -575,8 +590,6 @@ class DataPackageImporter:
                                         dataset_id=target_id,
                                         screen_id=None
                                     )
-                            if successful_uploads:
-                                log_ingestion_step(self.data_package, STAGE_IMPORTED)
                             all_successful_uploads.extend(successful_uploads)
                             all_failed_uploads.extend(failed_uploads)
                             return all_successful_uploads, all_failed_uploads, False

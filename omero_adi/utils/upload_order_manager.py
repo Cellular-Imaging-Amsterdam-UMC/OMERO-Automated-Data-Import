@@ -28,7 +28,7 @@ class UploadOrderManager:
         """
         required_attributes = ['Group', 'Username', 'UUID', 'DestinationID']
         missing_attributes = [attr for attr in required_attributes if attr not in self.order_info]
-    
+
         if missing_attributes:
             error_message = f"Missing required attributes in upload order: {', '.join(missing_attributes)}"
             self.logger.error(error_message)
