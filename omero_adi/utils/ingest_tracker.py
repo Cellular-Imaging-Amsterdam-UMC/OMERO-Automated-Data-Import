@@ -51,7 +51,7 @@ class IngestionTracking(Base):
         self._file_names = json.dumps(file_names)
 
 # Define the index outside of the class
-Index('ix_uuid_timestamp', IngestionTracking.uuid, IngestionTracking.timestamp)
+Index(f"{IngestionTracking.__tablename__}_ix_uuid_timestamp", IngestionTracking.uuid, IngestionTracking.timestamp)
 
 class IngestTracker:
     def __init__(self, config):
@@ -107,31 +107,31 @@ class IngestTracker:
             self.logger.error(f"Missing required fields in order_info: {required_fields}")
             return None
     
-        self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('uuid')}")
+        self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}")
         try:
-            new_entry = IngestionTracking(
-                    group_name=order_info.get('Group'),
-                    user_name=order_info.get('Username', 'Unknown'),
-                    destination_id=str(order_info.get('DestinationID', '')),
-                    stage=Stage,
-                    uuid=str(order_info.get('UUID', 'Unknown')),
-                    files=order_info.get('Files', []),
-                    file_names=order_info.get('FileNames', [])
+            with self.Session() as session:
+                new_entry = IngestionTracking(
+                        group_name=order_info.get('Group'),
+                        user_name=order_info.get('Username', 'Unknown'),
+                        destination_id=str(order_info.get('DestinationID', '')),
+                        stage=stage,
+                        uuid=str(order_info.get('UUID', 'Unknown')),
+                        files=order_info.get('Files', []),
+                        file_names=order_info.get('FileNames', [])
+                    )
+
+                session.add(new_entry)
+                session.commit()
+
+                self.logger.info(
+                    f"Ingestion event logged: {stage} | "
+                    f"UUID: {new_entry.uuid} | "
+                    f"Group: {new_entry.group_name} | "
+                    f"User: {new_entry.user_name} | "
+                    f"DestinationID: {new_entry.destination_id}"
                 )
-
-            session.add(new_entry)
-            session.commit()
-
-            self.logger.info(
-                f"Ingestion event logged: {Stage} | "
-                f"UUID: {new_entry.uuid} | "
-                f"Group: {new_entry.group_name} | "
-                f"User: {new_entry.user_name} | "
-                f"DestinationID: {new_entry.destination_id}"
-            )
-            self.logger.debug(f"Created database entry: {new_entry.id}")
-            return new_entry.id
-
+                self.logger.debug(f"Created database entry: {new_entry.id}")
+                return new_entry.id
         except SQLAlchemyError as e:
             self.logger.error(f"Database error logging ingestion step: {e}", exc_info=True)
             return None

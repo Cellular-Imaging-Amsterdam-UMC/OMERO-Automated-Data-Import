@@ -110,11 +110,11 @@ RUN mkdir /auto-importer/logs
 # Ensure proper permissions for all relevant directories in the user's auto-importer directory
 RUN chown -R autoimportuser:autoimportgroup /auto-importer/logs
 
-# Ensure your application's startup script is executable
-RUN chmod +x /auto-importer/src/main.py
+# Ensure your application's startup script is executable (already in GIT)
+RUN chmod +x /auto-importer/omero_adi/main.py
 
 # Switch to the new user for all subsequent commands
 USER autoimportuser
 
 # Set the default command or entrypoint to the main script
-ENTRYPOINT ["/opt/conda/bin/conda", "run", "-n", "auto-import-env", "python", "src/main.py"]
+ENTRYPOINT ["/opt/conda/bin/conda", "run", "-n", "auto-import-env", "python", "omero_adi/main.py"]

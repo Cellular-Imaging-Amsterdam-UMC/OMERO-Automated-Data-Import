@@ -158,6 +158,7 @@ class IngestionProcess:
             log_ingestion_step(self.data_package, STAGE_INGEST_FAILED)
             return self.data_package.get('UUID')
 
+# TODO: move the poller to the database logic?
 # --------------------------------------------------
 # DatabasePoller: Polls the DB for new upload orders
 # --------------------------------------------------
@@ -203,7 +204,7 @@ class DatabasePoller:
             with Session() as session:
                 try:
                     new_orders = session.query(self.IngestionTracking).filter(
-                        self.IngestionTracking.Stage == STAGE_NEW_ORDER,
+                        self.IngestionTracking.stage == STAGE_NEW_ORDER,
                         self.IngestionTracking.id > last_max_id
                     ).order_by(self.IngestionTracking.id.asc()).all()
                     for order in new_orders:

@@ -47,10 +47,10 @@ def initialize_system(config: dict) -> None:
         logger.info("Starting system initialization (database-driven mode)...")
         logger.debug("Initializing ingest tracking database...")
         success = initialize_ingest_tracker(config)  # Capture the return value
-        print(f"Initialization success: {success}")  # Debug print
         if not success:
             logger.error("Failed to initialize ingest tracker")
-        logger.info("System initialization completed successfully.")
+        else:
+            logger.info("System initialization completed successfully.")
     except Exception as e:
         logger.error(f"System initialization failed: {str(e)}", exc_info=True)
         print(f"Exception during initialization: {str(e)}")  # Debug print
