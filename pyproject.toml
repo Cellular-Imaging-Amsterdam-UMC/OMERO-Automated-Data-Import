@@ -40,7 +40,7 @@ test = [
 ]
 
 [tool.setuptools.packages]
-find = { where = ["omero_adi"] }
+find = {}  # Scan the project directory with the default parameters
 
 [tool.setuptools_scm]
 
