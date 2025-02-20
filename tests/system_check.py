@@ -4,7 +4,7 @@ import json
 import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from utils.ingest_tracker import Base, IngestionTracking, Preprocessing, STAGE_NEW_ORDER
+from omero_adi.utils.ingest_tracker import Base, IngestionTracking, Preprocessing, STAGE_NEW_ORDER
 from pathlib import Path
 import datetime
 import shutil

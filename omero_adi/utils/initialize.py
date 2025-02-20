@@ -10,7 +10,7 @@ from .ingest_tracker import initialize_ingest_tracker
 from sqlalchemy.sql import func
 from datetime import datetime, timedelta
 from sqlalchemy import func
-from utils.ingest_tracker import (
+from .ingest_tracker import (
     STAGE_NEW_ORDER,
     STAGE_INGEST_FAILED,
     STAGE_IMPORTED

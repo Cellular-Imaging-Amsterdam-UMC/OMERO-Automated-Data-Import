@@ -18,7 +18,7 @@ from omero.plugins.sessions import SessionsControl
 from omero.model import DatasetI
 from omero.sys import Parameters
 
-from utils.ingest_tracker import log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
+from .ingest_tracker import log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
 
 # Import the ImportControl from the OMERO plugins (if needed)
 ImportControl = import_module("omero.plugins.import").ImportControl

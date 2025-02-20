@@ -117,4 +117,4 @@ RUN chmod +x /auto-importer/omero_adi/main.py
 USER autoimportuser
 
 # Set the default command or entrypoint to the main script
-ENTRYPOINT ["/opt/conda/bin/conda", "run", "-n", "auto-import-env", "python", "omero_adi/main.py"]
+ENTRYPOINT ["/opt/conda/bin/conda", "run", "-n", "auto-import-env", "python", "-m", "omero_adi.main"]

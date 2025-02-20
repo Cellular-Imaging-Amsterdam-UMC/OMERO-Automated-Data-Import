@@ -6,8 +6,8 @@ from pathlib import Path
 import yaml
 import pytest
 
-from utils.upload_order_manager import UploadOrderManager
-from utils.initialize import load_settings
+from omero_adi.utils.upload_order_manager import UploadOrderManager
+from omero_adi.utils.initialize import load_settings
 
 class TestUploadOrderManager(unittest.TestCase):
 

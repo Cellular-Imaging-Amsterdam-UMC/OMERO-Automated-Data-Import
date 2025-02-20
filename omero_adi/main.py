@@ -13,16 +13,17 @@ from threading import Event, Thread
 from collections import UserDict
 
 # Local module imports
-from utils.initialize import finalize_dangling_orders_and_get_last_id, initialize_system, test_omero_connection
-from utils.upload_order_manager import UploadOrderManager
-from utils.importer import DataPackageImporter
-from utils.ingest_tracker import (
+from .utils.initialize import finalize_dangling_orders_and_get_last_id, initialize_system, test_omero_connection
+from .utils.upload_order_manager import UploadOrderManager
+from .utils.importer import DataPackageImporter
+from .utils.ingest_tracker import (
     log_ingestion_step, 
     STAGE_NEW_ORDER, 
     STAGE_INGEST_STARTED, 
     STAGE_INGEST_FAILED,
     STAGE_IMPORTED
 )
+from .utils.ingest_tracker import _ingest_tracker, IngestionTracking, Base
 
 # --------------------------------------------------
 # Utility function to load settings
@@ -176,7 +177,6 @@ class DatabasePoller:
         # Maintain a set of processed order UUIDs to avoid reprocessing.
         self.processed_uuids = set()
 
-        from utils.ingest_tracker import _ingest_tracker, IngestionTracking, Base
         self.ingest_tracker = _ingest_tracker  # global instance
         self.IngestionTracking = IngestionTracking
         
