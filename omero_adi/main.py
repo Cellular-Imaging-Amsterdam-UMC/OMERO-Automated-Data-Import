@@ -219,9 +219,20 @@ class DatabasePoller:
                             'Username': order.user_name,
                             'UUID': order.uuid,
                             'DestinationID': order.destination_id,
+                            'DestinationType': order.destination_type,
                             'Files': order.files,
                             'FileNames': order.file_names
                         }
+                        
+                        # Add preprocessing details if they exist
+                        if order.preprocessing:
+                            order_dict.update({
+                                "preprocessing_container": order.preprocessing.container,
+                                "preprocessing_inputfile": order.preprocessing.input_file,
+                                "preprocessing_outputfolder": order.preprocessing.output_folder,
+                                "preprocessing_altoutputfolder": order.preprocessing.alt_output_folder,
+                                "preprocessing_saveoption": order.preprocessing.save_option
+                            })
                         self.process_order(order_dict)
                         self.processed_uuids.add(order.uuid)
                 except Exception as e:
@@ -241,11 +252,18 @@ class DatabasePoller:
         # Mark that ingest has started.
         log_ingestion_step(order_dict, STAGE_INGEST_STARTED)
         
-        data_package = DataPackage(order_dict, order_identifier=uuid_val)
-        order_manager = UploadOrderManager.from_order_record(order_dict, self.config)
-        ingestion_process = IngestionProcess(data_package, self.config, order_manager)
-        future = self.executor.submit(ingestion_process.import_data_package)
-        future.add_done_callback(self.create_order_callback(uuid_val))
+        try:
+            order_manager = UploadOrderManager.from_order_record(order_dict, self.config)
+            order_dict = order_manager.get_order_info() # after validation / reforming
+            data_package = DataPackage(order_dict, order_identifier=uuid_val)
+            self.logger.debug(f"{data_package} || {order_manager}")
+            ingestion_process = IngestionProcess(data_package, self.config, order_manager)
+            future = self.executor.submit(ingestion_process.import_data_package)
+            future.add_done_callback(self.create_order_callback(uuid_val))
+        except Exception as e:
+            self.logger.error(f"Error processing order {order_dict}: {e}", exc_info=True) 
+            log_ingestion_step(order_dict, STAGE_INGEST_FAILED)
+            raise e
 
     def create_order_callback(self, uuid_val: str):
         """

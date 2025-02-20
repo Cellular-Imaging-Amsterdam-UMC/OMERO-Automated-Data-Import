@@ -16,6 +16,7 @@ from omero.rtypes import rstring, rlong
 from omero.cli import CLI
 from omero.plugins.sessions import SessionsControl
 from omero.model import DatasetI
+from omero.sys import Parameters
 
 from utils.ingest_tracker import log_ingestion_step, STAGE_IMPORTED, STAGE_PREPROCESSING
 
@@ -126,32 +127,32 @@ class DataProcessor:
         kwargs = []
         mount_paths = []
         mount_path = None
-        # TODO: these preprocessing options need to be in the DB (columns) now somehow
-        # I would suggest: 
-        # It's own imports_preprocessing table, with predefined options (rows) for the container(s).
-        # And then you refer/link to that table row id in the import in some new column if you want that preprocessing
-        # We might still need the extra params like output folder for the specific import
         for key, value in self.data_package.items():
             if key.startswith("preprocessing_") and key not in ("preprocessing_container", "preprocessing_outputfolder", "preprocessing_altoutputfolder"):
+                self.logger.debug(f"Found {key}:{value}")
                 if isinstance(value, str) and "{Files}" in value:
+                    self.logger.debug(f"Found Files in {key}:{value}")
                     if file_path:
                         data_file_path = os.path.join(output_folder, os.path.basename(file_path))
+                        self.logger.debug(f"Replacing {file_path} ({data_file_path}) for Files in {key}:{value}")
                         value = value.replace("{Files}", data_file_path)
                         mount_path = os.path.dirname(file_path)
+                        self.logger.debug(f"Set mount_path to {mount_path}")
                 arg_key = key.replace("preprocessing_", "")
                 kwargs.append(f"--{arg_key}")
                 kwargs.append(value)
+        self.logger.debug(f"Found extra preproc kwargs: {kwargs}")
                 
         kwargs += ["--outputfolder", output_folder]
         mount_paths.append((mount_path, output_folder))
-        self.logger.info(f"Output folder mount: {mount_path} --> {output_folder}")
+        self.logger.debug(f"Output folder mount: {mount_path} --> {output_folder}")
         
         alt_output_folder = self.data_package.get("preprocessing_altoutputfolder")
         if alt_output_folder:
             kwargs += ["--altoutputfolder", alt_output_folder]
             relative_output_path = get_tmp_output_path(self.data_package)
             mount_paths.append((relative_output_path, alt_output_folder))
-            self.logger.info(f"Alt output folder mount: {relative_output_path} --> {alt_output_folder}")
+            self.logger.debug(f"Alt output folder mount: {relative_output_path} --> {alt_output_folder}")
         else:
             self.logger.error("Missing altoutputfolder. Not handled yet.")
             return None, None, None            
@@ -285,7 +286,13 @@ class DataPackageImporter:
             return None
         self.logger.debug("Retrieving Plate IDs")
         q = conn.getQueryService()
-        params = {"cpath": rstring(f"{str(file_path).strip('/') }%"), "screen_id": rlong(screen_id)}
+        params = Parameters()
+        path_query = f"{str(file_path).strip('/')}%"
+        self.logger.debug(f"path query: {path_query}. Screen_id: {screen_id}")
+        params.map = {
+            "cpath": rstring(path_query),
+            "screen_id": rlong(screen_id),
+        }
         results = q.projection(
             "SELECT DISTINCT p.id, p.details.creationEvent.time, fs.templatePrefix FROM Plate p "
             "JOIN p.wells w "
@@ -299,8 +306,10 @@ class DataPackageImporter:
             params,
             conn.SERVICE_OPTS
         )
+        self.logger.debug(f"Query results: {results}")
         plate_ids = [r[0].val for r in results]
-        template_prefixes = [r[2].val for r in results]
+        template_prefixes = [r[2].val for r in results]  # Extract Template Prefixes
+        
         return plate_ids, template_prefixes
 
     @connection
@@ -330,18 +339,12 @@ class DataPackageImporter:
         successful_uploads = []
         failed_uploads = []
         self.logger.debug(f"Uploading files: {file_paths}")
+        upload_target = dataset_id or screen_id
 
         for i, file_path in enumerate(file_paths):
             self.logger.debug(f"Uploading file: {file_path}")
             try:
                 if screen_id:
-                    try:
-                        screen_id = int(screen_id)
-                    except (ValueError, TypeError):
-                        error_message = f"Invalid 'DestinationID': must be a valid integer. Found: {screen_id}"
-                        self.logger.error(error_message)
-                        raise ValueError(error_message)
-                    
                     if not local_paths:
                         imported = self.import_to_omero(
                             file_path=str(file_path),
@@ -353,6 +356,7 @@ class DataPackageImporter:
                         image_ids, _ = self.get_plate_ids(str(file_path), screen_id)
                     else:
                         fp = str(local_paths[i])
+                        self.logger.debug(f"Importing {fp}")
                         imported = self.import_to_omero(
                             file_path=fp,
                             target_id=screen_id,
@@ -360,31 +364,44 @@ class DataPackageImporter:
                             uuid=uuid,
                             depth=10
                         )
-                        image_ids, _ = self.get_plate_ids(str(local_paths[i]), screen_id)
-                        # Update symlinks and cleanup (if applicable)
+                        self.logger.debug("Upload done. Retrieving plate id.")
+                        image_ids, local_file_dir = self.get_plate_ids(str(local_paths[i]), screen_id)
+                        
+                        # rsync file to remote and point symlink there
+                        # Ensure remote_path is the directory itself if file_path is a directory
                         remote_path = file_path if os.path.isdir(file_path) else os.path.dirname(file_path)
-                        self.logger.info(f"Updating symlinks in {remote_path}")
-                        for root, _, files in os.walk(remote_path):
+                        local_file_dir = local_file_dir[0].rstrip("/") + "/"
+                        local_file_dir = "/OMERO/ManagedRepository/" + local_file_dir
+                        # self.logger.debug(f"Move {local_file_dir} to {remote_path}")
+                        # 1. Rsync the actual files to the remote location
+                        # rsync_command = [
+                        #     "rsync", "-av", "--copy-links",  # Copy actual files instead of symlinks
+                        #     local_file_dir,  # Already guaranteed to have a trailing slash
+                        #     remote_path
+                        # ]
+                        # self.logger.info(f"Rsync command: {rsync_command}")
+                        # subprocess.run(rsync_command, check=True)
+                        # 2. Update the symlinks to point to the remote location
+                        self.logger.info(f"Now update symlinks in {local_file_dir} to {remote_path}")
+                        for root, _, files in os.walk(local_file_dir):
                             for file in files:
                                 symlink_path = os.path.join(root, file)
-                                if os.path.islink(symlink_path):
-                                    os.unlink(symlink_path)
+                                if os.path.islink(symlink_path):  # Only process symlinks
+                                    # Update symlink to point to remote location
+                                    os.unlink(symlink_path)  # Remove the old symlink
                                     new_target = os.path.join(remote_path, file)
-                                    os.symlink(new_target, symlink_path)
-                                    self.logger.debug(f"Updated symlink {symlink_path} -> {new_target}")
-                        relative_output_path = get_tmp_output_path(self.data_package)
+                                    os.symlink(new_target, symlink_path)  # Create the new symlink
+                                    self.logger.debug(f"new symlinks {symlink_path} -> {new_target}")
+                                    
+                        # delete local copy in tmp out folder
+                        relative_output_path = os.path.join("/OMERO", TMP_OUTPUT_FOLDER, self.data_package.get('UUID'))
                         if os.path.exists(relative_output_path):
-                            self.logger.debug(f"Removing temporary folder: {relative_output_path}")
+                            self.logger.debug(f"Removing temporary local {relative_output_path} folder")
                             shutil.rmtree(relative_output_path)
+                        else:
+                            self.logger.debug(f"The folder {relative_output_path} does not exist.")                        
                     upload_target = screen_id
                 else:
-                    try:
-                        dataset_id = int(dataset_id)
-                    except (ValueError, TypeError):
-                        error_message = f"Invalid 'DestinationID': must be a valid integer. Found: {dataset_id}"
-                        self.logger.error(error_message)
-                        raise ValueError(error_message)
-                    
                     if os.path.isfile(file_path):
                         image_ids = self.import_dataset(
                             target=str(file_path),
@@ -467,41 +484,6 @@ class DataPackageImporter:
         self.logger.info(f"Created new dataset with ID: {dataset_id}")
         return dataset_id
 
-    @retry_on_connection_issue
-    @connection
-    def determine_target_type(self, conn, target_id):
-        """
-        Determine if the target_id belongs to a Dataset or Screen in OMERO.
-        Checks Dataset first as it's more common.
-
-        Args:
-            conn: OMERO connection (provided by decorator)
-            target_id: The ID to check
-
-        Returns:
-            bool: True if Screen, False if Dataset
-            Raises ValueError if neither or if ID doesn't exist.
-        """
-        conn.keepAlive()  # Keep connection alive
-        # TODO I assume keep alive is in the @connection already
-        # TODO This doesn't actually work, because in OMERO dataset and screen have their own ID
-        # So dataset 1 exists and screen 1. 
-        # So we need the order to say explicitly whether its screen or dataset I guess.
-
-        # Try Dataset first (more common)
-        dataset = conn.getObject("Dataset", target_id)
-        if dataset is not None:
-            self.logger.debug(f"ID {target_id} identified as Dataset")
-            return False
-
-        # If not Dataset, try Screen
-        screen = conn.getObject("Screen", target_id)
-        if screen is not None:
-            self.logger.debug(f"ID {target_id} identified as Screen")
-            return True
-
-        # If we get here, the ID doesn't exist as either type
-        raise ValueError(f"ID {target_id} not found as either Dataset or Screen in OMERO")
 
     def import_data_package(self):
         """Import the data package and log the outcome."""
@@ -511,6 +493,14 @@ class DataPackageImporter:
             if not target_id:
                 self.logger.error("No DestinationID provided")
                 return [], [], True
+            
+            target_type = self.data_package.get('DestinationType')
+            if not target_type:
+                self.logger.error("No DestinationType provided")
+                return [], [], True
+            # Determine if the target ID is a Dataset or a Screen
+            is_screen = target_type == "Screen"
+            self.logger.info(f"Target ID {target_id} ({type(target_id)}) identified as {target_type}.")
 
             intended_username = self.data_package.get('Username')
             group_name = self.data_package.get('Group')
@@ -536,11 +526,6 @@ class DataPackageImporter:
                             user_conn.keepAlive()    
                             user_conn.setGroupForSession(group_id)
                             self.logger.info(f"Connected as user {intended_username} in group {group_name}")
-                        
-                            # Determine if the target ID is a Dataset or a Screen
-                            is_screen = self.determine_target_type(target_id)
-                            target_type = "Screen" if is_screen else "Dataset"
-                            self.logger.info(f"Target ID {target_id} ({type(target_id)}) identified as {target_type}.")
 
                             all_successful_uploads = []
                             all_failed_uploads = []

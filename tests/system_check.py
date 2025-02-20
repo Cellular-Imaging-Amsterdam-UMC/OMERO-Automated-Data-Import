@@ -4,7 +4,7 @@ import json
 import uuid
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from utils.ingest_tracker import Base, IngestionTracking, STAGE_NEW_ORDER
+from utils.ingest_tracker import Base, IngestionTracking, Preprocessing, STAGE_NEW_ORDER
 from pathlib import Path
 import datetime
 import shutil
@@ -49,10 +49,13 @@ def main():
     session = Session()
     try:
         files = ["/auto-importer/tests/Barbie1.tif"]
-        filenames = ["Barbie1.tif"]
         
         # Sample image and base directory
         sample_image = Path(config.get('sample_image', '/auto-importer/tests/Barbie1.tif'))
+        sample_group = config.get('sample_group', 'Reits')
+        sample_user = config.get('sample_user', 'rrosas')
+        sample_parent_id = config.get('sample_parent_id', '2401')
+        sample_parent_type = config.get('sample_parent_type', 'Dataset')
         base_dir = Path(config['base_dir'])
         
         # Copy the sample image
@@ -61,29 +64,59 @@ def main():
             
         # Build a sample upload order record
         order_info = {
-            "Group": "Reits",
-            "Username": "rrosas",
-            "DestinationID": "2401",  # Updated from "DataPackage" to "DestinationID"
+            "Group": sample_group,
+            "Username": sample_user,
+            "DestinationID": sample_parent_id,  # Updated from "DataPackage" to "DestinationID"
+            "DestinationType": sample_parent_type, # Screen
             "UUID": str(uuid.uuid4()),
-            "Files": files,
-            "FileNames": filenames
+            "Files": files
         }
+        
+        preprocessing = config.get('preprocessing')
+        if preprocessing: #exists
+            
+            sample_pre_container = config.get('sample_pre_container', "cellularimagingcf/cimagexpresstoometiff:v0.7")
+            sample_pre_input = config.get('sample_pre_input', "{Files}")
+            sample_pre_out = config.get('sample_pre_out', "/data")
+            sample_pre_outalt = config.get('sample_pre_outalt', "/out")
+            sample_pre_save = config.get('sample_pre_save', "single")
+            
+            order_info["preprocessing_container"] = sample_pre_container
+            order_info["preprocessing_inputfile"] = sample_pre_input
+            order_info["preprocessing_outputfolder"] = sample_pre_out # local to the container / a mount point
+            order_info["preprocessing_altoutputfolder"] = sample_pre_outalt # local to the container / a mount point
+            order_info["preprocessing_saveoption"] = sample_pre_save
         
         # Create a new IngestionTracking instance
         new_order = IngestionTracking(
             group_name=order_info["Group"],
             user_name=order_info["Username"],
             destination_id=order_info["DestinationID"],
+            destination_type=order_info["DestinationType"],
             stage=STAGE_NEW_ORDER,
             uuid=order_info["UUID"],
-            files=order_info["Files"],
-            file_names=order_info["FileNames"]
+            files=order_info["Files"]
         )
         
         session.add(new_order)
+        
+        # Add preprocessing data if needed
+        preprocessing = config.get('preprocessing')
+        if preprocessing:
+            new_order.preprocessing = Preprocessing(
+                container=order_info["preprocessing_container"],
+                input_file=order_info["preprocessing_inputfile"],
+                output_folder=order_info["preprocessing_outputfolder"],
+                alt_output_folder= order_info["preprocessing_altoutputfolder"],
+                save_option=order_info["preprocessing_saveoption"]
+            )
+
+        # Commit everything in ONE transaction
         session.commit()
         
-        print("New upload order created with ID:", new_order.id)
+        print(f"New upload order created with ID: {new_order.id} -> {new_order.__dict__}")
+        if preprocessing:
+            print(f"Preprocessing entry created for order ID: {new_order.id} -> {new_order.preprocessing.__dict__}")
     except Exception as e:
         print("Error creating upload order:", e)
         session.rollback()

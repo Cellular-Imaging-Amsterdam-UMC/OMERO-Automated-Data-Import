@@ -2,8 +2,8 @@
 # ingest_tracker.py
 
 import logging
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Index
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Index, ForeignKey
+from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func, text
 from datetime import datetime
@@ -20,6 +20,18 @@ STAGE_INGEST_FAILED = "Import Failed"
 
 Base = declarative_base()
 
+class Preprocessing(Base):
+    """Database model for storing preprocessing parameters."""
+    __tablename__ = 'imports_preprocessing'
+
+    id = Column(Integer, primary_key=True)
+    container = Column(String, nullable=False)
+    input_file = Column(String, nullable=False)
+    output_folder = Column(String, nullable=False)
+    alt_output_folder = Column(String, nullable=True)
+    save_option = Column(String, nullable=False)
+
+
 class IngestionTracking(Base):
     """Database model for tracking ingestion steps."""
     __tablename__ = 'imports'
@@ -28,11 +40,15 @@ class IngestionTracking(Base):
     group_name = Column(String, nullable=False)
     user_name = Column(String, nullable=False, index=True)
     destination_id = Column(String, nullable=False)
+    destination_type = Column(String, nullable=False)
     stage = Column(String, nullable=False)
     uuid = Column(String(36), nullable=False, index=True)
     timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)
     _file_names = Column("file_names", Text, nullable=True)
+    
+    preprocessing_id = Column(Integer, ForeignKey('imports_preprocessing.id'), nullable=True)
+    preprocessing = relationship("Preprocessing", backref="imports")
 
     @property
     def files(self):
@@ -114,6 +130,7 @@ class IngestTracker:
                         group_name=order_info.get('Group'),
                         user_name=order_info.get('Username', 'Unknown'),
                         destination_id=str(order_info.get('DestinationID', '')),
+                        destination_type=str(order_info.get('DestinationType', '')),
                         stage=stage,
                         uuid=str(order_info.get('UUID', 'Unknown')),
                         files=order_info.get('Files', []),
@@ -128,7 +145,8 @@ class IngestTracker:
                     f"UUID: {new_entry.uuid} | "
                     f"Group: {new_entry.group_name} | "
                     f"User: {new_entry.user_name} | "
-                    f"DestinationID: {new_entry.destination_id}"
+                    f"DestinationID: {new_entry.destination_id} | "
+                    f"DestinationType: {new_entry.destination_type}"
                 )
                 self.logger.debug(f"Created database entry: {new_entry.id}")
                 return new_entry.id
