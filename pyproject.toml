@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "omeroadi"
+name = "omero_adi"
 dynamic = ["version"]
 description = "OMERO Automated Data Import (ADI) System"
 authors = [{ name = "Rodrigo Rosas-Bertolini", email = "cellularimaging@amsterdamumc.nl" }]
