@@ -85,7 +85,9 @@ def main():
             order_info["preprocessing_inputfile"] = sample_pre_input
             order_info["preprocessing_outputfolder"] = sample_pre_out # local to the container / a mount point
             order_info["preprocessing_altoutputfolder"] = sample_pre_outalt # local to the container / a mount point
-            order_info["preprocessing_saveoption"] = sample_pre_save
+            order_info["extra_params"] = {
+                "saveoption": sample_pre_save
+            }
         
         # Create a new IngestionTracking instance
         new_order = IngestionTracking(
@@ -108,7 +110,7 @@ def main():
                 input_file=order_info["preprocessing_inputfile"],
                 output_folder=order_info["preprocessing_outputfolder"],
                 alt_output_folder= order_info["preprocessing_altoutputfolder"],
-                save_option=order_info["preprocessing_saveoption"]
+                extra_params=order_info.get("extra_params")  # Store the extra parameters
             )
 
         # Commit everything in ONE transaction

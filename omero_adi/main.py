@@ -230,9 +230,12 @@ class DatabasePoller:
                                 "preprocessing_container": order.preprocessing.container,
                                 "preprocessing_inputfile": order.preprocessing.input_file,
                                 "preprocessing_outputfolder": order.preprocessing.output_folder,
-                                "preprocessing_altoutputfolder": order.preprocessing.alt_output_folder,
-                                "preprocessing_saveoption": order.preprocessing.save_option
+                                "preprocessing_altoutputfolder": order.preprocessing.alt_output_folder
                             })
+                            # Add all extra parameters
+                            if order.preprocessing.extra_params:
+                                for key, value in order.preprocessing.extra_params.items():
+                                    order_dict[f"preprocessing_{key}"] = value
                         self.process_order(order_dict)
                         self.processed_uuids.add(order.uuid)
                 except Exception as e:

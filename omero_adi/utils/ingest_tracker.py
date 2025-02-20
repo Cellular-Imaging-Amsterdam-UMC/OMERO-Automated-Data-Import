@@ -2,7 +2,7 @@
 # ingest_tracker.py
 
 import logging
-from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Index, ForeignKey
+from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, Index, ForeignKey, JSON
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func, text
@@ -29,7 +29,7 @@ class Preprocessing(Base):
     input_file = Column(String, nullable=False)
     output_folder = Column(String, nullable=False)
     alt_output_folder = Column(String, nullable=True)
-    save_option = Column(String, nullable=False)
+    extra_params = Column(JSON, nullable=True) # Storing dynamic kwargs here
 
 
 class IngestionTracking(Base):
