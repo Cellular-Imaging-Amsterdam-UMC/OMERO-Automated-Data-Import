@@ -123,7 +123,7 @@ class IngestTracker:
             self.logger.error(f"Missing required fields in order_info: {required_fields}")
             return None
     
-        self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}")
+        self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}, Order: {order_info}")
         try:
             with self.Session() as session:
                 new_entry = IngestionTracking(
@@ -138,6 +138,40 @@ class IngestTracker:
                     )
 
                 session.add(new_entry)
+                
+                # Check for _preprocessing_id in order_info
+                preprocessing_id = order_info.get('_preprocessing_id')
+                if preprocessing_id:
+                    # Directly set the preprocessing_id without querying for the object
+                    new_entry.preprocessing_id = preprocessing_id
+                elif "preprocessing_container" in order_info:
+                    # Known hardcoded preprocessing fields
+                    hardcoded_fields = {
+                        "container": order_info.get("preprocessing_container"),
+                        "input_file": order_info.get("preprocessing_inputfile"),
+                        "output_folder": order_info.get("preprocessing_outputfolder"),
+                        "alt_output_folder": order_info.get("preprocessing_altoutputfolder")
+                    }
+
+                    # Extract any extra params that aren't part of the hardcoded fields
+                    extra_params = {
+                        key.replace("preprocessing_", ""): value
+                        for key, value in order_info.items()
+                        if key.startswith("preprocessing_") and key not in {
+                            "preprocessing_container",
+                            "preprocessing_inputfile",
+                            "preprocessing_outputfolder",
+                            "preprocessing_altoutputfolder"
+                        }
+                    }
+
+                    new_preprocessing = Preprocessing(
+                        **hardcoded_fields,
+                        extra_params=extra_params
+                    )
+                    session.add(new_preprocessing)
+                    new_entry.preprocessing = new_preprocessing  # Link the new preprocessing row to the ingestion entry
+                    
                 session.commit()
 
                 self.logger.info(
@@ -146,7 +180,8 @@ class IngestTracker:
                     f"Group: {new_entry.group_name} | "
                     f"User: {new_entry.user_name} | "
                     f"DestinationID: {new_entry.destination_id} | "
-                    f"DestinationType: {new_entry.destination_type}"
+                    f"DestinationType: {new_entry.destination_type} | "
+                    f"Preprocessing: {new_entry.preprocessing}"
                 )
                 self.logger.debug(f"Created database entry: {new_entry.id}")
                 return new_entry.id

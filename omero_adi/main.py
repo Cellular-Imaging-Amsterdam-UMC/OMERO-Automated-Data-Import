@@ -230,7 +230,8 @@ class DatabasePoller:
                                 "preprocessing_container": order.preprocessing.container,
                                 "preprocessing_inputfile": order.preprocessing.input_file,
                                 "preprocessing_outputfolder": order.preprocessing.output_folder,
-                                "preprocessing_altoutputfolder": order.preprocessing.alt_output_folder
+                                "preprocessing_altoutputfolder": order.preprocessing.alt_output_folder,
+                                "_preprocessing_id": order.preprocessing.id
                             })
                             # Add all extra parameters
                             if order.preprocessing.extra_params:
