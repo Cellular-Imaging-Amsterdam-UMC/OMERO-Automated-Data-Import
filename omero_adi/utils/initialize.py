@@ -1,7 +1,5 @@
 # initialize.py
 
-import os
-import sys
 import yaml
 import json
 import logging

@@ -6,3 +6,4 @@ test_logfile.log
 omeroadi.egg-info/
 **/__pycache__
 .coverage
+logs/*

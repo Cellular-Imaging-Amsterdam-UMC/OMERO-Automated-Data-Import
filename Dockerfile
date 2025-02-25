@@ -105,7 +105,7 @@ ADD / /auto-importer
 RUN pip install /auto-importer
 
 # Make the logs directory
-RUN mkdir /auto-importer/logs
+RUN mkdir -p /auto-importer/logs
 
 # Ensure proper permissions for all relevant directories in the user's auto-importer directory
 RUN chown -R autoimportuser:autoimportgroup /auto-importer/logs

@@ -6,8 +6,9 @@ from sqlalchemy import create_engine, Column, String, Integer, DateTime, Text, I
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func, text
-from datetime import datetime
 import json
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------
 # Stage constants
@@ -20,6 +21,7 @@ STAGE_INGEST_FAILED = "Import Failed"
 
 Base = declarative_base()
 
+
 class Preprocessing(Base):
     """Database model for storing preprocessing parameters."""
     __tablename__ = 'imports_preprocessing'
@@ -29,7 +31,7 @@ class Preprocessing(Base):
     input_file = Column(String, nullable=False)
     output_folder = Column(String, nullable=False)
     alt_output_folder = Column(String, nullable=True)
-    extra_params = Column(JSON, nullable=True) # Storing dynamic kwargs here
+    extra_params = Column(JSON, nullable=True)  # Storing dynamic kwargs here
 
 
 class IngestionTracking(Base):
@@ -46,8 +48,9 @@ class IngestionTracking(Base):
     timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)
     _file_names = Column("file_names", Text, nullable=True)
-    
-    preprocessing_id = Column(Integer, ForeignKey('imports_preprocessing.id'), nullable=True)
+
+    preprocessing_id = Column(Integer, ForeignKey(
+        'imports_preprocessing.id'), nullable=True)
     preprocessing = relationship("Preprocessing", backref="imports")
 
     @property
@@ -66,14 +69,17 @@ class IngestionTracking(Base):
     def file_names(self, file_names):
         self._file_names = json.dumps(file_names)
 
+
 # Define the index outside of the class
-Index(f"{IngestionTracking.__tablename__}_ix_uuid_timestamp", IngestionTracking.uuid, IngestionTracking.timestamp)
+Index(f"{IngestionTracking.__tablename__}_ix_uuid_timestamp",
+      IngestionTracking.uuid, IngestionTracking.timestamp)
+
 
 class IngestTracker:
     def __init__(self, config):
         if not config or 'ingest_tracking_db' not in config:
             raise ValueError("Configuration must include 'ingest_tracking_db'")
-            
+
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing IngestTracker")
         try:
@@ -95,13 +101,14 @@ class IngestTracker:
             # Verify connection
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))
-            
+
             # Create tables if they do not exist
             self.logger.debug("Creating tables if they do not exist...")
             Base.metadata.create_all(self.engine)
             self.logger.info("Database initialization successful")
         except Exception as e:
-            self.logger.error(f"Unexpected error during IngestTracker initialization: {e}", exc_info=True)
+            self.logger.error(
+                f"Unexpected error during IngestTracker initialization: {e}", exc_info=True)
             raise
 
     def dispose(self):
@@ -120,25 +127,28 @@ class IngestTracker:
         """
         required_fields = ['Group', 'Username', 'UUID', 'DestinationID']
         if not all(field in order_info for field in required_fields):
-            self.logger.error(f"Missing required fields in order_info: {required_fields}")
+            self.logger.error(
+                f"Missing required fields in order_info: {required_fields}")
             return None
-    
-        self.logger.debug(f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}, Order: {order_info}")
+
+        self.logger.debug(
+            f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}, Order: {order_info}")
         try:
             with self.Session() as session:
                 new_entry = IngestionTracking(
-                        group_name=order_info.get('Group'),
-                        user_name=order_info.get('Username', 'Unknown'),
-                        destination_id=str(order_info.get('DestinationID', '')),
-                        destination_type=str(order_info.get('DestinationType', '')),
-                        stage=stage,
-                        uuid=str(order_info.get('UUID', 'Unknown')),
-                        files=order_info.get('Files', []),
-                        file_names=order_info.get('FileNames', [])
-                    )
+                    group_name=order_info.get('Group'),
+                    user_name=order_info.get('Username', 'Unknown'),
+                    destination_id=str(order_info.get('DestinationID', '')),
+                    destination_type=str(
+                        order_info.get('DestinationType', '')),
+                    stage=stage,
+                    uuid=str(order_info.get('UUID', 'Unknown')),
+                    files=order_info.get('Files', []),
+                    file_names=order_info.get('FileNames', [])
+                )
 
                 session.add(new_entry)
-                
+
                 # Check for _preprocessing_id in order_info
                 preprocessing_id = order_info.get('_preprocessing_id')
                 if preprocessing_id:
@@ -170,8 +180,9 @@ class IngestTracker:
                         extra_params=extra_params
                     )
                     session.add(new_preprocessing)
-                    new_entry.preprocessing = new_preprocessing  # Link the new preprocessing row to the ingestion entry
-                    
+                    # Link the new preprocessing row to the ingestion entry
+                    new_entry.preprocessing = new_preprocessing
+
                 session.commit()
 
                 self.logger.info(
@@ -186,20 +197,25 @@ class IngestTracker:
                 self.logger.debug(f"Created database entry: {new_entry.id}")
                 return new_entry.id
         except SQLAlchemyError as e:
-            self.logger.error(f"Database error logging ingestion step: {e}", exc_info=True)
+            self.logger.error(
+                f"Database error logging ingestion step: {e}", exc_info=True)
             return None
         except Exception as e:
-            self.logger.error(f"Unexpected error logging ingestion step: {e}", exc_info=True)
+            self.logger.error(
+                f"Unexpected error logging ingestion step: {e}", exc_info=True)
             return None
+
 
 # --------------------------------------------------
 # Global instance management
 # --------------------------------------------------
 _ingest_tracker = None
 
+
 def get_ingest_tracker():
     """Return the current global IngestTracker instance."""
     return _ingest_tracker
+
 
 def initialize_ingest_tracker(config):
     """Initialize the global IngestTracker instance."""
@@ -210,10 +226,10 @@ def initialize_ingest_tracker(config):
             raise Exception("IngestTracker failed to initialize properly")
         return True
     except Exception as e:
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to initialize IngestTracker: {e}", exc_info=True)
         _ingest_tracker = None
         return False
+
 
 def log_ingestion_step(order_info, stage):
     """Thread-safe function to log ingestion steps."""
@@ -221,6 +237,6 @@ def log_ingestion_step(order_info, stage):
     if tracker is not None:
         return tracker.db_log_ingestion_event(order_info, stage)
     else:
-        logger = logging.getLogger(__name__)
-        logger.error("IngestTracker not initialized. Call initialize_ingest_tracker first.")
+        logger.error(
+            "IngestTracker not initialized. Call initialize_ingest_tracker first.")
         return None
