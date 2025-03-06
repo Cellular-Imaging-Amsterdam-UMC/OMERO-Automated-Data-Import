@@ -23,6 +23,7 @@ ImportControl = import_module("omero.plugins.import").ImportControl
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries (in seconds)
 TMP_OUTPUT_FOLDER = "OMERO_inplace"
+PROCESSED_DATA_FOLDER = ".processed"
 
 
 def get_tmp_output_path(data_package):
@@ -139,7 +140,7 @@ class DataProcessor:
         for key, value in self.data_package.items():
             if key.startswith("preprocessing_") and key not in ("preprocessing_container", "preprocessing_outputfolder", "preprocessing_altoutputfolder"):
                 self.logger.debug(f"Found {key}:{value}")
-                if isinstance(value, str) and "{Files}" in value:
+                if isinstance(value, str) and "{Files}" in value: # handle inputfile = {Files}
                     self.logger.debug(f"Found Files in {key}:{value}")
                     if file_path:
                         data_file_path = os.path.join(
@@ -154,11 +155,18 @@ class DataProcessor:
                 kwargs.append(value)
         self.logger.debug(f"Found extra preproc kwargs: {kwargs}")
 
-        kwargs += ["--outputfolder", output_folder]
+
         mount_paths.append((mount_path, output_folder))
         self.logger.debug(
             f"Output folder mount: {mount_path} --> {output_folder}")
-
+        
+        # Setup a processed subfolder for the processed outputs
+        proc_output_folder = os.path.join(output_folder, PROCESSED_DATA_FOLDER)
+        real_proc_output_folder = os.path.join(mount_path, PROCESSED_DATA_FOLDER)
+        os.makedirs(real_proc_output_folder, exist_ok=True)
+        self.logger.debug(f"Created processed subfolder at {real_proc_output_folder} and giving container --outputfolder {proc_output_folder}")
+        kwargs += ["--outputfolder", proc_output_folder]
+        
         alt_output_folder = self.data_package.get(
             "preprocessing_altoutputfolder")
         if alt_output_folder:
@@ -331,7 +339,7 @@ class DataPackageImporter:
         plate_ids = [r[0].val for r in results]
         # Extract Template Prefixes
         template_prefixes = [r[2].val for r in results]
-
+        self.logger.debug(f"Plate id determined to be {plate_ids} by SQL query")
         return plate_ids, template_prefixes
 
     @connection
@@ -350,7 +358,7 @@ class DataPackageImporter:
         uuid = self.data_package.get('UUID')
         kwargs['file'] = f"logs/cli.{uuid}.logs"
         kwargs['errs'] = f"logs/cli.{uuid}.errs"
-        self.logger.debug(f"{conn} {target} {int(dataset)} {kwargs}")
+        self.logger.debug(f"EZImport: {conn} {target} {int(dataset)} {kwargs}")
         return ezomero.ezimport(conn=conn, target=target, dataset=int(dataset), **kwargs)
 
     def upload_files(self, conn, file_paths, dataset_id=None, screen_id=None, local_paths=None):
@@ -381,6 +389,11 @@ class DataPackageImporter:
                         image_ids, _ = self.get_plate_ids(
                             str(file_path), screen_id)
                     else:
+                        # If local_paths, we have done preprocessing 
+                        # data is now in PROCESSED_DATA_FOLDER subfolder on remote storage
+                        # and in local_paths folder on the omero server storage
+                        # we will import now in-place from the omero server storage 
+                        # and then we'll switch the in-place symlinks to the remote storage (subfolder)
                         fp = str(local_paths[i])
                         self.logger.debug(f"Importing {fp}")
                         imported = self.import_to_omero(
@@ -398,6 +411,9 @@ class DataPackageImporter:
                         # Ensure remote_path is the directory itself if file_path is a directory
                         remote_path = file_path if os.path.isdir(
                             file_path) else os.path.dirname(file_path)
+                        # select the PROCESSED_DATA_FOLDER subfolder with processed data
+                        remote_path = os.path.join(remote_path, PROCESSED_DATA_FOLDER)
+                        
                         local_file_dir = local_file_dir[0].rstrip("/") + "/"
                         local_file_dir = "/OMERO/ManagedRepository/" + local_file_dir
                         # self.logger.debug(f"Move {local_file_dir} to {remote_path}")
@@ -445,6 +461,7 @@ class DataPackageImporter:
                             dataset=dataset_id,
                             transfer="ln_s"
                         )
+                        self.logger.debug(f"EZimport returned ids {image_ids} for {str(file_path)} ({dataset_id})")
                     elif os.path.isdir(file_path):
                         imported = self.import_to_omero(
                             file_path=str(file_path),
@@ -454,14 +471,18 @@ class DataPackageImporter:
                             depth=10
                         )
                         image_ids = dataset_id
+                        self.logger.debug(f"Set ids {image_ids} to the dataset {dataset_id}")
                     else:
                         raise ValueError(
                             f"{file_path} is not recognized as file or directory.")
                     upload_target = dataset_id
 
                 if image_ids:
-                    image_or_plate_id = image_ids[0] if isinstance(
+                    image_or_plate_id = max(image_ids) if isinstance(
                         image_ids, list) else image_ids
+                    # Selecting 1 id, because this is a for-loop over files.
+                    # This means we should only be getting back 1 ID per single upload.
+                    self.logger.debug(f"Postprocessing ids {image_ids}: max ID = {image_or_plate_id}")
                     try:
                         self.add_image_annotations(
                             conn, image_or_plate_id, uuid, file_path, is_screen=bool(screen_id))
@@ -591,6 +612,7 @@ class DataPackageImporter:
                             processor = DataProcessor(
                                 self.data_package, self.logger)
                             if processor.has_preprocessing():
+                                # Setup a local tmp folder on the OMERO server itself
                                 local_tmp_folder = get_tmp_output_path(
                                     self.data_package)
                                 os.makedirs(local_tmp_folder, exist_ok=True)
