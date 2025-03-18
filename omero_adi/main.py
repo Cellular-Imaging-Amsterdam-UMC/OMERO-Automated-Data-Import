@@ -60,6 +60,8 @@ def create_executor(config):
                 logging.StreamHandler(sys.stdout)
             ]
         )
+        # Add specific logger for ezomero
+        logging.getLogger('ezomero').setLevel(logging.DEBUG)
     return ProcessPoolExecutor(
         max_workers=config.get('max_workers', 4),
         initializer=init_worker
@@ -356,6 +358,8 @@ def main():
                 logging.StreamHandler(sys.stdout)
             ]
         )
+        # Add specific logger for ezomero
+        logging.getLogger('ezomero').setLevel(logging.DEBUG)
 
         logger.info("Starting application...")
 
