@@ -93,15 +93,10 @@ RUN chmod 4755 /usr/bin/newgidmap && \
 ENV _CONTAINERS_USERNS_CONFIGURED="" \
     BUILDAH_ISOLATION=chroot
 
+# Copy the application code (when building from the repository context)
+COPY . /auto-importer
 
-# Clone the specific branch of the repository
-# ADD "https://api.github.com/repos/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import/commits?sha=database&per_page=1" /latest_commit
-# RUN git clone -b database https://github.com/Cellular-Imaging-Amsterdam-UMC/OMERO-Automated-Data-Import.git /auto-importer
-
-# Copy the auto-importer application code
-ADD / /auto-importer
-
-# Install the Python dependencies from the repository
+# Install the package with Git metadata for version detection
 RUN pip install /auto-importer
 
 # Make the logs directory
