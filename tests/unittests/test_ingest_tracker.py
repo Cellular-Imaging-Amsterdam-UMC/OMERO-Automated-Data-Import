@@ -1,7 +1,7 @@
 import json
 import os
 import pytest
-from utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step, STAGE_IMPORTED
+from omero_adi.utils.ingest_tracker import initialize_ingest_tracker, log_ingestion_step, STAGE_IMPORTED
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 import tempfile
@@ -27,7 +27,7 @@ def setup_database():
     yield config  # Yield the config for use in tests
 
     # Dispose the global ingest_tracker
-    from utils.ingest_tracker import ingest_tracker
+    from omero_adi.utils.ingest_tracker import ingest_tracker
     if ingest_tracker:
         ingest_tracker.dispose()
         

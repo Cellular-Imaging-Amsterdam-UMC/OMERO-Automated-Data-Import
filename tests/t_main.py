@@ -13,7 +13,7 @@ os.chdir(Path(__file__).resolve().parent.parent)
 # Add the src directory to the PYTHONPATH
 sys.path.append(str(Path(__file__).resolve().parent.parent / 'src'))
 
-# from utils.config_manager import load_settings, load_json
+# from omero_adi.utils.config_manager import load_settings, load_json
 
 def load_settings(file_path):
     """
