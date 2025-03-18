@@ -96,8 +96,12 @@ ENV _CONTAINERS_USERNS_CONFIGURED="" \
 # Copy the application code (when building from the repository context)
 COPY . /auto-importer
 
-# Install the package with Git metadata for version detection
-RUN pip install /auto-importer
+# Install the package - use git version if available, otherwise use fallback version
+RUN if [ -d "/auto-importer/.git" ]; then \
+        pip install /auto-importer; \
+    else \
+        SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0 pip install /auto-importer; \
+    fi
 
 # Make the logs directory
 RUN mkdir -p /auto-importer/logs
