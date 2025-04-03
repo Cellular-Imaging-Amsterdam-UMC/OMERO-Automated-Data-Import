@@ -512,21 +512,23 @@ class DataPackageImporter:
             object_type = "Plate" if is_screen else "Image"
             metadata_file = self.data_package.get(
                 'metadata_file', 'metadata.csv')
-            metadata_path = os.path.join(
+            metadata_unproc_path = os.path.join(
                 os.path.dirname(file_path), metadata_file)
-            if os.path.exists(metadata_path):
-                self.logger.info(f"Reading metadata from {metadata_path}")
-                with open(metadata_path, 'r', newline='') as csvfile:
-                    reader = csv.reader(csvfile)
-                    for row in reader:
-                        if len(row) == 2:
-                            key, value = row
-                            if key:
-                                annotation_dict[key] = value or ''
-                        else:
-                            self.logger.warning(f"Invalid metadata row: {row}")
-            else:
-                self.logger.info(f"No metadata found at {metadata_path}")
+            metadata_processed_path = os.path.join(os.path.dirname(file_path), PROCESSED_DATA_FOLDER, metadata_file)
+            for metadata_path in [metadata_unproc_path, metadata_processed_path]:
+                if os.path.exists(metadata_path):
+                    self.logger.info(f"Reading metadata from {metadata_path}")
+                    with open(metadata_path, 'r', newline='') as csvfile:
+                        reader = csv.reader(csvfile)
+                        for row in reader:
+                            if len(row) == 2:
+                                key, value = row
+                                if key:
+                                    annotation_dict[key] = value or ''
+                            else:
+                                self.logger.warning(f"Invalid metadata row: {row}")
+                else:
+                    self.logger.info(f"No metadata found at {metadata_path}")
             self.logger.debug(f"Annotation dict: {annotation_dict}")
             map_ann_id = ezomero.post_map_annotation(
                 conn=conn,
