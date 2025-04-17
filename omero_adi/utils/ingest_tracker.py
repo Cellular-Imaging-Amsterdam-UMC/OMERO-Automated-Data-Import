@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base, relationship
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func, text
 import json
+from sqlalchemy.dialects.postgresql import UUID  # Add this import at the top
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class MetadataForm(Base):
     """Database model for storing metadata form definitions."""
     __tablename__ = 'metadata_forms'
 
-    id = Column(String(36), primary_key=True)  # Using UUID as string
+    id = Column(UUID(as_uuid=True), primary_key=True)  # Changed from String to UUID
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     schema = Column(JSON, nullable=False)
@@ -97,8 +98,8 @@ class FormSubmission(Base):
     """Database model for storing form submission data."""
     __tablename__ = 'form_submissions'
 
-    id = Column(String(36), primary_key=True)  # Using UUID as string
-    form_id = Column(String(36), ForeignKey('metadata_forms.id', ondelete='CASCADE'))
+    id = Column(UUID(as_uuid=True), primary_key=True)
+    form_id = Column(UUID(as_uuid=True), ForeignKey('metadata_forms.id', ondelete='CASCADE'))
     data = Column(JSON, nullable=False)
     submitted_by = Column(String(255), nullable=False)
     submitted_at = Column(DateTime(timezone=True), server_default=func.now())
