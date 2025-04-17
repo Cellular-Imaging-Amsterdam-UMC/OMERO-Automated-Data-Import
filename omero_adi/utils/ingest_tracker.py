@@ -75,6 +75,49 @@ Index(f"{IngestionTracking.__tablename__}_ix_uuid_timestamp",
       IngestionTracking.uuid, IngestionTracking.timestamp)
 
 
+class MetadataForm(Base):
+    """Database model for storing metadata form definitions."""
+    __tablename__ = 'metadata_forms'
+
+    id = Column(String(36), primary_key=True)  # Using UUID as string
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    schema = Column(JSON, nullable=False)
+    ui_schema = Column(JSON, nullable=True)
+    created = Column(DateTime(timezone=True), server_default=func.now())
+    updated = Column(DateTime(timezone=True), onupdate=func.now())
+    created_by = Column(String(255), nullable=False)
+    group_id = Column(String(255), nullable=True)  # Optional group restriction
+
+    def __repr__(self):
+        return f"<MetadataForm(id='{self.id}', title='{self.title}')>"
+
+
+class FormSubmission(Base):
+    """Database model for storing form submission data."""
+    __tablename__ = 'form_submissions'
+
+    id = Column(String(36), primary_key=True)  # Using UUID as string
+    form_id = Column(String(36), ForeignKey('metadata_forms.id', ondelete='CASCADE'))
+    data = Column(JSON, nullable=False)
+    submitted_by = Column(String(255), nullable=False)
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now())
+    object_type = Column(String(50), nullable=False)  # e.g., 'dataset', 'image'
+    object_id = Column(String(255), nullable=False)  # ID of the OMERO object
+
+    form = relationship("MetadataForm", backref="submissions")
+
+    def __repr__(self):
+        return f"<FormSubmission(id='{self.id}', form_id='{self.form_id}')>"
+
+
+# Create indexes for common queries
+Index('idx_forms_created_by', MetadataForm.created_by)
+Index('idx_forms_group', MetadataForm.group_id)
+Index('idx_submissions_form', FormSubmission.form_id)
+Index('idx_submissions_object', FormSubmission.object_type, FormSubmission.object_id)
+
+
 class IngestTracker:
     def __init__(self, config):
         if not config or 'ingest_tracking_db' not in config:
@@ -205,6 +248,114 @@ class IngestTracker:
                 f"Unexpected error logging ingestion step: {e}", exc_info=True)
             return None
 
+    def create_form(self, form_data: dict) -> str:
+        """Create a new metadata form."""
+        try:
+            with self.Session() as session:
+                form = MetadataForm(
+                    id=form_data.get('id'),  # UUID should be provided
+                    title=form_data['title'],
+                    description=form_data.get('description'),
+                    schema=form_data['schema'],
+                    ui_schema=form_data.get('ui_schema'),
+                    created_by=form_data['created_by'],
+                    group_id=form_data.get('group_id')
+                )
+                session.add(form)
+                session.commit()
+                return form.id
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error creating form: {e}", exc_info=True)
+            raise
+
+    def update_form(self, form_id: str, form_data: dict) -> bool:
+        """Update an existing metadata form."""
+        try:
+            with self.Session() as session:
+                form = session.query(MetadataForm).filter_by(id=form_id).first()
+                if not form:
+                    raise ValueError(f"Form with id {form_id} not found")
+                
+                # Update fields if provided
+                if 'title' in form_data:
+                    form.title = form_data['title']
+                if 'description' in form_data:
+                    form.description = form_data['description']
+                if 'schema' in form_data:
+                    form.schema = form_data['schema']
+                if 'ui_schema' in form_data:
+                    form.ui_schema = form_data['ui_schema']
+                if 'group_id' in form_data:
+                    form.group_id = form_data['group_id']
+                
+                session.commit()
+                return True
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error updating form: {e}", exc_info=True)
+            raise
+
+    def delete_form(self, form_id: str) -> bool:
+        """Delete a metadata form."""
+        try:
+            with self.Session() as session:
+                form = session.query(MetadataForm).filter_by(id=form_id).first()
+                if form:
+                    session.delete(form)
+                    session.commit()
+                    return True
+                return False
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error deleting form: {e}", exc_info=True)
+            raise
+
+    def get_form(self, form_id: str) -> dict:
+        """Get a single metadata form by ID."""
+        try:
+            with self.Session() as session:
+                form = session.query(MetadataForm).filter_by(id=form_id).first()
+                if not form:
+                    return None
+                return {
+                    'id': form.id,
+                    'title': form.title,
+                    'description': form.description,
+                    'schema': form.schema,
+                    'ui_schema': form.ui_schema,
+                    'created': form.created,
+                    'updated': form.updated,
+                    'created_by': form.created_by,
+                    'group_id': form.group_id
+                }
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error fetching form: {e}", exc_info=True)
+            raise
+
+    def list_forms(self, group_id: str = None) -> list:
+        """List all metadata forms, optionally filtered by group."""
+        try:
+            with self.Session() as session:
+                query = session.query(MetadataForm)
+                if group_id:
+                    query = query.filter(
+                        (MetadataForm.group_id == group_id) | 
+                        (MetadataForm.group_id == None)  # Include forms without group restriction
+                    )
+                forms = query.order_by(MetadataForm.updated.desc()).all()
+                return [{
+                    'id': form.id,
+                    'title': form.title,
+                    'description': form.description,
+                    'schema': form.schema,
+                    'ui_schema': form.ui_schema,
+                    'created': form.created,
+                    'updated': form.updated,
+                    'created_by': form.created_by,
+                    'group_id': form.group_id
+                } for form in forms]
+        except SQLAlchemyError as e:
+            self.logger.error(f"Database error listing forms: {e}", exc_info=True)
+            raise
+
 
 # --------------------------------------------------
 # Global instance management
@@ -240,3 +391,28 @@ def log_ingestion_step(order_info, stage):
         logger.error(
             "IngestTracker not initialized. Call initialize_ingest_tracker first.")
         return None
+
+
+def manage_form(action: str, form_data: dict = None, form_id: str = None, group_id: str = None):
+    """Thread-safe function to manage forms."""
+    tracker = get_ingest_tracker()
+    if tracker is None:
+        logger.error("IngestTracker not initialized. Call initialize_ingest_tracker first.")
+        return None
+
+    try:
+        if action == "create":
+            return tracker.create_form(form_data)
+        elif action == "update":
+            return tracker.update_form(form_id, form_data)
+        elif action == "delete":
+            return tracker.delete_form(form_id)
+        elif action == "get":
+            return tracker.get_form(form_id)
+        elif action == "list":
+            return tracker.list_forms(group_id)
+        else:
+            raise ValueError(f"Unknown action: {action}")
+    except Exception as e:
+        logger.error(f"Error managing form: {e}", exc_info=True)
+        raise
