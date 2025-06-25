@@ -127,7 +127,9 @@ class IngestTracker:
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initializing IngestTracker")
         try:
-            self.database_url = config['ingest_tracking_db']
+            # Override with environment variable if available (SQLAlchemy standard)
+            import os
+            self.database_url = os.getenv('INGEST_TRACKING_DB_URL', config['ingest_tracking_db'])
             self.logger.debug(f"Using database URL: {self.database_url}")
 
             connect_args = {}
