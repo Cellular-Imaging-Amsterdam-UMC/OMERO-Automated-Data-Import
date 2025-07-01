@@ -222,6 +222,7 @@ class DataProcessor:
 
             process = Popen(podman_command, stdout=PIPE, stderr=STDOUT)
             output_lines = []
+            json_parsed = False
             with process.stdout:
                 for line in iter(process.stdout.readline, b''):
                     line_str = line.decode().strip()
@@ -232,7 +233,6 @@ class DataProcessor:
                 self.logger.info("Podman command executed successfully.")
                 
                 # Try to parse JSON output from last line (new format)
-                json_parsed = False
                 if output_lines:
                     try:
                         import json
