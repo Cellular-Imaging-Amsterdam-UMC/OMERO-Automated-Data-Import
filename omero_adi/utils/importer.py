@@ -223,12 +223,13 @@ class DataProcessor:
             process = Popen(podman_command, stdout=PIPE, stderr=STDOUT)
             output_lines = []
             json_parsed = False
+            
             with process.stdout:
                 for line in iter(process.stdout.readline, b''):
                     line_str = line.decode().strip()
                     output_lines.append(line_str)
                     self.logger.debug('sub: %r', line)
-        
+    
             if process.wait() == 0:
                 self.logger.info("Podman command executed successfully.")
                 
@@ -262,15 +263,14 @@ class DataProcessor:
                         json_parsed = True
                     except (json.JSONDecodeError, KeyError, TypeError) as e:
                         self.logger.debug(f"No valid JSON output found, using legacy behavior: {e}")
-            
-            # Backward compatibility: if no JSON, use the old behavior
-            if not json_parsed:
-                self.logger.debug("Using legacy preprocessing behavior (no JSON output)")
-                
+        
+                # Backward compatibility: if no JSON, use the old behavior
+                if not json_parsed:
+                    self.logger.debug("Using legacy preprocessing behavior (no JSON output)")                
             else:
                 self.logger.error("Podman command failed.")
                 return False, [], {}
-        
+    
         return True, processed_files, metadata_dict
 
 
