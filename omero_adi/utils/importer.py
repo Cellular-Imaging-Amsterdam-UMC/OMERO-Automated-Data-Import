@@ -661,7 +661,7 @@ class DataPackageImporter:
         try:
             annotation_dict = {'UUID': str(uuid), 'Filepath': str(file_path)}
             ns = "omeroadi.import"
-            object_type = "Plate" if is_screen else "Image
+            object_type = "Plate" if is_screen else "Image"
             
             # Add preprocessing metadata if available
             preprocessing_metadata = self.data_package.get('_preprocessing_metadata', {})
