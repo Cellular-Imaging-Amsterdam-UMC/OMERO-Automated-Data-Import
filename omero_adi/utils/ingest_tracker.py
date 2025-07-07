@@ -209,21 +209,28 @@ class IngestTracker:
                         "alt_output_folder": order_info.get("preprocessing_altoutputfolder")
                     }
 
-                    # Extract any extra params that aren't part of the hardcoded fields
-                    extra_params = {
+                    # Handle extra_params - check for direct extra_params first
+                    extra_params = order_info.get("extra_params", {})
+
+                    # Also extract any additional preprocessing_ fields that aren't hardcoded  
+                    dynamic_params = {
                         key.replace("preprocessing_", ""): value
                         for key, value in order_info.items()
                         if key.startswith("preprocessing_") and key not in {
                             "preprocessing_container",
                             "preprocessing_inputfile",
-                            "preprocessing_outputfolder",
+                            "preprocessing_outputfolder", 
                             "preprocessing_altoutputfolder"
                         }
                     }
 
+                    # Merge both sources - dynamic params override direct ones
+                    if dynamic_params:
+                        extra_params.update(dynamic_params)
+
                     new_preprocessing = Preprocessing(
                         **hardcoded_fields,
-                        extra_params=extra_params
+                        extra_params=extra_params if extra_params else None
                     )
                     session.add(new_preprocessing)
                     # Link the new preprocessing row to the ingestion entry
