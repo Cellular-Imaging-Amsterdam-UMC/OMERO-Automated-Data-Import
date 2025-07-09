@@ -97,7 +97,6 @@ def retry_on_connection_issue(func):
 
 
 class DataProcessor:
-    # TODO: Change so it is not PODMAN specific. Otherwise testing will be... tricky. Or we skip for now :)
     def __init__(self, data_package, logger=None):
         """Initialize DataProcessor with proper logging."""
         self.data_package = data_package
@@ -192,24 +191,16 @@ class DataProcessor:
             self.logger.warning("No container specified for podman command.")
             return None
 
-        # Complete Test Results Summary
-        # Platform	Method	File Ownership	Permissions	Status
-        # Linux	WITH --userns=keep-id	autoimportuser:autoimportgroup	-rwxr-xr-x	✅ Works
-        # Linux	WITHOUT --userns=keep-id	autoimportuser:autoimportgroup	-rwxr-xr-x	✅ Works
-        # Windows	WITH --userns=keep-id	N/A	N/A	❌ Broken (cgroup error)
-        # Windows	WITHOUT --userns=keep-id	autoimportuser:autoimportgroup	-rw-r--r--	✅ Works
-        # Key Findings
-        # Linux: Zero functional difference between methods
-        # Windows: Only works without --userns=keep-id
-        # File ownership: Consistent autoimportuser:autoimportgroup on both platforms
-        # OMERO compatibility: Files are owned by the correct user for import
-        # Final Recommendation: REMOVE --userns=keep-id
-        # The evidence is overwhelming:
-        # - Required for Windows compatibility
-        # - No negative impact on Linux
-        # - Identical file ownership results
-        # - Successful file processing on both platforms
-        podman_settings = ["podman", "run", "--rm"]  # Removed --userns=keep-id
+        podman_settings = ["podman", "run", "--rm"]
+        
+        # Check if user namespace mapping is available/desired
+        userns_mode = os.getenv("PODMAN_USERNS_MODE", "auto").lower()
+        
+        if userns_mode == "keep-id":
+            podman_settings.append("--userns=keep-id")
+            self.logger.debug("Added --userns=keep-id for user namespace mapping. This allows running non-root containers.")
+        else:
+            self.logger.debug(f"Using default podman user mapping (userns_mode: {userns_mode}). This means only root containers can be run.")
         
         for src, dst in mount_paths:
             podman_settings += ["-v", f"{src}:{dst}"]
@@ -293,7 +284,6 @@ class DataProcessor:
 
 
 class DataPackageImporter:
-    # TODO: Check if I can clean up this class. Its a bit messy.
     """
     Handles the import of data packages into OMERO using database-driven order details.
     """
