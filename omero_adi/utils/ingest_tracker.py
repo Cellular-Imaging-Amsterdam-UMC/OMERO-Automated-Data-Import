@@ -8,6 +8,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.sql import func, text
 import json
 from sqlalchemy.dialects.postgresql import UUID  # Add this import at the top
+import psycopg2
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +168,7 @@ class IngestTracker:
         except Exception as e:
             self.logger.error(f"Error disposing database resources: {e}")
 
-    def db_log_ingestion_event(self, order_info: dict, stage: str) -> int:
+    def db_log_ingestion_event(self, order_info: dict, stage: str, max_retries: int = 3):
         """
         Log an ingestion step to the database.
         Returns the new entry ID or None if logging failed.
@@ -179,84 +181,89 @@ class IngestTracker:
 
         self.logger.debug(
             f"Logging ingestion event - Stage: {stage}, UUID: {order_info.get('UUID')}, Order: {order_info}")
-        try:
-            with self.Session() as session:
-                new_entry = IngestionTracking(
-                    group_name=order_info.get('Group'),
-                    user_name=order_info.get('Username', 'Unknown'),
-                    destination_id=str(order_info.get('DestinationID', '')),
-                    destination_type=str(
-                        order_info.get('DestinationType', '')),
-                    stage=stage,
-                    uuid=str(order_info.get('UUID', 'Unknown')),
-                    files=order_info.get('Files', []),
-                    file_names=order_info.get('FileNames', [])
-                )
-
-                session.add(new_entry)
-
-                # Check for _preprocessing_id in order_info
-                preprocessing_id = order_info.get('_preprocessing_id')
-                if preprocessing_id:
-                    # Directly set the preprocessing_id without querying for the object
-                    new_entry.preprocessing_id = preprocessing_id
-                elif "preprocessing_container" in order_info:
-                    # Known hardcoded preprocessing fields
-                    hardcoded_fields = {
-                        "container": order_info.get("preprocessing_container"),
-                        "input_file": order_info.get("preprocessing_inputfile"),
-                        "output_folder": order_info.get("preprocessing_outputfolder"),
-                        "alt_output_folder": order_info.get("preprocessing_altoutputfolder")
-                    }
-
-                    # Handle extra_params - check for direct extra_params first
-                    extra_params = order_info.get("extra_params", {})
-
-                    # Also extract any additional preprocessing_ fields that aren't hardcoded  
-                    dynamic_params = {
-                        key.replace("preprocessing_", ""): value
-                        for key, value in order_info.items()
-                        if key.startswith("preprocessing_") and key not in {
-                            "preprocessing_container",
-                            "preprocessing_inputfile",
-                            "preprocessing_outputfolder", 
-                            "preprocessing_altoutputfolder"
-                        }
-                    }
-
-                    # Merge both sources - dynamic params override direct ones
-                    if dynamic_params:
-                        extra_params.update(dynamic_params)
-
-                    new_preprocessing = Preprocessing(
-                        **hardcoded_fields,
-                        extra_params=extra_params if extra_params else None
+        for attempt in range(max_retries):
+            try:
+                with self.Session() as session:
+                    new_entry = IngestionTracking(
+                        group_name=order_info.get('Group'),
+                        user_name=order_info.get('Username', 'Unknown'),
+                        destination_id=str(order_info.get('DestinationID', '')),
+                        destination_type=str(
+                            order_info.get('DestinationType', '')),
+                        stage=stage,
+                        uuid=str(order_info.get('UUID', 'Unknown')),
+                        files=order_info.get('Files', []),
+                        file_names=order_info.get('FileNames', [])
                     )
-                    session.add(new_preprocessing)
-                    # Link the new preprocessing row to the ingestion entry
-                    new_entry.preprocessing = new_preprocessing
 
-                session.commit()
+                    session.add(new_entry)
 
-                self.logger.info(
-                    f"Ingestion event logged: {stage} | "
-                    f"UUID: {new_entry.uuid} | "
-                    f"Group: {new_entry.group_name} | "
-                    f"User: {new_entry.user_name} | "
-                    f"DestinationID: {new_entry.destination_id} | "
-                    f"DestinationType: {new_entry.destination_type} | "
-                    f"Preprocessing: {new_entry.preprocessing}"
-                )
-                self.logger.debug(f"Created database entry: {new_entry.id}")
-                return new_entry.id
-        except SQLAlchemyError as e:
-            self.logger.error(
-                f"Database error logging ingestion step: {e}", exc_info=True)
-            return None
-        except Exception as e:
-            self.logger.error(
-                f"Unexpected error logging ingestion step: {e}", exc_info=True)
-            return None
+                    # Check for _preprocessing_id in order_info
+                    preprocessing_id = order_info.get('_preprocessing_id')
+                    if preprocessing_id:
+                        # Directly set the preprocessing_id without querying for the object
+                        new_entry.preprocessing_id = preprocessing_id
+                    elif "preprocessing_container" in order_info:
+                        # Known hardcoded preprocessing fields
+                        hardcoded_fields = {
+                            "container": order_info.get("preprocessing_container"),
+                            "input_file": order_info.get("preprocessing_inputfile"),
+                            "output_folder": order_info.get("preprocessing_outputfolder"),
+                            "alt_output_folder": order_info.get("preprocessing_altoutputfolder")
+                        }
+
+                        # Handle extra_params - check for direct extra_params first
+                        extra_params = order_info.get("extra_params", {})
+
+                        # Also extract any additional preprocessing_ fields that aren't hardcoded  
+                        dynamic_params = {
+                            key.replace("preprocessing_", ""): value
+                            for key, value in order_info.items()
+                            if key.startswith("preprocessing_") and key not in {
+                                "preprocessing_container",
+                                "preprocessing_inputfile",
+                                "preprocessing_outputfolder", 
+                                "preprocessing_altoutputfolder"
+                            }
+                        }
+
+                        # Merge both sources - dynamic params override direct ones
+                        if dynamic_params:
+                            extra_params.update(dynamic_params)
+
+                        new_preprocessing = Preprocessing(
+                            **hardcoded_fields,
+                            extra_params=extra_params if extra_params else None
+                        )
+                        session.add(new_preprocessing)
+                        # Link the new preprocessing row to the ingestion entry
+                        new_entry.preprocessing = new_preprocessing
+
+                    session.commit()
+
+                    self.logger.info(
+                        f"Ingestion event logged: {stage} | "
+                        f"UUID: {new_entry.uuid} | "
+                        f"Group: {new_entry.group_name} | "
+                        f"User: {new_entry.user_name} | "
+                        f"DestinationID: {new_entry.destination_id} | "
+                        f"DestinationType: {new_entry.destination_type} | "
+                        f"Preprocessing: {new_entry.preprocessing}"
+                    )
+                    self.logger.debug(f"Created database entry: {new_entry.id}")
+                    return new_entry.id
+            except (SQLAlchemyError, psycopg2.OperationalError) as e:
+                if "closed the connection" in str(e) or "Name or service not known" in str(e):
+                    if attempt < max_retries - 1:
+                        time.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                        continue
+                self.logger.error(
+                    f"Database error logging ingestion step: {e}", exc_info=True)
+                return None
+            except Exception as e:
+                self.logger.error(
+                    f"Unexpected error logging ingestion step: {e}", exc_info=True)
+                return None
 
     def create_form(self, form_data: dict) -> str:
         """Create a new metadata form."""
