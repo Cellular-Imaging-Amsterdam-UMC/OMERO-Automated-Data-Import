@@ -192,7 +192,25 @@ class DataProcessor:
             self.logger.warning("No container specified for podman command.")
             return None
 
-        podman_settings = ["podman", "run", "--rm", "--userns=keep-id"]
+        # Complete Test Results Summary
+        # Platform	Method	File Ownership	Permissions	Status
+        # Linux	WITH --userns=keep-id	autoimportuser:autoimportgroup	-rwxr-xr-x	✅ Works
+        # Linux	WITHOUT --userns=keep-id	autoimportuser:autoimportgroup	-rwxr-xr-x	✅ Works
+        # Windows	WITH --userns=keep-id	N/A	N/A	❌ Broken (cgroup error)
+        # Windows	WITHOUT --userns=keep-id	autoimportuser:autoimportgroup	-rw-r--r--	✅ Works
+        # Key Findings
+        # Linux: Zero functional difference between methods
+        # Windows: Only works without --userns=keep-id
+        # File ownership: Consistent autoimportuser:autoimportgroup on both platforms
+        # OMERO compatibility: Files are owned by the correct user for import
+        # Final Recommendation: REMOVE --userns=keep-id
+        # The evidence is overwhelming:
+        # - Required for Windows compatibility
+        # - No negative impact on Linux
+        # - Identical file ownership results
+        # - Successful file processing on both platforms
+        podman_settings = ["podman", "run", "--rm"]  # Removed --userns=keep-id
+        
         for src, dst in mount_paths:
             podman_settings += ["-v", f"{src}:{dst}"]
         podman_command = podman_settings + [container] + kwargs
