@@ -668,20 +668,53 @@ class DataPackageImporter:
     def add_image_annotations(self, conn, object_id, uuid, file_path, is_screen=False, local_path=None):
         try:
             annotation_dict = {'UUID': str(uuid), 'Filepath': str(file_path)}
-            ns = "omeroadi.import"
-            object_type = "Plate" if is_screen else "Image"
+            
+            # Add the full order_info for complete traceability
+            order_info = self.data_package
+            
+            # Core order metadata
+            core_fields = ['Group', 'Username', 'DestinationID', 'DestinationType', 'Files', 'FileNames']
+            for field in core_fields:
+                if field in order_info:
+                    if field == 'Files':
+                        # Convert file list to string representation
+                        annotation_dict[field] = str(order_info[field])
+                    elif field == 'FileNames':
+                        # Convert filename list to string representation  
+                        annotation_dict[field] = str(order_info[field])
+                    else:
+                        annotation_dict[field] = str(order_info[field])
             
             # Add preprocessing metadata if available
-            preprocessing_metadata = self.data_package.get('_preprocessing_metadata', {})
+            preprocessing_fields = [key for key in order_info.keys() if key.startswith('preprocessing_')]
+            for field in preprocessing_fields:
+                annotation_dict[field] = str(order_info[field])
+                
+            # Add preprocessing ID if available
+            if '_preprocessing_id' in order_info:
+                annotation_dict['preprocessing_id'] = str(order_info['_preprocessing_id'])
             
-            # For preprocessing, we need to match against the local_paths that were used for import
-            # This is a bit tricky since file_path might be the original path, but we imported from local_paths
+            # Add any extra_params from preprocessing
+            if 'extra_params' in order_info:
+                for key, value in order_info['extra_params'].items():
+                    annotation_dict[f'preprocessing_{key}'] = str(value)
+            
+            # Add preprocessing metadata from processing results
+            preprocessing_metadata = order_info.get('_preprocessing_metadata', {})
             for processed_file_path, metadata in preprocessing_metadata.items():
                 if processed_file_path == file_path or processed_file_path == local_path:
                     self.logger.debug(f"Found preprocessing metadata for file: {processed_file_path}")
-                    # Use the metadata directly if it matches the file_path
-                    annotation_dict.update(metadata)
-                    self.logger.debug(f"Using preprocessing metadata: {metadata}")
+                    # Prefix preprocessing output metadata to avoid conflicts
+                    for key, value in metadata.items():
+                        annotation_dict[f'processing_output_{key}'] = str(value)
+                    self.logger.debug(f"Added preprocessing output metadata: {metadata}")
+            
+            # Add timestamp for when annotation was created
+            import datetime
+            annotation_dict['Import_Timestamp'] = datetime.datetime.now().isoformat()
+            
+            ns = "omeroadi.import"
+            object_type = "Plate" if is_screen else "Image"
             
             # CSV metadata reading logic ...
             metadata_file = self.data_package.get('metadata_file', 'metadata.csv')
@@ -697,13 +730,16 @@ class DataPackageImporter:
                             if len(row) == 2:
                                 key, value = row
                                 if key:
-                                    annotation_dict[key] = value or ''
+                                    # Prefix CSV metadata to distinguish from order metadata
+                                    annotation_dict[f'csv_{key}'] = value or ''
                             else:
                                 self.logger.warning(f"Invalid metadata row: {row}")
                 else:
                     self.logger.info(f"No metadata found at {metadata_path}")
             
-            self.logger.debug(f"Annotation dict: {annotation_dict}")
+            self.logger.debug(f"Full annotation dict: {annotation_dict}")
+            self.logger.info(f"Adding {len(annotation_dict)} metadata fields to {object_type} {object_id}")
+            
             map_ann_id = ezomero.post_map_annotation(
                 conn=conn,
                 object_type=object_type,
