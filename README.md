@@ -185,6 +185,10 @@ WORKDIR /app
 ENTRYPOINT ["python", "convert_script.py"]
 ```
 
+Note: We suggest to keep the `user` in the Dockerfile as `ROOT` because non-root users might get into permission issues with the mounted I/O folders, especially on Windows. On Linux, we have the env option with `PODMAN_USERNS_MODE: keep-id` so that we can run also as non-root, but this doesn't work on Docker for Windows.
+
+See the [security overview](./security_overview_privileged.md) for more details on the podman-in-podman or podman-in-docker setups, requirements, and issues.
+
 ### Podman Configuration
 
 The system runs containers using Podman with these settings:
@@ -322,5 +326,213 @@ The current implementation is focused on:
 ---
 
 **Note**: This system replaces the previous file-based upload order approach. All order management is now database-driven using PostgreSQL and SQLAlchemy for improved reliability, scalability, and integration with BIOMERO workflows.
+
+## Data Access Architecture
+
+The ADI system requires a shared storage architecture where data is accessible from multiple containers with read/write permissions. This is essential for in-place imports and preprocessing workflows.
+
+### Storage Requirements
+
+The system requires a **shared storage volume** (typically a Samba/CIFS mount or NFS) that is mounted identically across all containers:
+
+- **OMERO Server**: For in-place imports using `ln_s` transfers
+- **OMERO Web**: For omero.boost plugin to browse and select files
+- **OMERO ADI**: For reading source files and writing processed data
+- **OMERO Workers**: For script access to data files
+
+**Critical requirement**: All mounts must have **read/write (R/W) permissions**, not read-only.
+
+### Mount Configuration
+
+```yaml
+# Example docker-compose.yml mounts
+services:
+  omeroserver:
+    volumes:
+      - "omero:/OMERO"
+      - "./web/L-Drive:/data"  # Shared storage mounted as /data
+      
+  omeroweb:
+    volumes:
+      - "./web/L-Drive:/data:rw"  # Same mount path, R/W access
+      
+  omeroadi:
+    volumes:
+      - "omero:/OMERO"
+      - "./web/L-Drive:/data"  # Identical mount path for in-place imports
+```
+
+### In-Place Import Workflow
+
+The ADI system uses **in-place imports** exclusively, which means:
+
+1. **Source Data**: Files remain on the shared storage
+2. **OMERO Import**: Uses `transfer=ln_s` to create symlinks instead of copying data
+3. **No Data Duplication**: Original files stay in place, only metadata is stored in OMERO
+4. **Preprocessing**: Creates new files but maintains in-place import approach
+
+### Preprocessing Data Flow
+
+When preprocessing is enabled, the system follows this data flow:
+
+```
+Original Data (Remote Storage)
+    ↓
+Container Processing (On OMERO Server)
+    ↓
+Processed Data → Two Destinations:
+    1. Remote Storage (/.processed subfolder)
+    2. Temporary Local Storage (alt_path)
+    ↓
+OMERO Import (from temporary storage)
+    ↓
+Symlink Redirect (to remote storage)
+    ↓
+Cleanup (temporary storage deleted)
+```
+
+#### Why This Architecture?
+
+1. **Performance**: Import from local temporary storage is faster than remote storage
+2. **Reliability**: Avoid network issues during import process
+3. **Storage Efficiency**: Final data resides on remote storage, not OMERO server
+4. **Backup**: Processed data is preserved on remote storage
+
+#### Implementation Details
+
+From the source code (`importer.py`):
+
+```python
+# Preprocessing creates data in both locations
+remote_path = os.path.join(file_path, PROCESSED_DATA_FOLDER)  # /.processed
+alt_path = f"/OMERO/OMERO_inplace/{uuid}"  # Temporary local storage
+
+# Import from temporary storage for speed
+imported = self.import_to_omero(
+    file_path=alt_path,
+    target_id=dataset_id,
+    target_type='Dataset',
+    transfer="ln_s"
+)
+
+# After import, redirect symlinks to remote storage
+for symlink_path in omero_managed_files:
+    os.unlink(symlink_path)  # Remove temporary symlink
+    new_target = os.path.join(remote_path, filename)
+    os.symlink(new_target, symlink_path)  # Point to remote storage
+```
+
+### Metadata Integration
+
+The system supports metadata inclusion through two mechanisms:
+
+#### 1. CSV Metadata Files
+
+Place a `metadata.csv` file alongside your import data:
+
+```csv
+key,value
+acquisition_date,2024-01-15
+magnification,63x
+staining_method,DAPI
+```
+
+The system automatically detects and processes CSV files in:
+- Original data directory
+- Processed data directory (`.processed` subfolder)
+
+#### 2. JSON Metadata from Preprocessing
+
+Preprocessing containers can output metadata in their JSON response:
+
+```json
+[
+  {
+    "alt_path": "/out/processed_image.tif",
+    "keyvalues": [
+      {"processing_method": "deconvolution"},
+      {"algorithm": "Richardson-Lucy"},
+      {"iterations": "10"}
+    ]
+  }
+]
+```
+
+This allows containers to:
+- **Enrich metadata** by calling external APIs
+- **Add processing parameters** automatically
+- **Create metadata-only containers** that don't modify source data
+
+### Example Deployment
+
+#### Docker Compose Setup
+
+```yaml
+volumes:
+  - "/mnt/shared-storage:/data"  # Shared storage mount
+  - "omero:/OMERO"               # OMERO managed repository
+```
+
+#### Podman Setup (Linux)
+
+```bash
+podman run -d --rm --name omeroadi \
+    --privileged \
+    --device /dev/fuse \
+    --security-opt label=disable \
+    -e OMERO_HOST=omeroserver \
+    -e OMERO_USER=root \
+    -e OMERO_PASSWORD=secret \
+    -e OMERO_PORT=4064 \
+    -e PODMAN_USERNS_MODE=keep-id \
+    --network omero \
+    --volume /mnt/datadisk/omero:/OMERO \
+    --volume /mnt/L-Drive/basic/divg:/data \
+    --volume "$(pwd)/logs/omeroadi:/auto-importer/logs:Z" \
+    --volume "$(pwd)/config:/auto-importer/config" \
+    --userns=keep-id:uid=1000,gid=1000 \
+    cellularimagingcf/omeroadi:latest
+```
+
+### Storage Permissions
+
+Ensure proper permissions on your shared storage.
+
+Basic examples:
+
+```bash
+# Example for Linux hosts
+sudo chmod -R 755 /mnt/shared-storage
+sudo chown -R 1000:1000 /mnt/shared-storage
+
+# For Samba/CIFS mounts, ensure the mount options allow R/W:
+mount -t cifs //server/share /mnt/shared-storage -o username=user,rw,file_mode=0755,dir_mode=0755
+```
+
+
+### Troubleshooting Storage Issues
+
+Common storage-related problems:
+
+1. **Permission Denied**: Check R/W permissions on shared storage
+2. **Import Failures**: Verify identical mount paths across all containers
+3. **Symlink Errors**: Ensure OMERO managed repository is accessible
+4. **Preprocessing Failures**: Check temporary storage space and permissions
+
+Use these commands to diagnose:
+
+```bash
+# Check mount points
+docker exec omeroadi df -h
+
+# Test file access
+docker exec omeroadi ls -la /data
+docker exec omeroadi touch /data/test-write-permissions
+
+# Verify OMERO storage
+docker exec omeroadi ls -la /OMERO/ManagedRepository
+```
+
+This architecture ensures efficient, reliable data import while maintaining data integrity and providing flexibility for preprocessing workflows.
 
 
