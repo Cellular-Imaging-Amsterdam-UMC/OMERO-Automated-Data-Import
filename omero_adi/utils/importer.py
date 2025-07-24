@@ -363,6 +363,39 @@ class DataPackageImporter:
             return False
 
     @connection
+    def import_zarr(self, conn, file_path, target_id, target_type):
+        self.logger.debug(
+            f"Starting import Zarr to OMERO for file: {file_path}, Target: {target_id} ({target_type})")
+
+        file_title = os.path.basename(file_path)
+        if not file_path.endswith('/'):
+            zarr_file_path = file_path + '/'
+        else:
+            zarr_file_path = file_path
+
+        from .register import register_zarr
+        register_zarr(uri=zarr_file_path, name=file_title, target=target_id)
+
+        obj = conn.getObject(target_type, target_id)
+        if obj:
+            result_id = obj.getId()
+            self.imported = True
+            self.logger.info(f'Imported successfully for {str(file_path)}')
+        else:
+            result_id = None
+            self.imported = False
+            self.logger.error(f'Import failed for {str(file_path)}')
+
+        if target_type == 'Screen':
+            image_ids, _ = self.get_plate_ids(str(file_path), target_id)
+            result_id = image_ids[0] if image_ids else None
+        if result_id is not None:
+            image_ids = [result_id]
+        else:
+            image_ids = []
+        return image_ids
+
+    @connection
     def get_plate_ids(self, conn, file_path, screen_id):
         if not self.imported:
             self.logger.error(f'File {file_path} was not imported')
@@ -463,6 +496,7 @@ class DataPackageImporter:
 
         for i, file_path in enumerate(file_paths):
             self.logger.debug(f"Uploading file: {file_path}")
+            is_zarr = os.path.splitext(file_path)[1].lower().endswith('.zarr')
             try:
                 if screen_id:
                     if not local_paths:
@@ -545,26 +579,34 @@ class DataPackageImporter:
                 else:
                     if not local_paths:
                         # Original dataset import logic
-                        if os.path.isfile(file_path):
-                            image_ids = self.import_dataset(
-                                target=str(file_path),
-                                dataset=dataset_id,
-                                transfer="ln_s"
-                            )
-                            self.logger.debug(f"EZimport returned ids {image_ids} for {str(file_path)} ({dataset_id})")
-                        elif os.path.isdir(file_path):
-                            imported = self.import_to_omero(
+                        if is_zarr:
+                            self.logger.debug(f"Importing Zarr dataset {file_path} to dataset {dataset_id}")
+                            image_ids = self.import_zarr(
                                 file_path=str(file_path),
                                 target_id=dataset_id,
                                 target_type='Dataset',
-                                uuid=uuid,
-                                depth=10
                             )
-                            image_ids = dataset_id
-                            self.logger.debug(f"Set ids {image_ids} to the dataset {dataset_id}")
                         else:
-                            raise ValueError(
-                                f"{file_path} is not recognized as file or directory.")
+                            if os.path.isfile(file_path):
+                                image_ids = self.import_dataset(
+                                    target=str(file_path),
+                                    dataset=dataset_id,
+                                    transfer="ln_s"
+                                )
+                                self.logger.debug(f"EZimport returned ids {image_ids} for {str(file_path)} ({dataset_id})")
+                            elif os.path.isdir(file_path):
+                                imported = self.import_to_omero(
+                                    file_path=str(file_path),
+                                    target_id=dataset_id,
+                                    target_type='Dataset',
+                                    uuid=uuid,
+                                    depth=10
+                                )
+                                image_ids = dataset_id
+                                self.logger.debug(f"Set ids {image_ids} to the dataset {dataset_id}")
+                            else:
+                                raise ValueError(
+                                    f"{file_path} is not recognized as file or directory.")
                     else:
                         # Preprocessed dataset import logic
                         fp = str(local_paths[i])  # TODO: assumes 1:1 local_paths and file_paths
