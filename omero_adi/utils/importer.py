@@ -3,6 +3,7 @@ import csv
 import shutil
 import logging
 import functools
+import subprocess
 import time
 from subprocess import Popen, PIPE, STDOUT
 from importlib import import_module
@@ -373,26 +374,27 @@ class DataPackageImporter:
         else:
             zarr_file_path = file_path
 
-        from .register import register_zarr
-        register_zarr(uri=zarr_file_path, name=file_title, target=target_id)
-
-        obj = conn.getObject(target_type, target_id)
-        if obj:
-            result_id = obj.getId()
-            self.imported = True
-            self.logger.info(f'Imported successfully for {str(file_path)}')
-        else:
-            result_id = None
-            self.imported = False
-            self.logger.error(f'Import failed for {str(file_path)}')
+        #register_zarr(uri=zarr_file_path, name=file_title, target=target_id)
+        process = subprocess.run(['omero_adi/utils/register.py', zarr_file_path, '--name', file_title, '--target', str(target_id)],
+                                 check=False, timeout=60, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if process.returncode != 0:
+            self.logger.warning(process.stdout.decode())
+            self.logger.error(process.stderr.decode())
 
         if target_type == 'Screen':
             image_ids, _ = self.get_plate_ids(str(file_path), target_id)
-            result_id = image_ids[0] if image_ids else None
-        if result_id is not None:
-            image_ids = [result_id]
         else:
-            image_ids = []
+            #image_ids, _ = self.get_image_id(str(file_path), target_id)
+            image_ids=None
+
+        result_id = image_ids[0] if image_ids else None
+        if result_id is not None:
+            self.imported = True
+            self.logger.info(f'Imported successfully for {str(file_path)}')
+        else:
+            self.imported = False
+            self.logger.error(f'Import failed for {str(file_path)}')
+
         return image_ids
 
     @connection

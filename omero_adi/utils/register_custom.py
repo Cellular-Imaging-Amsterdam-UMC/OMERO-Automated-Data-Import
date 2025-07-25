@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+import logging
 #
 # Copyright (C) 2025 University of Dundee & Open Microscopy Environment.
 # All rights reserved.
@@ -521,19 +521,19 @@ def get_uri_parameters(transport_params, nosignrequest):
         return "?anonymous=true"
     return None
 
-def link_to_target(args, conn, obj):
+def link_to_target(conn, obj, target=None, target_by_name=None):
     is_plate = isinstance(obj, omero.model.PlateI)
 
-    if args.target:
+    if target:
         if is_plate:
-            target = conn.getObject("Screen", attributes={'id': int(args.target)})
+            target = conn.getObject("Screen", attributes={'id': int(target)})
         else:
-            target = conn.getObject("Dataset", attributes={'id': int(args.target)})
+            target = conn.getObject("Dataset", attributes={'id': int(target)})
     else:
         if is_plate:
-            target = conn.getObject("Screen", attributes={'name': args.target_by_name})
+            target = conn.getObject("Screen", attributes={'name': target_by_name})
         else:
-            target = conn.getObject("Dataset", attributes={'name': args.target_by_name})
+            target = conn.getObject("Dataset", attributes={'name': target_by_name})
 
     if target is None:
         print("Target not found")
@@ -562,12 +562,13 @@ def main():
     parser.add_argument("--target-by-name", required=False, type=str, help="The name of the target (dataset/screen)")
 
     args = parser.parse_args()
+    register_zarr(args.uri, endpoint=args.endpoint, name=args.name, nosignrequest=args.nosignrequest, target=args.target, target_by_name=args.target_by_name)
+
+def register_zarr(uri, endpoint=None, name=None, nosignrequest=False, target=None, target_by_name=None):
+    logger = logging.getLogger('omero_adi')
 
     with cli_login() as cli:
         conn = BlitzGateway(client_obj=cli._client)
-        uri = args.uri
-        endpoint = args.endpoint
-        nosignrequest = args.nosignrequest
         validate_endpoint(endpoint)
         if uri.startswith("/"):
             transport_params = None
@@ -589,13 +590,13 @@ def main():
         print("type_to_register, uri", type_to_register, uri)
 
         if type_to_register == OBJECT_PLATE:
-            obj = register_plate(conn, uri, args.name, transport_params, endpoint=endpoint, uri_parameters=params)
+            obj = register_plate(conn, uri, name, transport_params, endpoint=endpoint, uri_parameters=params)
             
         else:
-            obj = register_image(conn, uri, args.name, transport_params, endpoint=endpoint, uri_parameters=params)
+            obj = register_image(conn, uri, name, transport_params, endpoint=endpoint, uri_parameters=params)
 
-        if args.target or args.target_by_name:
-            link_to_target(args, conn, obj)
+        if target or target_by_name:
+            link_to_target(conn, obj, target, target_by_name)
 
 if __name__ == "__main__":
     main()
