@@ -363,8 +363,7 @@ class DataPackageImporter:
             self.logger.error(f'Import failed for {str(file_path)}')
             return False
 
-    @connection
-    def import_zarr(self, conn, file_path, target_id, target_type):
+    def import_zarr_script(self, file_path, target_id, target_type):
         self.logger.debug(
             f"Starting import Zarr to OMERO for file: {file_path}, Target: {target_id} ({target_type})")
 
@@ -374,7 +373,6 @@ class DataPackageImporter:
         else:
             zarr_file_path = file_path
 
-        #register_zarr(uri=zarr_file_path, name=file_title, target=target_id)
         process = subprocess.run(['omero_adi/utils/register.py', zarr_file_path, '--name', file_title, '--target', str(target_id)],
                                  check=False, timeout=60, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if process.returncode != 0:
@@ -386,6 +384,60 @@ class DataPackageImporter:
         else:
             #image_ids, _ = self.get_image_id(str(file_path), target_id)
             image_ids=None
+
+        result_id = image_ids[0] if image_ids else None
+        if result_id is not None:
+            self.imported = True
+            self.logger.info(f'Imported successfully for {str(file_path)}')
+        else:
+            self.imported = False
+            self.logger.error(f'Import failed for {str(file_path)}')
+
+        return image_ids
+
+    @connection
+    def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=True):
+        from .register import (register_image, register_plate, link_to_target, urlsplit, validate_uri, validate_endpoint,
+                               create_client, get_uri_parameters, determine_object_to_register)
+        from types import SimpleNamespace
+
+        target = target_id
+        args = SimpleNamespace(target=target, target_by_name=target_by_name)
+        name = os.path.basename(file_path)
+        if not file_path.endswith('/'):
+            uri = file_path + '/'
+        else:
+            uri = file_path
+
+        validate_endpoint(endpoint)
+        if uri.startswith("/"):
+            transport_params = None
+        else:
+            parsed_uri = urlsplit(uri)
+            scheme = "{0.scheme}".format(parsed_uri)
+            if "http" in scheme:
+                endpoint = "https://" + "{0.netloc}".format(parsed_uri)
+                nosignrequest = True
+                path = "{0.path}".format(parsed_uri)
+                if path.startswith("/"):
+                    path = path[1:]
+                uri = "s3://" + path
+
+            uri = validate_uri(uri)
+            transport_params = create_client(endpoint, nosignrequest)
+        params = get_uri_parameters(transport_params, nosignrequest)
+        type_to_register, uri = determine_object_to_register(uri, transport_params)
+        print("type_to_register, uri", type_to_register, uri)
+
+        if target_type != 'Dataset':
+            obj = register_plate(conn, uri, name, transport_params, endpoint=endpoint, uri_parameters=params)
+            image_ids, _ = self.get_plate_ids(str(file_path), target_id)
+        else:
+            obj = register_image(conn, uri, name, transport_params, endpoint=endpoint, uri_parameters=params)
+            image_ids = [target_id]
+
+        if target or target_by_name:
+            link_to_target(args, conn, obj)
 
         result_id = image_ids[0] if image_ids else None
         if result_id is not None:
