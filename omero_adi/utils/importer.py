@@ -554,13 +554,21 @@ class DataPackageImporter:
             try:
                 if screen_id:
                     if not local_paths:
-                        imported = self.import_to_omero(
-                            file_path=str(file_path),
-                            target_id=screen_id,
-                            target_type='Screen',
-                            uuid=uuid,
-                            depth=10
-                        )
+                        if is_zarr:
+                            self.logger.debug(f"Importing Zarr dataset {file_path} to dataset {screen_id}")
+                            image_ids = self.import_zarr(
+                                file_path=str(file_path),
+                                target_id=screen_id,
+                                target_type='Screen',
+                            )
+                        else:
+                            imported = self.import_to_omero(
+                                file_path=str(file_path),
+                                target_id=screen_id,
+                                target_type='Screen',
+                                uuid=uuid,
+                                depth=10
+                            )
                         image_ids, _ = self.get_plate_ids(
                             str(file_path), screen_id)
                     else:
