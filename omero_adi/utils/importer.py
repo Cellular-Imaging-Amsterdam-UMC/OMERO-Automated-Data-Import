@@ -397,63 +397,73 @@ class DataPackageImporter:
 
     @connection
     def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=True):
-        from .register import (register_image, register_plate, link_to_target, urlsplit, validate_uri, validate_endpoint,
-                               create_client, get_uri_parameters, determine_object_to_register, OBJECT_PLATE)
+        from .register import load_attrs, register_image, register_plate, link_to_target, validate_endpoint
+        import zarr
         from types import SimpleNamespace
 
         target = target_id
-        args = SimpleNamespace(target=target, target_by_name=target_by_name, name=os.path.basename(file_path))
         if not file_path.endswith('/'):
             uri = file_path + '/'
         else:
             uri = file_path
+        #uri = file_path
+        args = SimpleNamespace(uri=uri, endpoint=endpoint, name=os.path.basename(file_path),
+                               nosignrequest=nosignrequest, target=target, target_by_name=target_by_name)
 
         # --- start copy from register.main() ---
 
         validate_endpoint(endpoint)
+        store = None
         if uri.startswith("/"):
-            transport_params = None
+            store = zarr.storage.LocalStore(uri, read_only=True)
         else:
-            parsed_uri = urlsplit(uri)
-            scheme = "{0.scheme}".format(parsed_uri)
-            if "http" in scheme:
-                endpoint = "https://" + "{0.netloc}".format(parsed_uri)
-                nosignrequest = True
-                path = "{0.path}".format(parsed_uri)
-                if path.startswith("/"):
-                    path = path[1:]
-                uri = "s3://" + path
+            storage_options = {}
+            if nosignrequest:
+                storage_options['anon'] = True
 
-            uri = validate_uri(uri)
-            transport_params = create_client(endpoint, nosignrequest)
-        params = get_uri_parameters(transport_params, nosignrequest)
-        type_to_register, uri = determine_object_to_register(uri, transport_params)
-        print("type_to_register, uri", type_to_register, uri)
+            if endpoint:
+                storage_options['client_kwargs'] = {'endpoint_url': endpoint}
 
-        if type_to_register == OBJECT_PLATE:
-            obj = register_plate(conn, uri, args.name, transport_params, endpoint=endpoint, uri_parameters=params)
+            store = zarr.storage.FsspecStore.from_url(uri,
+                                                      read_only=True,
+                                                      storage_options=storage_options
+                                                      )
 
+        zattrs = load_attrs(store)
+        objs = []
+        if "plate" in zattrs:
+            print("Registering: Plate")
+            objs = [register_plate(conn, store, args, zattrs)]
         else:
-            obj = register_image(conn, uri, args.name, transport_params, endpoint=endpoint, uri_parameters=params)
+            if "bioformats2raw.layout" in zattrs and zattrs["bioformats2raw.layout"] == 3:
+                print("Registering: bioformats2raw.layout")
+                series = 0
+                series_exists = True
+                while series_exists:
+                    try:
+                        print("Checking for series:", series)
+                        obj = register_image(conn, store, args, None, image_path=str(series))
+                        objs.append(obj)
+                    except FileNotFoundError:
+                        series_exists = False
+                    series += 1
+            else:
+                print("Registering: Image")
+                objs = [register_image(conn, store, args, zattrs)]
 
         if args.target or args.target_by_name:
-            link_to_target(args, conn, obj)
+            for obj in objs:
+                link_to_target(args, conn, obj)
 
         # --- end copy from register.main() ---
 
-        if target_type != 'Dataset':
-            image_ids, _ = self.get_plate_ids(str(file_path), target_id)
-        else:
-            image_ids = [target_id]
-
-        result_id = image_ids[0] if image_ids else None
-        if result_id is not None:
+        image_ids = [obj.getId().getValue() for obj in objs]
+        if image_ids:
             self.imported = True
-            self.logger.info(f'Imported successfully for {str(file_path)}')
+            self.logger.info(f'Import successfully for {str(file_path)}')
         else:
             self.imported = False
             self.logger.error(f'Import failed for {str(file_path)}')
-
         return image_ids
 
     @connection
