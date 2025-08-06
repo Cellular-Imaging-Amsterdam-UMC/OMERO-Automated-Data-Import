@@ -22,14 +22,15 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "ezomero @ git+https://github.com/TheJacksonLaboratory/ezomero.git@9ea21e07f012ea17f39717925207389598d40d38",
+    "ezomero",
     "pandas>=2.2.1",
     "numpy>=1.26.4",
     "openpyxl>=3.1.2",
     "python-dotenv>=1.0.1",
     "pytest>=8.2.1",
     "sqlalchemy>=2.0.28",
-    "psycopg2>=2.9.7"
+    "psycopg2>=2.9.7",
+    "zarr>=3"
 ]
 
 [project.optional-dependencies]

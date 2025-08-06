@@ -398,16 +398,17 @@ class DataPackageImporter:
     @connection
     def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=True):
         from .register import (register_image, register_plate, link_to_target, urlsplit, validate_uri, validate_endpoint,
-                               create_client, get_uri_parameters, determine_object_to_register)
+                               create_client, get_uri_parameters, determine_object_to_register, OBJECT_PLATE)
         from types import SimpleNamespace
 
         target = target_id
-        args = SimpleNamespace(target=target, target_by_name=target_by_name)
-        name = os.path.basename(file_path)
+        args = SimpleNamespace(target=target, target_by_name=target_by_name, name=os.path.basename(file_path))
         if not file_path.endswith('/'):
             uri = file_path + '/'
         else:
             uri = file_path
+
+        # --- start copy from register.main() ---
 
         validate_endpoint(endpoint)
         if uri.startswith("/"):
@@ -429,15 +430,21 @@ class DataPackageImporter:
         type_to_register, uri = determine_object_to_register(uri, transport_params)
         print("type_to_register, uri", type_to_register, uri)
 
+        if type_to_register == OBJECT_PLATE:
+            obj = register_plate(conn, uri, args.name, transport_params, endpoint=endpoint, uri_parameters=params)
+
+        else:
+            obj = register_image(conn, uri, args.name, transport_params, endpoint=endpoint, uri_parameters=params)
+
+        if args.target or args.target_by_name:
+            link_to_target(args, conn, obj)
+
+        # --- end copy from register.main() ---
+
         if target_type != 'Dataset':
-            obj = register_plate(conn, uri, name, transport_params, endpoint=endpoint, uri_parameters=params)
             image_ids, _ = self.get_plate_ids(str(file_path), target_id)
         else:
-            obj = register_image(conn, uri, name, transport_params, endpoint=endpoint, uri_parameters=params)
             image_ids = [target_id]
-
-        if target or target_by_name:
-            link_to_target(args, conn, obj)
 
         result_id = image_ids[0] if image_ids else None
         if result_id is not None:
