@@ -396,18 +396,15 @@ class DataPackageImporter:
         return image_ids
 
     @connection
-    def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=True):
+    def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=False):
         from .register import load_attrs, register_image, register_plate, link_to_target, validate_endpoint
         import zarr
         from types import SimpleNamespace
 
         target = target_id
-        if not file_path.endswith('/'):
-            uri = file_path + '/'
-        else:
-            uri = file_path
-        #uri = file_path
-        args = SimpleNamespace(uri=uri, endpoint=endpoint, name=os.path.basename(file_path),
+        uri = file_path
+        file_title = os.path.splitext(os.path.basename(file_path))[0].rstrip('.ome')
+        args = SimpleNamespace(uri=uri, endpoint=endpoint, name=file_title,
                                nosignrequest=nosignrequest, target=target, target_by_name=target_by_name)
 
         # --- start copy from register.main() ---
