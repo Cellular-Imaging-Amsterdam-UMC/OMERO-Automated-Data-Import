@@ -3,7 +3,6 @@ import csv
 import shutil
 import logging
 import functools
-import subprocess
 import time
 from subprocess import Popen, PIPE, STDOUT
 from importlib import import_module
@@ -362,38 +361,6 @@ class DataPackageImporter:
             self.imported = False
             self.logger.error(f'Import failed for {str(file_path)}')
             return False
-
-    def import_zarr_script(self, file_path, target_id, target_type):
-        self.logger.debug(
-            f"Starting import Zarr to OMERO for file: {file_path}, Target: {target_id} ({target_type})")
-
-        file_title = os.path.basename(file_path)
-        if not file_path.endswith('/'):
-            zarr_file_path = file_path + '/'
-        else:
-            zarr_file_path = file_path
-
-        process = subprocess.run(['omero_adi/utils/register.py', zarr_file_path, '--name', file_title, '--target', str(target_id)],
-                                 check=False, timeout=60, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if process.returncode != 0:
-            self.logger.warning(process.stdout.decode())
-            self.logger.error(process.stderr.decode())
-
-        if target_type == 'Screen':
-            image_ids, _ = self.get_plate_ids(str(file_path), target_id)
-        else:
-            #image_ids, _ = self.get_image_id(str(file_path), target_id)
-            image_ids=None
-
-        result_id = image_ids[0] if image_ids else None
-        if result_id is not None:
-            self.imported = True
-            self.logger.info(f'Imported successfully for {str(file_path)}')
-        else:
-            self.imported = False
-            self.logger.error(f'Import failed for {str(file_path)}')
-
-        return image_ids
 
     @connection
     def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=False):
