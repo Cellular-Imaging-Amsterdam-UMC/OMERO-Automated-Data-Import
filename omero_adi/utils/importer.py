@@ -583,8 +583,8 @@ class DataPackageImporter:
                                 uuid=uuid,
                                 depth=10
                             )
-                        image_ids, _ = self.get_plate_ids(
-                            str(file_path), screen_id)
+                            image_ids, _ = self.get_plate_ids(
+                                str(file_path), screen_id)
                     else:
                         # If local_paths, we have done preprocessing 
                         # data is now in PROCESSED_DATA_FOLDER subfolder on remote storage
