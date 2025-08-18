@@ -363,14 +363,13 @@ class DataPackageImporter:
             return False
 
     @connection
-    def import_zarr(self, conn, file_path, target_id, target_type, target_by_name=None, endpoint=None, nosignrequest=False):
+    def import_zarr(self, conn, uri, target, target_type, target_by_name=None, endpoint=None, nosignrequest=False):
+        # Using https://github.com/BioNGFF/omero-import-utils/blob/main/metadata/register.py
         from .register import load_attrs, register_image, register_plate, link_to_target, validate_endpoint
         import zarr
         from types import SimpleNamespace
 
-        target = target_id
-        uri = file_path
-        file_title = os.path.splitext(os.path.basename(file_path))[0].rstrip('.ome')
+        file_title = os.path.splitext(os.path.basename(uri))[0].rstrip('.ome')
         args = SimpleNamespace(uri=uri, endpoint=endpoint, name=file_title,
                                nosignrequest=nosignrequest, target=target, target_by_name=target_by_name)
 
@@ -424,10 +423,10 @@ class DataPackageImporter:
         image_ids = [obj.getId().getValue() for obj in objs]
         if image_ids:
             self.imported = True
-            self.logger.info(f'Import successfully for {str(file_path)}')
+            self.logger.info(f'Import successfully for {str(uri)}')
         else:
             self.imported = False
-            self.logger.error(f'Import failed for {str(file_path)}')
+            self.logger.error(f'Import failed for {str(uri)}')
         return image_ids
 
     @connection
@@ -538,8 +537,8 @@ class DataPackageImporter:
                         if is_zarr:
                             self.logger.debug(f"Importing Zarr dataset {file_path} to dataset {screen_id}")
                             image_ids = self.import_zarr(
-                                file_path=str(file_path),
-                                target_id=screen_id,
+                                uri=str(file_path),
+                                target=screen_id,
                                 target_type='Screen',
                             )
                         else:
@@ -625,8 +624,8 @@ class DataPackageImporter:
                         if is_zarr:
                             self.logger.debug(f"Importing Zarr dataset {file_path} to dataset {dataset_id}")
                             image_ids = self.import_zarr(
-                                file_path=str(file_path),
-                                target_id=dataset_id,
+                                uri=str(file_path),
+                                target=dataset_id,
                                 target_type='Dataset',
                             )
                         else:
