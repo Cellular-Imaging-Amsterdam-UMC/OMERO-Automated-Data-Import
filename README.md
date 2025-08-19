@@ -19,6 +19,8 @@ The system uses SQLAlchemy models to manage:
 - **Preprocessing**: Optional containerized preprocessing steps stored in `imports_preprocessing` table
 - **Progress Tracking**: Complete audit trail of all import operations
 
+![Flow Diagram of ADI import proces](flow_diagram_ADI_import.png)
+
 ### Key Components
 
 - **DatabasePoller**: Continuously polls for new orders with `STAGE_NEW_ORDER` status
