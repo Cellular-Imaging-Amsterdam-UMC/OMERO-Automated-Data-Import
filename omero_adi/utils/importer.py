@@ -299,6 +299,7 @@ class DataPackageImporter:
         self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
+        self.use_register_zarr = os.getenv('USE_REGISTER_ZARR', config.get('use_register_zarr', True))
 
         # Validate environment variables
         if not all([self.host, self.password, self.user, self.port]):
@@ -310,7 +311,7 @@ class DataPackageImporter:
 
     def import_to_omero(self, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
         is_zarr = os.path.splitext(file_path)[1].lower() == '.zarr'
-        if is_zarr:
+        if is_zarr and self.use_register_zarr:
             return self.import_zarr(
                 uri=file_path,
                 target=target_id,
@@ -327,9 +328,9 @@ class DataPackageImporter:
             )
             if target_type == 'Screen':
                 image_ids, _ = self.get_plate_ids(
-                    str(file_path), screen_id)
+                    str(file_path), target_id)
             else:
-                image_ids = dataset_id
+                image_ids = target_id
             return image_ids
 
     @connection
@@ -514,7 +515,7 @@ class DataPackageImporter:
 
     def import_dataset(self, target, dataset, transfer="ln_s", depth=None):
         is_zarr = os.path.splitext(target)[1].lower() == '.zarr'
-        if is_zarr:
+        if is_zarr and self.use_register_zarr:
             return self.import_zarr(
                 uri=dataset,
                 target=target,
