@@ -89,7 +89,7 @@ The system uses these environment variables:
 
 ## Creating Upload Orders
 
-Upload orders are typically created through a user interface, such as [OMERO.boost (CANVAS)](https://github.com/Cellular-Imaging-Amsterdam-UMC/omero-boost), an OMERO.web plugin. However, orders can also be created programmatically using the database API. 
+Upload orders are typically created through a user interface, such as the OMERO.biomero plugin (Importer tab) at `/omero_biomero/biomero/`, an OMERO.web extension. However, orders can also be created programmatically using the database API. 
 
 You can use the provided test scripts shown below as examples. 
 You can also configure some more settings for them: 
