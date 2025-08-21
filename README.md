@@ -69,6 +69,8 @@ skip_minmax: false
 skip_thumbnails: false
 skip_upgrade: false
 skip_all: false
+
+use_register_zarr: true
 ```
 
 **Note**: The `upload_orders_dir_name`, `data_dir_name`, and `failed_uploads_directory_name` settings are **legacy from the old file-based system** and are no longer used in the current database-driven implementation.
@@ -83,6 +85,7 @@ The system uses these environment variables:
 - `OMERO_PASSWORD`: OMERO root password
 - `OMERO_PORT`: OMERO server port
 - `PODMAN_USERNS_MODE`: Set to "keep-id" for Linux user namespace mapping in preprocessing
+- `USE_REGISTER_ZARR`: Set to "true" to enable zarr register script - requires omero-zarr-pixel-buffer (overrides config file setting)
 
 ## Creating Upload Orders
 

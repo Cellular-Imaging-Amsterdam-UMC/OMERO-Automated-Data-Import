@@ -29,6 +29,8 @@ skip_thumbnails: true
 skip_upgrade: true
 # Connection timeout in milliseconds
 ttl_for_user_conn: 60000
+# Use ADI zarr register script to register ome-zarrs - requires omero-zarr-pixel-buffer
+use_register_zarr: true
 
 #------------------------------------------------#
 # Test settings

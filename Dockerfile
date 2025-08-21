@@ -1,16 +1,16 @@
 # Start from the Miniconda base image to use Conda
-FROM continuumio/miniconda3:24.1.2-0
+FROM continuumio/miniconda3:25.3.1-1
 
 # Set the working directory in the container
 WORKDIR /auto-importer
 
 # Create a Conda environment
-RUN conda create -n auto-import-env python=3.10 -y
+RUN conda create -n auto-import-env python=3.12 -y
 
 # Install omero-py, bftools, and psycopg2 using Conda
 RUN conda install -n auto-import-env -c conda-forge omero-py -y && \
     conda install -n auto-import-env -c bioconda bftools -y && \
-    conda install -n auto-import-env -c conda-forge psycopg2 libffi==3.3 -y && \
+    conda install -n auto-import-env -c conda-forge psycopg2 libffi==3.4.4 -y && \
     conda install -n auto-import-env -c conda-forge intel-openmp=2019.4 -y
 
 # Activate the environment by setting the path to environment's bin directory

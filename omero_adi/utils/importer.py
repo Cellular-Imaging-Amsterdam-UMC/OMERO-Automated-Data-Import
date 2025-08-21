@@ -299,6 +299,7 @@ class DataPackageImporter:
         self.password = os.getenv('OMERO_PASSWORD')
         self.user = os.getenv('OMERO_USER')
         self.port = os.getenv('OMERO_PORT')
+        self.use_register_zarr = os.getenv('USE_REGISTER_ZARR', config.get('use_register_zarr', True))
 
         # Validate environment variables
         if not all([self.host, self.password, self.user, self.port]):
@@ -308,8 +309,32 @@ class DataPackageImporter:
 
         self.imported = False
 
+    def import_to_omero(self, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
+        is_zarr = os.path.splitext(file_path)[1].lower() == '.zarr'
+        if is_zarr and self.use_register_zarr:
+            return self.import_zarr(
+                uri=file_path,
+                target=target_id,
+                target_type=target_type,
+            )
+        else:
+            imported = self.import_to_omero_nozarr(
+                file_path=file_path,
+                target_id=target_id,
+                target_type=target_type,
+                uuid=uuid,
+                transfer_type=transfer_type,
+                depth=depth
+            )
+            if target_type == 'Screen':
+                image_ids, _ = self.get_plate_ids(
+                    str(file_path), target_id)
+            else:
+                image_ids = target_id
+            return image_ids
+
     @connection
-    def import_to_omero(self, conn, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
+    def import_to_omero_nozarr(self, conn, file_path, target_id, target_type, uuid, transfer_type="ln_s", depth=None):
         self.logger.debug(
             f"Starting import to OMERO for file: {file_path}, Target: {target_id} ({target_type})")
         cli = CLI()
@@ -361,6 +386,73 @@ class DataPackageImporter:
             self.imported = False
             self.logger.error(f'Import failed for {str(file_path)}')
             return False
+
+    @connection
+    def import_zarr(self, conn, uri, target, target_type, target_by_name=None, endpoint=None, nosignrequest=False):
+        # Using https://github.com/BioNGFF/omero-import-utils/blob/main/metadata/register.py
+        from .register import load_attrs, register_image, register_plate, link_to_target, validate_endpoint
+        import zarr
+        from types import SimpleNamespace
+
+        file_title = os.path.splitext(os.path.basename(uri))[0].rstrip('.ome')
+        args = SimpleNamespace(uri=uri, endpoint=endpoint, name=file_title,
+                               nosignrequest=nosignrequest, target=target, target_by_name=target_by_name)
+
+        # --- start copy from register.main() ---
+
+        validate_endpoint(endpoint)
+        store = None
+        if uri.startswith("/"):
+            store = zarr.storage.LocalStore(uri, read_only=True)
+        else:
+            storage_options = {}
+            if nosignrequest:
+                storage_options['anon'] = True
+
+            if endpoint:
+                storage_options['client_kwargs'] = {'endpoint_url': endpoint}
+
+            store = zarr.storage.FsspecStore.from_url(uri,
+                                                      read_only=True,
+                                                      storage_options=storage_options
+                                                      )
+
+        zattrs = load_attrs(store)
+        objs = []
+        if "plate" in zattrs:
+            print("Registering: Plate")
+            objs = [register_plate(conn, store, args, zattrs)]
+        else:
+            if "bioformats2raw.layout" in zattrs and zattrs["bioformats2raw.layout"] == 3:
+                print("Registering: bioformats2raw.layout")
+                series = 0
+                series_exists = True
+                while series_exists:
+                    try:
+                        print("Checking for series:", series)
+                        obj = register_image(conn, store, args, None, image_path=str(series))
+                        objs.append(obj)
+                    except FileNotFoundError:
+                        series_exists = False
+                    series += 1
+            else:
+                print("Registering: Image")
+                objs = [register_image(conn, store, args, zattrs)]
+
+        if args.target or args.target_by_name:
+            for obj in objs:
+                link_to_target(args, conn, obj)
+
+        # --- end copy from register.main() ---
+
+        image_ids = [obj.getId().getValue() for obj in objs]
+        if image_ids:
+            self.imported = True
+            self.logger.info(f'Import successfully for {str(uri)}')
+        else:
+            self.imported = False
+            self.logger.error(f'Import failed for {str(uri)}')
+        return image_ids
 
     @connection
     def get_plate_ids(self, conn, file_path, screen_id):
@@ -421,8 +513,24 @@ class DataPackageImporter:
         template_prefixes = [r[0].val for r in results]
         return [], template_prefixes  # Return format consistent with get_plate_ids
 
+    def import_dataset(self, target, dataset, transfer="ln_s", depth=None):
+        is_zarr = os.path.splitext(target)[1].lower() == '.zarr'
+        if is_zarr and self.use_register_zarr:
+            return self.import_zarr(
+                uri=dataset,
+                target=target,
+                target_type='Dataset',
+            )
+        else:
+            return self.import_dataset_nozarr(
+                target=target,
+                dataset=dataset,
+                transfer=transfer,
+                depth=depth
+            )
+
     @connection
-    def import_dataset(self, conn, target, dataset, transfer="ln_s", depth=None):
+    def import_dataset_nozarr(self, conn, target, dataset, transfer="ln_s", depth=None):
         kwargs = {"transfer": transfer}
         if 'parallel_upload_per_worker' in self.config:
             kwargs['parallel-upload'] = str(
@@ -466,33 +574,29 @@ class DataPackageImporter:
             try:
                 if screen_id:
                     if not local_paths:
-                        imported = self.import_to_omero(
+                        image_ids = self.import_to_omero(
                             file_path=str(file_path),
                             target_id=screen_id,
                             target_type='Screen',
                             uuid=uuid,
                             depth=10
                         )
-                        image_ids, _ = self.get_plate_ids(
-                            str(file_path), screen_id)
                     else:
-                        # If local_paths, we have done preprocessing 
+                        # If local_paths, we have done preprocessing
                         # data is now in PROCESSED_DATA_FOLDER subfolder on remote storage
                         # and in local_paths folder on the omero server storage
-                        # we will import now in-place from the omero server storage 
+                        # we will import now in-place from the omero server storage
                         # and then we'll switch the in-place symlinks to the remote storage (subfolder)
-                        fp = str(local_paths[i])            # TODO: assumes 1:1 local_paths and file_paths
+                        fp = str(local_paths[i])  # TODO: assumes 1:1 local_paths and file_paths
                         self.logger.debug(f"Importing {fp}")
-                        imported = self.import_to_omero(
+                        image_ids = self.import_to_omero(
                             file_path=fp,
                             target_id=screen_id,
                             target_type='Screen',
                             uuid=uuid,
                             depth=10
                         )
-                        self.logger.debug("Upload done. Retrieving plate id.")
-                        image_ids, local_file_dir = self.get_plate_ids(
-                            str(local_paths[i]), screen_id) 
+                        self.logger.debug("Upload done, retrieved plate id.")
                         # TODO: assumes 1:1 local_paths and file_paths
 
                         # rsync file to remote and point symlink there
@@ -501,7 +605,7 @@ class DataPackageImporter:
                             file_path) else os.path.dirname(file_path)
                         # select the PROCESSED_DATA_FOLDER subfolder with processed data
                         remote_path = os.path.join(remote_path, PROCESSED_DATA_FOLDER)
-                        
+
                         local_file_dir = local_file_dir[0].rstrip("/") + "/"
                         local_file_dir = "/OMERO/ManagedRepository/" + local_file_dir
                         # self.logger.debug(f"Move {local_file_dir} to {remote_path}")
@@ -553,14 +657,13 @@ class DataPackageImporter:
                             )
                             self.logger.debug(f"EZimport returned ids {image_ids} for {str(file_path)} ({dataset_id})")
                         elif os.path.isdir(file_path):
-                            imported = self.import_to_omero(
+                            image_ids = self.import_to_omero(
                                 file_path=str(file_path),
                                 target_id=dataset_id,
                                 target_type='Dataset',
                                 uuid=uuid,
                                 depth=10
                             )
-                            image_ids = dataset_id
                             self.logger.debug(f"Set ids {image_ids} to the dataset {dataset_id}")
                         else:
                             raise ValueError(
@@ -569,7 +672,7 @@ class DataPackageImporter:
                         # Preprocessed dataset import logic
                         fp = str(local_paths[i])  # TODO: assumes 1:1 local_paths and file_paths
                         self.logger.debug(f"Importing {fp}")
-                        
+
                         if os.path.isfile(fp):
                             image_ids = self.import_dataset(
                                 target=fp,
@@ -577,15 +680,14 @@ class DataPackageImporter:
                                 transfer="ln_s"
                             )
                         else:
-                            imported = self.import_to_omero(
+                            image_ids = self.import_to_omero(
                                 file_path=fp,
                                 target_id=dataset_id,
                                 target_type='Dataset',
                                 uuid=uuid,
                                 depth=10
                             )
-                            image_ids = dataset_id
-                        
+
                         # Get the OMERO storage path for datasets
                         _, local_file_dir = self.get_image_paths(str(local_paths[i]), dataset_id)
                         # TODO: assumes 1:1 local_paths and file_paths
@@ -595,7 +697,7 @@ class DataPackageImporter:
                             file_path) else os.path.dirname(file_path)
                         # select the PROCESSED_DATA_FOLDER subfolder with processed data
                         remote_path = os.path.join(remote_path, PROCESSED_DATA_FOLDER)
-                        
+
                         local_file_dir = local_file_dir[0].rstrip("/") + "/"
                         local_file_dir = "/OMERO/ManagedRepository/" + local_file_dir
                         # self.logger.debug(f"Move {local_file_dir} to {remote_path}")
@@ -645,7 +747,8 @@ class DataPackageImporter:
                     self.logger.debug(f"Postprocessing ids {image_ids}: max ID = {image_or_plate_id}")
                     try:
                         self.add_image_annotations(
-                            conn, image_or_plate_id, uuid, file_path, is_screen=bool(screen_id), local_path=local_paths[i] if local_paths else None)
+                            conn, image_or_plate_id, uuid, file_path, is_screen=bool(screen_id),
+                            local_path=local_paths[i] if local_paths else None)
                         self.logger.info(
                             f"Uploaded file: {file_path} to target: {upload_target} with ID: {image_or_plate_id}")
                     except Exception as annotation_error:
