@@ -9,15 +9,15 @@ dynamic = ["version"]
 description = "OMERO Automated Data Import (ADI) System"
 authors = [{ name = "Rodrigo Rosas-Bertolini", email = "cellularimaging@amsterdamumc.nl" }]
 license = { file = "LICENSE" }
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 readme = "README.md"  
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
