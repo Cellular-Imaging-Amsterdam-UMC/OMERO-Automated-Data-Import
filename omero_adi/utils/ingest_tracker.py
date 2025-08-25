@@ -51,6 +51,8 @@ class IngestionTracking(Base):
     timestamp = Column(DateTime(timezone=True), default=func.now())
     _files = Column("files", Text, nullable=False)
     _file_names = Column("file_names", Text, nullable=True)
+    # Optional human-readable description for the step (e.g., failure reason)
+    description = Column(Text, nullable=True)
 
     preprocessing_id = Column(Integer, ForeignKey(
         'imports_preprocessing.id'), nullable=True)
@@ -152,7 +154,11 @@ class IngestTracker:
                         stage=stage,
                         uuid=str(order_info.get('UUID', 'Unknown')),
                         files=order_info.get('Files', []),
-                        file_names=order_info.get('FileNames', [])
+                        file_names=order_info.get('FileNames', []),
+                        description=(
+                            order_info.get('Description')
+                            or order_info.get('description')
+                        )
                     )
 
                     session.add(new_entry)

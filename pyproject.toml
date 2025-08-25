@@ -30,7 +30,8 @@ dependencies = [
     "pytest>=8.2.1",
     "sqlalchemy>=2.0.28",
     "psycopg2>=2.9.7",
-    "zarr>=3"
+    "zarr>=3",
+    "alembic>=1.13"
 ]
 
 [project.optional-dependencies]
@@ -50,3 +51,6 @@ find = {}  # Scan the project directory with the default parameters
 
 [tool.pytest.ini_options]
 cache_dir = "/tmp/.pytest_cache"
+
+[tool.setuptools.package-data]
+omero_adi = ["migrations/**", "migrations/versions/**"]

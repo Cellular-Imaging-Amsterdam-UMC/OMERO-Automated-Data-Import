@@ -24,6 +24,7 @@ from .utils.ingest_tracker import (
     STAGE_IMPORTED
 )
 from .utils.ingest_tracker import IngestionTracking, Base, get_ingest_tracker
+from .db_migrate import run_migrations_on_startup
 
 # --------------------------------------------------
 # Utility function to load settings
@@ -148,11 +149,16 @@ class IngestionProcess:
             package_uuid = self.data_package.get('UUID')
 
             if import_failed or failed_uploads or (not successful_uploads and not failed_uploads):
-                self.logger.error(
+                error_msg = (
                     f"Import failed for data package {package_uuid} targeting OMERO {destination_id}. "
                     f"Failed files: {[f[0] for f in failed_uploads]}"
                 )
-                log_ingestion_step(self.data_package, STAGE_INGEST_FAILED)
+                self.logger.error(error_msg)
+                # include description for failure tracking
+                failed_pkg = dict(self.data_package)
+                if 'Description' not in failed_pkg:
+                    failed_pkg['Description'] = error_msg
+                log_ingestion_step(failed_pkg, STAGE_INGEST_FAILED)
             else:
                 self.logger.info(
                     f"Successfully imported data package {package_uuid} to OMERO {destination_id}. "
@@ -170,9 +176,11 @@ class IngestionProcess:
             return package_uuid
 
         except Exception as e:
-            self.logger.error(
-                f"Error during import_data_package: {e}", exc_info=True)
-            log_ingestion_step(self.data_package, STAGE_INGEST_FAILED)
+            error_msg = f"Exception during import_data_package: {e}"
+            self.logger.error(error_msg, exc_info=True)
+            failed_pkg = dict(self.data_package)
+            failed_pkg['Description'] = error_msg
+            log_ingestion_step(failed_pkg, STAGE_INGEST_FAILED)
             return self.data_package.get('UUID')
 
 # TODO: move the poller to the database logic?
@@ -291,9 +299,11 @@ class DatabasePoller:
                 ingestion_process.import_data_package)
             future.add_done_callback(self.create_order_callback(uuid_val))
         except Exception as e:
-            self.logger.error(
-                f"Error processing order {order_dict}: {e}", exc_info=True)
-            log_ingestion_step(order_dict, STAGE_INGEST_FAILED)
+            err = f"Error processing order {order_dict.get('UUID')}: {e}"
+            self.logger.error(err, exc_info=True)
+            failed = dict(order_dict)
+            failed['Description'] = err
+            log_ingestion_step(failed, STAGE_INGEST_FAILED)
             raise e
 
     def create_order_callback(self, uuid_val: str):
@@ -362,11 +372,19 @@ def main():
         logging.getLogger('ezomero').setLevel(logging.DEBUG)
 
         logger.info("Starting application...")
-
+        
+        logger.info("Testing OMERO connectivity...")
         # Test OMERO connectivity
         test_omero_connection()
 
+        logger.info("Initializing system (create tables if missing)...")
         initialize_system(config)
+
+        logger.info("Checking database migrations...")
+        # Run database migrations after tables exist for fresh installs
+        run_migrations_on_startup()
+
+        
         logger.info("Creating process executor...")
         executor = create_executor(config)
         groups_info = None

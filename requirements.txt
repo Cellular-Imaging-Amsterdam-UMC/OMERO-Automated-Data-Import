@@ -1,6 +1,0 @@
-ezomero>=2.1.0
-pandas==2.2.1
-numpy==1.26.4
-openpyxl==3.1.2
-python-dotenv==1.0.1
-pytest==8.2.1

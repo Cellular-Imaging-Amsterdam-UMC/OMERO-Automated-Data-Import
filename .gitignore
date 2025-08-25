@@ -2,8 +2,12 @@
 */__pycache__/
 config/groups_list.json
 venv/
+.venv/
+dist/
+build/
 test_logfile.log
-omeroadi.egg-info/
+omero_adi.egg-info/
+.pytest_cache/
 **/__pycache__
 .coverage
 logs/*

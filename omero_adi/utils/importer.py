@@ -935,7 +935,10 @@ class DataPackageImporter:
                                     self.data_package, STAGE_PREPROCESSING)
                                 success, processed_files, processed_metadata = processor.run(dry_run=False)
                                 if not success:
-                                    self.logger.error("Preprocessing failed.")
+                                    msg = "Preprocessing failed. See container logs for details."
+                                    self.logger.error(msg)
+                                    # propagate reason for DB description
+                                    self.data_package['Description'] = msg
                                     return [], [], True
                                 self.logger.info(
                                     "Preprocessing succeeded; proceeding with upload.")
@@ -986,23 +989,59 @@ class DataPackageImporter:
                             all_failed_uploads.extend(failed_uploads)
                             return all_successful_uploads, all_failed_uploads, False
 
+                except TypeError as te:
+                    # Handle suConn returning None (NoneType not a context manager)
+                    if (
+                        "context manager" in str(te)
+                        or "NoneType" in str(te)
+                    ):
+                        full_msg = (
+                            f"suConn failed for user '{intended_username}' in group "
+                            f"'{group_name}'. User may not exist or cannot be "
+                            f"impersonated."
+                        )
+                        self.logger.error(f"{full_msg} Error: {te}",
+                                          exc_info=True)
+                        
+                        # Simplified message for data_package description
+                        simple_msg = (
+                            f"User '{intended_username}' or group "
+                            f"'{group_name}' not recognized. Contact admin."
+                        )
+                        if not self.data_package.get('Description'):
+                            self.data_package['Description'] = simple_msg
+                        return [], [], True
+                    # Not our case, let the generic handler manage it
+                    raise
+
                 except Exception as e:
                     # TODO: can we use this decorator instead? no?
                     if "connect" in str(e).lower():
                         retry_count += 1
                         self.logger.error(
-                            f"Connection issue (attempt {retry_count}/{MAX_RETRIES}): {e}")
+                            f"Connection issue (attempt {retry_count}/"
+                            f"{MAX_RETRIES}): {e}")
                         if retry_count < MAX_RETRIES:
                             self.logger.info(
                                 f"Retrying in {RETRY_DELAY} seconds...")
                             time.sleep(RETRY_DELAY)
                             continue
-                    self.logger.error(
-                        f"Error during import: {e}", exc_info=True)
+                    msg = f"Error during import: {e}"
+                    self.logger.error(msg, exc_info=True)
+                    # Simplified message for DB
+                    self.data_package['Description'] = (
+                        "Import failed. Please retry; if it repeats, "
+                        "contact admin."
+                    )
                     return [], [], True
 
             self.logger.error(
                 f"Max retries ({MAX_RETRIES}) reached during import")
+            if not self.data_package.get('Description'):
+                self.data_package['Description'] = (
+                    "OMERO connection problem. Retry later; if it repeats, "
+                    "contact admin."
+                )
             return [], [], True
 
         except Exception as e:
