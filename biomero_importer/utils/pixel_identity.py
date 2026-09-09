@@ -1,5 +1,6 @@
 """Compatibility adapter; filesystem identity lives in biomero-shallower."""
 from typing import Any, Literal, Sequence, Mapping
+from importlib import import_module
 from biomero_schema.zarr import PixelIdentity
 from biomero_shallower.pixel_identity import *  # noqa: F401,F403
 from biomero_shallower.pixel_identity import (
@@ -10,6 +11,9 @@ from biomero_shallower.pixel_identity import (
 
 class IsccBioIdentityProvider(FilesystemIdentityProvider):
     """Add the OMERO source adapter to the shared filesystem provider."""
+
+    def _import_upstream(self):
+        return import_module("iscc_bio.api")
 
     def generate_omero(
         self,
