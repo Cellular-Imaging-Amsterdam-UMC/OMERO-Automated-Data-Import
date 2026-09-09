@@ -16,19 +16,32 @@ shared workspace environment or a running service container.
 
 Install the platform-specific ZeroC Ice 3.6.5 wheel from Glencoe before the
 editable package install. Do not ask pip to build `zeroc-ice` from PyPI. Then
-install the project with its test dependencies:
+install the project with its test and identity dependencies:
 
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\python -m pip install "zeroc-ice @ <Glencoe wheel URL>"
-.\.venv\Scripts\python -m pip install -e ".[test]"
+.\.venv\Scripts\python -m pip install "zeroc-ice @ https://github.com/glencoesoftware/zeroc-ice-py-win-x86_64/releases/download/20240325/zeroc_ice-3.6.5-cp312-cp312-win_amd64.whl"
+.\.venv\Scripts\python -m pip install -e ".[test,identity]"
+.\.venv\Scripts\python -m pip check
 ```
 
 On Linux or WSL, use the equivalent `.venv/bin/python` commands and the
 matching Glencoe Linux wheel. If native Windows hangs while importing OMERO
-plugins, use a repository-local WSL/Linux `.venv` matching CI rather than
-changing production code or treating a Docker smoke assertion as the test
-suite.
+plugins, use a repository-local WSL/Linux Python 3.12 `.venv` matching CI. If
+WSL lacks Python 3.12 and the matching NL-BIOMERO importer image has already
+been built, run the complete suite against the mounted checkout instead:
+
+```powershell
+docker run --rm `
+  --volume "${PWD}:/work" `
+  --workdir /work `
+  --entrypoint /opt/conda/bin/conda `
+  nl-biomero-biomero-importer:latest `
+  run -n auto-import-env python -m pytest tests/unittests -q
+```
+
+This is a full unit-suite fallback, not a container smoke assertion. Do not
+change production code to accommodate a platform-specific import hang.
 
 ## Verification
 
