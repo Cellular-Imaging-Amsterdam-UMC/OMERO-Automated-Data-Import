@@ -1,11 +1,13 @@
 """Tests for narrowly retrying transient Podman bind-source failures."""
 
 from io import BytesIO
+from threading import Event
 from unittest.mock import MagicMock, call, patch
 
 from biomero_importer.utils.importer import (
     DataProcessor,
     is_retryable_podman_run_error,
+    preprocessing_connection_keepalive,
 )
 
 
@@ -18,6 +20,23 @@ class FakeProcess:
 
     def wait(self):
         return self.return_code
+
+
+def test_preprocessing_keepalive_refreshes_all_omero_connections():
+    called = Event()
+    root_conn = MagicMock()
+    user_conn = MagicMock()
+    user_conn.keepAlive.side_effect = called.set
+
+    with preprocessing_connection_keepalive(
+        (("root", root_conn), ("user", user_conn)),
+        MagicMock(),
+        interval=0.01,
+    ):
+        assert called.wait(1)
+
+    root_conn.keepAlive.assert_called()
+    user_conn.keepAlive.assert_called()
 
 
 def test_retryable_podman_error_matches_only_bind_source_ebusy():
