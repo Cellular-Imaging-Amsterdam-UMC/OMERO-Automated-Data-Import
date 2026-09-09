@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, call, patch
 from biomero_importer.utils.importer import (
     DataProcessor,
     is_retryable_podman_run_error,
-    preprocessing_connection_keepalive,
+    omero_connection_keepalive,
 )
 
 
@@ -22,15 +22,16 @@ class FakeProcess:
         return self.return_code
 
 
-def test_preprocessing_keepalive_refreshes_all_omero_connections():
+def test_operation_keepalive_refreshes_all_omero_connections():
     called = Event()
     root_conn = MagicMock()
     user_conn = MagicMock()
     user_conn.keepAlive.side_effect = called.set
 
-    with preprocessing_connection_keepalive(
+    with omero_connection_keepalive(
         (("root", root_conn), ("user", user_conn)),
         MagicMock(),
+        "test operation",
         interval=0.01,
     ):
         assert called.wait(1)
