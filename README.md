@@ -93,6 +93,8 @@ The system uses these environment variables:
 - `OMERO_PASSWORD`: OMERO root password
 - `OMERO_PORT`: OMERO server port
 - `PODMAN_USERNS_MODE`: Set to "keep-id" for Linux user namespace mapping in preprocessing
+- `PROCESSED_DATA_FOLDER`: Subfolder name for preprocessing outputs and canonical
+  Zarr storage (default: `.processed`). Read when the importer starts.
 - `USE_REGISTER_ZARR`: Set to "true" to enable zarr register script - requires omero-zarr-pixel-buffer (overrides config file setting)
 - `BIOMERO_SHALLOW_ZARR`: Opt in to the native `biomero.shallow-zarr`
   lifecycle operation. Existing orders are unchanged when false or absent.
@@ -105,6 +107,20 @@ The system uses these environment variables:
 - `BIOMERO_SHALLOW_ZARR_WORKERS`: Bounded ISCC-BIO identity workers used by
   the importer service (library fallback `1`; NL-BIOMERO supplies `4`). This is
   deployment configuration, not a client-controlled import option.
+
+For example, set a different processed subfolder in the importer container's
+Docker Compose environment, then recreate the service:
+
+```yaml
+services:
+  biomero-importer:
+    environment:
+      PROCESSED_DATA_FOLDER: processed
+```
+
+```bash
+docker compose up -d --force-recreate biomero-importer
+```
 
 ## Creating Upload Orders
 

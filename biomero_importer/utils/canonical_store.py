@@ -15,7 +15,10 @@ from biomero_schema.zarr import CanonicalPlateSource, CanonicalZarrSource
 CANONICAL_MARKER_NAME = ".biomero-canonical.json"
 CANONICAL_MARKER_SCHEMA = 1
 CANONICAL_METADATA_DIRECTORY = ".biomero"
-PROCESSED_DATA_FOLDER = ".processed"
+PROCESSED_DATA_FOLDER = os.getenv(
+    "PROCESSED_DATA_FOLDER",
+    ".processed",
+)
 CanonicalSourceLike = Union[
     CanonicalZarrSource,
     CanonicalPlateSource,

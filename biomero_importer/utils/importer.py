@@ -29,7 +29,10 @@ IMPORT_RETRY_DELAY = 10  # Delay between import retries (in seconds)
 PODMAN_RUN_MAX_ATTEMPTS = 3  # Bounded retries for transient bind setup failures
 PODMAN_RUN_RETRY_DELAY = 2  # Initial retry delay, doubled after each failure
 TMP_OUTPUT_FOLDER = "OMERO_inplace"
-PROCESSED_DATA_FOLDER = ".processed"
+PROCESSED_DATA_FOLDER = os.getenv(
+    "PROCESSED_DATA_FOLDER",
+    ".processed",
+)
 SHALLOW_ZARR_ENABLED = (
     os.getenv("BIOMERO_SHALLOW_ZARR", "false").lower() == "true"
 )
