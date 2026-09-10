@@ -44,4 +44,3 @@ class IsccBioIdentityProvider(FilesystemIdentityProvider):
             axes=axes,
             coordinate_transformations=coordinate_transformations,
         )
-
