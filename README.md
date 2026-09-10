@@ -94,7 +94,9 @@ The system uses these environment variables:
 - `OMERO_PORT`: OMERO server port
 - `PODMAN_USERNS_MODE`: Set to "keep-id" for Linux user namespace mapping in preprocessing
 - `PROCESSED_DATA_FOLDER`: Subfolder name for preprocessing outputs and canonical
-  Zarr storage (default: `.processed`). Read when the importer starts.
+  Zarr storage (default: `.processed` when the variable is unset). Read when the
+  importer starts. The value is used as supplied: no leading dot is added or
+  removed. Use a non-empty relative subfolder name.
 - `USE_REGISTER_ZARR`: Set to "true" to enable zarr register script - requires omero-zarr-pixel-buffer (overrides config file setting)
 - `BIOMERO_SHALLOW_ZARR`: Opt in to the native `biomero.shallow-zarr`
   lifecycle operation. Existing orders are unchanged when false or absent.
@@ -107,6 +109,28 @@ The system uses these environment variables:
 - `BIOMERO_SHALLOW_ZARR_WORKERS`: Bounded ISCC-BIO identity workers used by
   the importer service (library fallback `1`; NL-BIOMERO supplies `4`). This is
   deployment configuration, not a client-controlled import option.
+
+### Configuring the processed data folder
+
+`PROCESSED_DATA_FOLDER=processed` writes to a subfolder named `processed`;
+`PROCESSED_DATA_FOLDER=.import` writes to `.import`. Leaving the variable unset
+keeps the existing `.processed` default.
+
+> [!WARNING]
+> **Choose this setting before the first import whenever possible. Changing it
+> on an existing deployment requires planning; there is no built-in migration.**
+>
+> Changing from `.processed` to `.import` leaves existing data in `.processed`
+> and directs new processed outputs to `.import`, so both folders can coexist.
+> The importer does not move existing data or rewrite existing OMERO links or
+> stored paths. Existing in-place imports remain readable through their recorded
+> paths and symlinks **as long as the original data stays accessible at those
+> paths**. Renaming, moving, or deleting the old folder can break pixel access.
+>
+> Preprocessing and processed-metadata lookup use the current setting, so retries
+> or reprocessing of older orders may need manual handling. Let active imports
+> finish before changing the setting, retain the old folder and its mounts, and
+> plan any data migration separately.
 
 For example, set a different processed subfolder in the importer container's
 Docker Compose environment, then recreate the service:
