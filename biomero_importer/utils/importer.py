@@ -5,9 +5,11 @@ import logging
 import functools
 import re
 import time
+from contextlib import contextmanager
 from subprocess import Popen, PIPE, STDOUT
 from importlib import import_module
 from pathlib import PurePath
+from threading import Event, Thread
 
 import ezomero
 from omero.gateway import BlitzGateway
@@ -28,6 +30,7 @@ IMPORT_MAX_RETRIES = 3  # Maximum retries for transient import errors (e.g. Ice 
 IMPORT_RETRY_DELAY = 10  # Delay between import retries (in seconds)
 PODMAN_RUN_MAX_ATTEMPTS = 3  # Bounded retries for transient bind setup failures
 PODMAN_RUN_RETRY_DELAY = 2  # Initial retry delay, doubled after each failure
+OMERO_KEEPALIVE_SECONDS = 60
 TMP_OUTPUT_FOLDER = "OMERO_inplace"
 PROCESSED_DATA_FOLDER = os.getenv(
     "PROCESSED_DATA_FOLDER",
@@ -65,6 +68,49 @@ PREPROC_RESULT_NAME = "name"
 PREPROC_RESULT_LOCAL_ALT = "local_alt_path"
 PREPROC_RESULT_LOCAL_FULL = "local_full_path"
 PREPROC_RESULT_METADATA = "metadata"
+
+
+@contextmanager
+def omero_connection_keepalive(
+    connections,
+    logger,
+    operation_name,
+    interval=None,
+):
+    """Keep OMERO sessions alive during a potentially long local operation."""
+    interval = interval or OMERO_KEEPALIVE_SECONDS
+    stop_event = Event()
+
+    def keep_alive():
+        while not stop_event.wait(interval):
+            for connection_name, conn in connections:
+                try:
+                    conn.keepAlive()
+                except Exception as exc:
+                    logger.warning(
+                        "Could not keep the %s OMERO connection alive during "
+                        "%s: %s",
+                        connection_name,
+                        operation_name,
+                        exc,
+                    )
+
+    thread = Thread(
+        target=keep_alive,
+        name="OMEROConnectionKeepAlive",
+        daemon=True,
+    )
+    thread.start()
+    try:
+        yield
+    finally:
+        stop_event.set()
+        thread.join(timeout=5)
+        if thread.is_alive():
+            logger.warning(
+                "OMERO keepalive thread for %s did not stop",
+                operation_name,
+            )
 
 
 def _zarr_import_title(uri):
@@ -1337,7 +1383,22 @@ class DataPackageImporter:
                                 os.makedirs(local_tmp_folder, exist_ok=True)
                                 log_ingestion_step(
                                     self.data_package, STAGE_PREPROCESSING)
-                                success, processed_files = processor.run(dry_run=False)
+                                # Conversion can take longer than the OMERO
+                                # session TTL for large Screens. Keep both the
+                                # admin and sudo-user sessions active because
+                                # the user connection is reused for import
+                                # metadata immediately afterward.
+                                with omero_connection_keepalive(
+                                    (
+                                        ("root", root_conn),
+                                        ("user", user_conn),
+                                    ),
+                                    self.logger,
+                                    "preprocessing",
+                                ):
+                                    success, processed_files = processor.run(
+                                        dry_run=False
+                                    )
                                 if not success:
                                     msg = "Preprocessing failed. See container logs for details."
                                     self.logger.error(msg)
@@ -1381,9 +1442,17 @@ class DataPackageImporter:
                                     ]
                                     if not lifecycle_files:
                                         lifecycle_files = local_paths
-                                    lifecycle_plan = ImportLifecycleEngine(
-                                        self.logger
-                                    ).prepare(lifecycle_files, options)
+                                    with omero_connection_keepalive(
+                                        (
+                                            ("root", root_conn),
+                                            ("user", user_conn),
+                                        ),
+                                        self.logger,
+                                        "import lifecycle preparation",
+                                    ):
+                                        lifecycle_plan = ImportLifecycleEngine(
+                                            self.logger
+                                        ).prepare(lifecycle_files, options)
 
                                 # Pass the target id based on its type; include local paths if preprocessed
                                 if lifecycle_plan is not None:
@@ -1417,9 +1486,17 @@ class DataPackageImporter:
                                         self.data_package,
                                         STAGE_PREPROCESSING,
                                     )
-                                    lifecycle_plan = ImportLifecycleEngine(
-                                        self.logger
-                                    ).prepare(file_paths, options)
+                                    with omero_connection_keepalive(
+                                        (
+                                            ("root", root_conn),
+                                            ("user", user_conn),
+                                        ),
+                                        self.logger,
+                                        "import lifecycle preparation",
+                                    ):
+                                        lifecycle_plan = ImportLifecycleEngine(
+                                            self.logger
+                                        ).prepare(file_paths, options)
                                     successful_uploads, failed_uploads = (
                                         self.upload_prepared_plan(
                                             user_conn,
