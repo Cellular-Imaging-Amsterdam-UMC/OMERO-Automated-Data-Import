@@ -122,15 +122,43 @@ keeps the existing `.processed` default.
 >
 > Changing from `.processed` to `.import` leaves existing data in `.processed`
 > and directs new processed outputs to `.import`, so both folders can coexist.
-> The importer does not move existing data or rewrite existing OMERO links or
-> stored paths. Existing in-place imports remain readable through their recorded
-> paths and symlinks **as long as the original data stays accessible at those
-> paths**. Renaming, moving, or deleting the old folder can break pixel access.
+> The importer does not move existing data, retarget existing filesystem
+> symlinks, rewrite Zarr `ExternalInfo.lsid` values, or migrate canonical-source
+> records. Changing this variable alone does not redirect existing pixel reads.
+> **Keep the old data accessible at its original paths from OMERO.server.**
+> Renaming, moving, or deleting the old folder can break both symlink-based
+> imports and registered Zarr images, including their Plate images.
 >
-> Preprocessing and processed-metadata lookup use the current setting, so retries
-> or reprocessing of older orders may need manual handling. Let active imports
-> finish before changing the setting, retain the old folder and its mounts, and
-> plan any data migration separately.
+> Resubmitting an order with preprocessing runs the converter with the current
+> folder setting. CSV annotation lookup checks the input directory and the
+> currently configured processed subfolder; it does not search the previous
+> processed subfolder. Let active imports finish before changing the setting,
+> retain the old folder and its mounts, and plan any data migration separately.
+
+The storage references explain why existing reads retain their paths:
+
+| Import route | Stored reference used for pixel access |
+| --- | --- |
+| Conventional in-place import | A filesystem symlink in OMERO's ManagedRepository. For preprocessed files, `upload_files()` retargets it to the converter's reported `full_path`, mapped to shared storage. |
+| Zarr registration (`USE_REGISTER_ZARR=true`) | `set_external_info()` records the Zarr path in each Image's `ExternalInfo.lsid`, appending the image node for series and Plates. The Zarr pixel buffer reads that stored path. This route does not rely on the ManagedRepository symlink redirection. |
+| Shallow Zarr registration | The importer resolves the stored canonical source or label location before registration, then records that physical path in `ExternalInfo.lsid`. Existing canonical `relativePath` values are resolved against their storage root, without substituting the current processed-folder setting. |
+
+See [`upload_files()`](biomero_importer/utils/importer.py),
+[`set_external_info()`](biomero_importer/utils/register.py), and
+[`resolve_managed_source_path()`](biomero_importer/utils/result_zarr.py).
+In the pixel buffer, `ZarrPixelsService.getUri()` reads `ExternalInfo.lsid`,
+`asPath()` converts a local value with `Paths.get()`, and
+`createOmeNgffPixelBuffer()` opens that location. It does not read
+`PROCESSED_DATA_FOLDER` or search for a renamed folder. See the upstream
+[0.6.1 implementation](https://github.com/glencoesoftware/omero-zarr-pixel-buffer/blob/v0.6.1/src/main/java/com/glencoesoftware/omero/zarr/ZarrPixelsService.java)
+and [path contract](https://github.com/glencoesoftware/omero-zarr-pixel-buffer/blob/v0.6.1/README.md#usage).
+
+The setting is local to each Python process importing the library. Setting it
+on the importer container configures that service's preprocessing. Code calling
+`CanonicalStore.relative_path_for()` uses the setting in its own process;
+setting it only on the importer does not configure separate OMERO script
+workers. If those workers must create canonical Zarrs in the same custom folder,
+their deployment must also pass the variable through to the script subprocesses.
 
 For example, set a different processed subfolder in the importer container's
 Docker Compose environment, then recreate the service:
@@ -464,16 +492,16 @@ services:
 
 ### In-Place Import Workflow
 
-The BIOMERO.importer system uses **in-place imports** exclusively, which means:
-
-1. **Source Data**: Files remain on the shared storage
-2. **OMERO Import**: Uses `transfer=ln_s` to create symlinks instead of copying data
-3. **No Data Duplication**: Original files stay in place, only metadata is stored in OMERO
-4. **Preprocessing**: Creates new files but maintains in-place import approach
+Image data remains on shared storage. Conventional imports use `transfer=ln_s`
+to create filesystem symlinks. Zarr registration with `USE_REGISTER_ZARR=true`
+instead records the physical Zarr location in `ExternalInfo.lsid` for the Zarr
+pixel buffer. Preprocessing creates new outputs on shared storage. See
+[Configuring the processed data folder](#configuring-the-processed-data-folder)
+for the references that must remain valid when changing storage configuration.
 
 ### Preprocessing Data Flow
 
-When preprocessing is enabled, the system follows this data flow:
+For conventional imports with preprocessing, the system follows this data flow:
 
 ```
 Original Data (Remote Storage)
@@ -481,7 +509,7 @@ Original Data (Remote Storage)
 Container Processing (On OMERO Server)
     ↓
 Processed Data → Two Destinations:
-    1. Remote Storage (/.processed subfolder)
+    1. Remote Storage (PROCESSED_DATA_FOLDER subfolder; default .processed)
     2. Temporary Local Storage (alt_path)
     ↓
 OMERO Import (from temporary storage)
@@ -490,6 +518,10 @@ Symlink Redirect (to remote storage)
     ↓
 Cleanup (temporary storage deleted)
 ```
+
+For Zarr registration, `upload_files()` uses the converter's mapped `full_path`
+on shared storage directly; it bypasses the temporary-storage import and
+ManagedRepository symlink redirection shown above.
 
 #### Why This Architecture?
 
@@ -500,27 +532,13 @@ Cleanup (temporary storage deleted)
 
 #### Implementation Details
 
-From the source code (`importer.py`):
-
-```python
-# Preprocessing creates data in both locations
-remote_path = os.path.join(file_path, PROCESSED_DATA_FOLDER)  # /.processed
-alt_path = f"/OMERO/OMERO_inplace/{uuid}"  # Temporary local storage
-
-# Import from temporary storage for speed
-imported = self.import_to_omero(
-    file_path=alt_path,
-    target_id=dataset_id,
-    target_type='Dataset',
-    transfer="ln_s"
-)
-
-# After import, redirect symlinks to remote storage
-for symlink_path in omero_managed_files:
-    os.unlink(symlink_path)  # Remove temporary symlink
-    new_target = os.path.join(remote_path, filename)
-    os.symlink(new_target, symlink_path)  # Point to remote storage
-```
+In [`importer.py`](biomero_importer/utils/importer.py),
+`DataProcessor.get_preprocessing_args()` creates the configured subfolder next
+to the input and passes the matching converter path as `--outputfolder`.
+`DataProcessor.run()` maps the converter's reported `full_path` and `alt_path`
+back to host paths using the Podman mounts. `upload_files()` uses those reported
+paths for registration or symlink redirection; it does not reconstruct the final
+pixel location from a hardcoded `.processed` name.
 
 ### Metadata Integration
 
@@ -539,7 +557,7 @@ staining_method,DAPI
 
 The system automatically detects and processes CSV files in:
 - Original data directory
-- Processed data directory (`.processed` subfolder)
+- Configured processed data directory (`PROCESSED_DATA_FOLDER`, default `.processed`)
 
 #### 2. JSON Metadata from Preprocessing
 
